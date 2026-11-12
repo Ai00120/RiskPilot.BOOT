@@ -22,6 +22,13 @@ repository [`Ai00120/RiskPilot.BOT`](https://github.com/Ai00120/RiskPilot.BOT).
 - **Phase 2 complete** — Foundation & Diagnostic Core: standalone solution/project, normalized
   data model, bounded event queue, session/logging/manifest, M1/M2 probes, and unit tests.
   See [`docs/PHASE2_IMPLEMENTATION.md`](docs/PHASE2_IMPLEMENTATION.md).
+- **Phase 3 complete** — Diagnostic modules M1–M8: the eight read-only probes and their
+  observation consumers, driven through the read-only `ProbeContext`.
+  See [`docs/PHASE3_DIAGNOSTIC_MODULES.md`](docs/PHASE3_DIAGNOSTIC_MODULES.md).
+- **Phase 4 complete** — UI, evidence reporting & tests: the three diagnostic modes
+  (Quick / Full / Post-Trade Audit), the run coordinator (single-run, cancel, dispatcher
+  marshalling), the 17-artifact evidence package, M9 post-trade audit and the Control Center
+  window. See [`docs/PHASE4_UI_AND_EVIDENCE.md`](docs/PHASE4_UI_AND_EVIDENCE.md).
 
 > **Real NinjaTrader host compatibility is NOT yet verified.** The offline build compiles against
 > compile-time stubs for CI validation. A green offline build is a syntax/contract check only, not
@@ -36,14 +43,16 @@ src/RiskPilot.Diagnostics.Nt8/          The AddOn (shippable product)
 │   ├── Models/                          Normalized record types
 │   ├── Result/ Session/ Queue/ Logging/ Errors/
 │   ├── Report/                          JSON writer, SHA-256 manifest, serializer
-│   ├── Engine/                          DiagnosticEngine + probes M1/M2
+│   ├── Engine/                          DiagnosticEngine + probes M1–M9
+│   ├── Evidence/                        17-artifact evidence package builder
+│   ├── Run/                             Modes, run coordinator, view state (host-free)
 │   └── Contract/                        IReadOnlyDiagnosticSource (optional)
 ├── Host/                                The ONLY layer that touches NinjaTrader types
 ├── Stubs/                               Offline compile-time stubs (USE_STUBS only)
 └── Properties/AssemblyInfo.cs
 tests/RiskPilot.Diagnostics.Nt8.Tests/   xUnit unit tests
 verification/addon-smoke/                 Static safety scan (no NT8 required)
-docs/                                     Phase 1 audit + Phase 2 implementation
+docs/                                     Phase 1–4 records
 ```
 
 ## Build
@@ -85,6 +94,48 @@ elsewhere. The canonical NT8 workflow is to place the `.cs` files under
 
 Report artifacts are written to a directory **outside** the Git working tree, per repository
 governance for output locations.
+
+## Using the Diagnostic Center
+
+Open the window from the NinjaTrader Control Center main menu: **RiskPilot NT8 Diagnostic Center**.
+The window has three modes:
+
+| Mode | What it runs | Modules |
+| --- | --- | --- |
+| Quick Diagnostic | Fast environment / connection / account / instrument / market-data / safety checks | M1, M2, M3, M4, M5, M8 |
+| Full Diagnostic | Every module, including DOM, order-flow and strategies | M1–M8 |
+| Post-Trade Audit | Read-only analysis of already-recorded order/execution/position events | M9 |
+
+Run status is shown per module with `PASS / FAIL / INCONCLUSIVE / NOT_APPLICABLE`. **Cancel** stops
+the diagnostic processing only; it never touches a trade. A run executes on a background thread, so
+the Control Center never freezes, and only one run can be active at a time.
+
+**Export** writes the evidence package for the last completed run. Each run gets its own directory
+under `%USERPROFILE%\Documents\RiskPilot.Diagnostics.Evidence\<session-id>\` containing:
+
+```
+summary.html  full-report.html  acceptance-matrix.csv
+environment.json  connections.json  accounts.json  instruments.json
+orders.csv  executions.csv  positions.csv
+market-data-summary.json  dom-summary.json  orderflow-summary.json
+strategies.json  safety-audit.json  findings.json  manifest.json
+```
+
+`manifest.json` lists the session, start/end UTC, versions, provider, instrument, masked accounts,
+record and dropped counts, truncation status, every output file and its SHA-256, and the overall
+run status. Only data that was actually observable is exported; a missing source is written with
+`status=UNAVAILABLE` and a reason, never fabricated. No secret, token or raw account identifier
+appears in any artifact.
+
+### The three acceptance subjects
+
+Acceptance is reported as three independent subjects and never collapsed into one verdict:
+
+1. **AddOn implementation / build** — does the tool build and load.
+2. **Runtime diagnostic coverage / evidence quality** — what the run actually observed.
+3. **RiskPilot.BOT acceptance** — always `NOT_APPLICABLE` from inside this tool.
+
+A successful tool build is **not** a RiskPilot.BOT acceptance.
 
 ## Target environment
 

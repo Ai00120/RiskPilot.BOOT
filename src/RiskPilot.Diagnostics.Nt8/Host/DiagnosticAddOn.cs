@@ -3,6 +3,7 @@ using NinjaTrader.NinjaScript;
 using RiskPilot.Diagnostics.Nt8.Core.Clock;
 using RiskPilot.Diagnostics.Nt8.Core.Identity;
 using RiskPilot.Diagnostics.Nt8.Core.Logging;
+using RiskPilot.Diagnostics.Nt8.Core.Run;
 
 namespace RiskPilot.Diagnostics.Nt8.Host
 {
@@ -17,11 +18,14 @@ namespace RiskPilot.Diagnostics.Nt8.Host
     /// Lifecycle: SetDefaults -> Active (Initialize + Start) -> Terminated (Stop + Dispose).
     /// Every transition is guarded exactly-once so a repeated state change is harmless.
     /// </summary>
-    public sealed class DiagnosticAddOn : AddOnBase
+    public sealed partial class DiagnosticAddOn : AddOnBase
     {
         private readonly object _gate = new object();
         private readonly System.Collections.Generic.List<string> _lifecycleStates = new System.Collections.Generic.List<string>();
+        private readonly SwitchableUiDispatcher _uiDispatcher = new SwitchableUiDispatcher();
         private DiagnosticRuntime _runtime;
+        private DiagnosticViewState _viewState;
+        private DiagnosticRunCoordinator _coordinator;
         private bool _started;
         private bool _disposed;
 
@@ -61,6 +65,13 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         }
 
         /// <summary>
+        /// Root directory for evidence packages. It defaults to a folder under the operator's
+        /// Documents directory, which is outside the Git working tree (per governance). A host
+        /// or a test may override it before the AddOn initialises.
+        /// </summary>
+        public string EvidenceOutputRoot { get; set; }
+
+        /// <summary>
         /// Creates the runtime and registers probes. Guarded so repeated calls are no-ops.
         /// </summary>
         public void SafeInitialize()
@@ -77,15 +88,39 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     var provider = new Nt8HostDataProvider(masterMetadataReady: State == State.DataLoaded || State == State.Realtime);
                     _runtime = new DiagnosticRuntime(provider, SystemClock.Instance, 4096, 8192);
                     _runtime.Initialize();
+
+                    // The run coordinator owns the single-run guarantee and marshals its UI
+                    // notifications through the switchable dispatcher. The dispatcher has no
+                    // target until a host window exists, so notifications are dropped until
+                    // then rather than executed on the wrong thread.
+                    _viewState = new DiagnosticViewState();
+                    var runner = new RuntimeDiagnosticRunner(_runtime, BuildEvidenceSink());
+                    _coordinator = new DiagnosticRunCoordinator(runner, _uiDispatcher, _runtime.Log);
+
                     Log("RiskPilot Diagnostics initialized. Trading=Disabled.", NinjaTrader.Cbi.LogLevel.Information);
                 }
                 catch (Exception ex)
                 {
                     _runtime = null;
+                    _coordinator = null;
+                    _viewState = null;
                     Log("RiskPilot Diagnostics initialization failed: " + Core.Errors.ErrorClassifier.Describe(ex),
                         NinjaTrader.Cbi.LogLevel.Error);
                 }
             }
+        }
+
+        private IEvidenceSink BuildEvidenceSink()
+        {
+            var root = EvidenceOutputRoot;
+            if (string.IsNullOrEmpty(root))
+            {
+                root = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    "RiskPilot.Diagnostics.Evidence");
+            }
+
+            return new EvidenceDirectorySink(root);
         }
 
         /// <summary>Starts the background drain worker. Guarded exactly-once.</summary>
@@ -142,6 +177,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         public void SafeDispose()
         {
             DiagnosticRuntime runtime;
+            DiagnosticRunCoordinator coordinator;
             lock (_gate)
             {
                 if (_disposed)
@@ -151,7 +187,36 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
                 _disposed = true;
                 runtime = _runtime;
+                coordinator = _coordinator;
                 _runtime = null;
+                _coordinator = null;
+            }
+
+            // Cancel and join any active run before tearing down the runtime, so a run in
+            // flight cannot observe a disposed runtime.
+            if (coordinator != null)
+            {
+                try
+                {
+                    coordinator.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Log("RiskPilot Diagnostics coordinator dispose failed: " + Core.Errors.ErrorClassifier.Describe(ex),
+                        NinjaTrader.Cbi.LogLevel.Error);
+                }
+            }
+
+            // Detach and close the UI layer (implemented only in the real-host build). This
+            // runs after the coordinator is stopped, so no notification can race the teardown.
+            try
+            {
+                ShutdownUiLayer();
+            }
+            catch (Exception ex)
+            {
+                Log("RiskPilot Diagnostics UI shutdown failed: " + Core.Errors.ErrorClassifier.Describe(ex),
+                    NinjaTrader.Cbi.LogLevel.Error);
             }
 
             if (runtime == null)
@@ -216,5 +281,35 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         {
             get { lock (_gate) { return _started; } }
         }
+
+        /// <summary>The runtime, or null before initialization. Exposed for the window layer.</summary>
+        public DiagnosticRuntime Runtime
+        {
+            get { lock (_gate) { return _runtime; } }
+        }
+
+        /// <summary>The observable window state, or null before initialization.</summary>
+        public DiagnosticViewState ViewState
+        {
+            get { lock (_gate) { return _viewState; } }
+        }
+
+        /// <summary>The run coordinator, or null before initialization.</summary>
+        public DiagnosticRunCoordinator Coordinator
+        {
+            get { lock (_gate) { return _coordinator; } }
+        }
+
+        /// <summary>The evidence sink used for exported packages.</summary>
+        public IEvidenceSink EvidenceSink
+        {
+            get { return BuildEvidenceSink(); }
+        }
+
+        /// <summary>
+        /// Shuts the window/menu layer down. Declared here as a no-op so the stub build (which
+        /// has no WPF) compiles; the real-host partial overrides it with the actual teardown.
+        /// </summary>
+        partial void ShutdownUiLayer();
     }
 }
