@@ -69,7 +69,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Provider = new ProviderRecord { Name = "Rithmic", ResolutionMethod = "String", IsExpectedEvidenceProvider = true },
                 Snapshot = new DiagnosticSnapshot
                 {
-                    Provider = new ProviderEvidence { RawProviderValue = "Rithmic", ResolutionMethod = "String", MatchesExpectedProvider = true }
+                    Provider = new ProviderEvidence { RawProviderValue = "Rithmic", ResolutionMethod = "String", ResolutionBasis = ProviderResolutionBasis.SingleConnection, MatchesExpectedProvider = true }
                 }
             };
             provider.Connections.Add(new ConnectionRecord
@@ -92,7 +92,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Provider = new ProviderRecord { Name = "UnknownVendor", IsExpectedEvidenceProvider = false },
                 Snapshot = new DiagnosticSnapshot
                 {
-                    Provider = new ProviderEvidence { RawProviderValue = "UnknownVendor", ResolutionMethod = "String", MatchesExpectedProvider = false }
+                    Provider = new ProviderEvidence { RawProviderValue = "UnknownVendor", ResolutionMethod = "String", ResolutionBasis = ProviderResolutionBasis.SingleConnection, MatchesExpectedProvider = false }
                 }
             };
             provider.Connections.Add(new ConnectionRecord
@@ -739,9 +739,14 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             });
             provider.Snapshot = new DiagnosticSnapshot
             {
-                AccountAssociations = new List<AccountConnectionAssociation>
+                TargetAccountConnection = new TargetAccountConnectionObservation
                 {
-                    new AccountConnectionAssociation { AccountRef = "acct-1", HasConnection = false }
+                    AccountSurfaceObservable = true,
+                    ObservedAccountCount = 1,
+                    MatchingAccountCount = 1,
+                    AccountProviderObservable = true,
+                    AccountProviderMatches = true,
+                    ConnectionObserved = false
                 }
             };
 
@@ -750,7 +755,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
-        public void Scenario_AccountAssociation_PassesOnlyWithAnObservedConnectedAccount()
+        public void Scenario_AccountAssociation_PassesOnlyWithAnObservedTargetAccountBoundToTheRequiredConnection()
         {
             var provider = new FakeDataProvider();
             provider.Connections.Add(new ConnectionRecord
@@ -762,17 +767,20 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             });
             provider.Snapshot = new DiagnosticSnapshot
             {
-                AccountAssociations = new List<AccountConnectionAssociation>
+                TargetAccountConnection = new TargetAccountConnectionObservation
                 {
-                    new AccountConnectionAssociation
-                    {
-                        AccountRef = "acct-1",
-                        AccountProvider = "Rithmic",
-                        HasConnection = true,
-                        ConnectionName = "Rithmic",
-                        ConnectionProvider = "Rithmic",
-                        ProvidersAgree = true
-                    }
+                    AccountSurfaceObservable = true,
+                    ObservedAccountCount = 1,
+                    MatchingAccountCount = 1,
+                    ConnectionCount = 1,
+                    MatchingConnectionCount = 1,
+                    AccountProviderObservable = true,
+                    AccountProviderMatches = true,
+                    ConnectionObserved = true,
+                    ConnectionNameObservable = true,
+                    ConnectionNameMatches = true,
+                    ConnectionProviderObservable = true,
+                    ConnectionProviderMatches = true
                 }
             };
 

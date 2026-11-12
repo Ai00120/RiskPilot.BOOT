@@ -91,8 +91,17 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             return list;
         }
 
+        /// <summary>
+        /// Provider identity for the active connection. The provider is attributed to the target
+        /// account's own connection when the target account is observable; otherwise it is read
+        /// only from a single unambiguous connection. It is never taken from the first of several
+        /// connections, so an unrelated provider cannot be reported as the evidence provider.
+        /// </summary>
         public ProviderRecord GetProvider()
         {
+            Account targetAccount;
+            TryGetUniqueTargetAccount(out targetAccount);
+
             var connections = Connection.Connections;
             if (connections == null)
             {
@@ -101,6 +110,16 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
             lock (connections)
             {
+                var targetConnection = targetAccount != null ? targetAccount.Connection : null;
+                if (targetConnection != null && targetConnection.Options != null)
+                {
+                    return BuildProviderRecord(targetConnection.Options.Provider.ToString());
+                }
+
+                // No target account connection is observable: only a single enumerated
+                // connection is unambiguous enough to attribute the provider.
+                Connection only = null;
+                var count = 0;
                 foreach (var connection in connections)
                 {
                     if (connection == null || connection.Options == null)
@@ -108,22 +127,29 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                         continue;
                     }
 
-                    var name = connection.Options.Provider.ToString();
-                    return new ProviderRecord
-                    {
-                        Name = name,
-                        ResolutionMethod = "String",
-                        IsExpectedEvidenceProvider = string.Equals(
-                            name,
-                            Core.Engine.Probes.M2ConnectionProbe.ExpectedProvider,
-                            StringComparison.OrdinalIgnoreCase),
-                        ProviderBuildObservable = false,
-                        IngestedAtUtc = DateTime.UtcNow
-                    };
+                    count++;
+                    only = connection;
                 }
-            }
 
-            return null;
+                return count == 1 && only != null
+                    ? BuildProviderRecord(only.Options.Provider.ToString())
+                    : null;
+            }
+        }
+
+        private static ProviderRecord BuildProviderRecord(string providerName)
+        {
+            return new ProviderRecord
+            {
+                Name = providerName,
+                ResolutionMethod = "String",
+                IsExpectedEvidenceProvider = string.Equals(
+                    providerName,
+                    Core.Engine.Probes.M2ConnectionProbe.ExpectedProvider,
+                    StringComparison.OrdinalIgnoreCase),
+                ProviderBuildObservable = false,
+                IngestedAtUtc = DateTime.UtcNow
+            };
         }
 
         public IReadOnlyList<AccountRecord> GetAccounts()
@@ -231,6 +257,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 Provider = BuildProviderEvidence(),
                 AccountAssociations = BuildAccountAssociations(),
                 AccountIdentity = BuildAccountIdentityObservation(),
+                TargetAccountConnection = BuildTargetAccountConnectionObservation(),
                 OrderLifecycle = BuildOrderLifecycleObservation(),
                 Attestation = BuildAttestationObservation(),
                 DomMarketData = new DomMarketDataObservation(),
@@ -265,6 +292,9 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
         private ProviderEvidence BuildProviderEvidence()
         {
+            Account targetAccount;
+            TryGetUniqueTargetAccount(out targetAccount);
+
             var connections = Connection.Connections;
             if (connections == null)
             {
@@ -273,6 +303,18 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
             lock (connections)
             {
+                var targetConnection = targetAccount != null ? targetAccount.Connection : null;
+                if (targetConnection != null && targetConnection.Options != null)
+                {
+                    return BuildProviderEvidence(
+                        targetConnection.Options.Provider.ToString(),
+                        ProviderResolutionBasis.TargetAccountConnection);
+                }
+
+                // No target account connection is observable: only a single enumerated
+                // connection is unambiguous enough to attribute the provider.
+                Connection only = null;
+                var count = 0;
                 foreach (var connection in connections)
                 {
                     if (connection == null || connection.Options == null)
@@ -280,22 +322,30 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                         continue;
                     }
 
-                    var raw = connection.Options.Provider.ToString();
-                    return new ProviderEvidence
-                    {
-                        RawProviderValue = raw,
-                        ResolutionMethod = "String",
-                        MatchesExpectedProvider = string.Equals(
-                            raw,
-                            Core.Engine.Probes.M2ConnectionProbe.ExpectedProvider,
-                            StringComparison.OrdinalIgnoreCase),
-                        IsStubOrMockValue = false,
-                        ProviderBuildObservable = false
-                    };
+                    count++;
+                    only = connection;
                 }
-            }
 
-            return null;
+                return count == 1 && only != null
+                    ? BuildProviderEvidence(only.Options.Provider.ToString(), ProviderResolutionBasis.SingleConnection)
+                    : null;
+            }
+        }
+
+        private static ProviderEvidence BuildProviderEvidence(string raw, string resolutionBasis)
+        {
+            return new ProviderEvidence
+            {
+                RawProviderValue = raw,
+                ResolutionMethod = "String",
+                ResolutionBasis = resolutionBasis,
+                MatchesExpectedProvider = string.Equals(
+                    raw,
+                    Core.Engine.Probes.M2ConnectionProbe.ExpectedProvider,
+                    StringComparison.OrdinalIgnoreCase),
+                IsStubOrMockValue = false,
+                ProviderBuildObservable = false
+            };
         }
 
         private AccountIdentityObservation BuildAccountIdentityObservation()
@@ -379,6 +429,152 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             var status = SafeString(() => connection.Status.ToString());
             observation.ConnectionStatusObservable = !string.IsNullOrEmpty(status);
             observation.ConnectionConnected = string.Equals(status, ConnectionStatus.Connected.ToString(), StringComparison.Ordinal);
+
+            return observation;
+        }
+
+        /// <summary>
+        /// Resolves the single account that matches the required account name exactly. Returns
+        /// false (and a null account) when no account matched, more than one matched, or the
+        /// account surface could not be enumerated, so callers never bind to an ambiguous or
+        /// arbitrary account.
+        /// </summary>
+        private static bool TryGetUniqueTargetAccount(out Account target)
+        {
+            target = null;
+            var accounts = Account.All;
+            if (accounts == null)
+            {
+                return false;
+            }
+
+            var matchingCount = 0;
+            lock (accounts)
+            {
+                foreach (var account in accounts)
+                {
+                    if (account == null || string.IsNullOrWhiteSpace(account.Name))
+                    {
+                        continue;
+                    }
+
+                    if (ExpectedAccountIdentity.AccountNameMatches(account.Name))
+                    {
+                        matchingCount++;
+                        target = account;
+                    }
+                }
+            }
+
+            if (matchingCount != 1)
+            {
+                target = null;
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Builds the privacy-preserving observation that proves the target account is bound to
+        /// the required connection and provider. It reads the target account's own
+        /// <c>Account.Connection</c> (never the first entry of <c>Connection.Connections</c>) and
+        /// also counts the enumerated connections and how many match the required connection
+        /// identity, so a multiple-connection or ambiguous-association condition is detected. The
+        /// raw account and connection names never enter the observation.
+        /// </summary>
+        private TargetAccountConnectionObservation BuildTargetAccountConnectionObservation()
+        {
+            var observation = new TargetAccountConnectionObservation();
+            var accounts = Account.All;
+            if (accounts == null)
+            {
+                observation.AccountSurfaceObservable = false;
+                return observation;
+            }
+
+            observation.AccountSurfaceObservable = true;
+
+            Account matched = null;
+            var matchingCount = 0;
+            lock (accounts)
+            {
+                foreach (var account in accounts)
+                {
+                    if (account == null || string.IsNullOrWhiteSpace(account.Name))
+                    {
+                        continue;
+                    }
+
+                    observation.ObservedAccountCount++;
+
+                    if (ExpectedAccountIdentity.AccountNameMatches(account.Name))
+                    {
+                        matchingCount++;
+                        matched = account;
+                    }
+                }
+            }
+
+            observation.MatchingAccountCount = matchingCount;
+
+            var connections = Connection.Connections;
+            if (connections != null)
+            {
+                lock (connections)
+                {
+                    foreach (var enumerated in connections)
+                    {
+                        if (enumerated == null || enumerated.Options == null)
+                        {
+                            continue;
+                        }
+
+                        observation.ConnectionCount++;
+
+                        var connectionName = SafeString(() => enumerated.Options.Name);
+                        var connectionProvider = SafeString(() => enumerated.Options.Provider.ToString());
+                        if (ExpectedAccountIdentity.ConnectionNameMatches(connectionName)
+                            && ExpectedAccountIdentity.ProviderMatches(connectionProvider))
+                        {
+                            observation.MatchingConnectionCount++;
+                        }
+                    }
+                }
+            }
+
+            // Only a unique exact account match can be compared further; zero or many matches is
+            // decided by the verifier, and no raw name is read here.
+            if (matchingCount != 1 || matched == null)
+            {
+                return observation;
+            }
+
+            observation.AccountRef = SyntheticRef.For("account", matched.Name);
+
+            var accountProvider = SafeString(() => matched.Provider.ToString());
+            observation.AccountProviderObservable = !string.IsNullOrEmpty(accountProvider);
+            observation.AccountProviderMatches = ExpectedAccountIdentity.ProviderMatches(accountProvider);
+
+            var connection = matched.Connection;
+            if (connection == null)
+            {
+                return observation;
+            }
+
+            observation.ConnectionObserved = true;
+
+            var options = connection.Options;
+            if (options != null)
+            {
+                var connectionName = SafeString(() => options.Name);
+                observation.ConnectionNameObservable = !string.IsNullOrEmpty(connectionName);
+                observation.ConnectionNameMatches = ExpectedAccountIdentity.ConnectionNameMatches(connectionName);
+
+                var connectionProvider = SafeString(() => options.Provider.ToString());
+                observation.ConnectionProviderObservable = !string.IsNullOrEmpty(connectionProvider);
+                observation.ConnectionProviderMatches = ExpectedAccountIdentity.ProviderMatches(connectionProvider);
+            }
 
             return observation;
         }

@@ -42,6 +42,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     .WithEvidence(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "connections=0", now))
                     .WithRemediation("No connection was observable; connect the provider and re-run."));
                 results.Add(BuildAccountIdentityCheck(context, correlation, now));
+                results.Add(BuildTargetAccountAssociationCheck(context, correlation, now));
                 results.Add(DiagnosticResult
                     .NotApplicable(ModuleId, "M2.PROVIDER_IDENTITY", correlation, now)
                     .WithFindingId("M2.PROVIDER_IDENTITY")
@@ -75,9 +76,10 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             }
 
             results.Add(BuildReconnectCheck(connections, correlation, now));
-            results.Add(BuildProviderIdentityCheck(context, correlation, now));
+            results.Add(BuildProviderIdentityCheck(context, connections, correlation, now));
             results.Add(BuildAccountIdentityCheck(context, correlation, now));
-            results.Add(BuildAccountAssociationCheck(context, correlation, now));
+            results.Add(BuildTargetAccountAssociationCheck(context, correlation, now));
+            results.Add(BuildAccountProviderAgreementCheck(context, correlation, now));
 
             return results;
         }
@@ -105,7 +107,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 .WithEvidence(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "reconnects=" + totalReconnects, now));
         }
 
-        private DiagnosticResult BuildProviderIdentityCheck(ProbeContext context, string correlation, System.DateTime now)
+        private DiagnosticResult BuildProviderIdentityCheck(
+            ProbeContext context,
+            IReadOnlyList<ConnectionRecord> connections,
+            string correlation,
+            System.DateTime now)
         {
             var snapshot = context.Snapshot;
             var evidence = snapshot != null ? snapshot.Provider : null;
@@ -131,6 +137,22 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             var matches = !string.IsNullOrEmpty(rawValue)
                 && string.Equals(rawValue, ExpectedProvider, System.StringComparison.OrdinalIgnoreCase);
 
+            // The provider is only attributed when it was read from the target account's own
+            // connection or from a single unambiguous connection. It is never taken from the
+            // first of several connections, so an unrelated provider cannot be reported as the
+            // evidence provider.
+            var basis = evidence != null ? evidence.ResolutionBasis : null;
+            var attributed = basis == ProviderResolutionBasis.TargetAccountConnection
+                || basis == ProviderResolutionBasis.SingleConnection;
+
+            // Backward-compatible fallback: a provider record supplied directly (no snapshot
+            // evidence) is only attributed when exactly one connection is observable, so a
+            // multiple-connection host cannot be mis-attributed to the first connection.
+            if (evidence == null && provider != null && connections != null && connections.Count == 1)
+            {
+                attributed = true;
+            }
+
             // A stub/mock value can never establish the real provider identity.
             DiagnosticResult result;
             if (isStub)
@@ -140,6 +162,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     .WithReasonCode("PROVIDER_VALUE_FROM_STUB_OR_MOCK")
                     .WithLimitation("The observed provider value came from a compile-time stub or test double, not the real host; it cannot establish real provider identity.")
                     .WithNextAction("Run the diagnostic inside the real NinjaTrader host with the real connection.");
+            }
+            else if (!attributed)
+            {
+                result = DiagnosticResult
+                    .Inconclusive(ModuleId, "M2.PROVIDER_IDENTITY", correlation, now)
+                    .WithReasonCode("PROVIDER_NOT_ATTRIBUTED")
+                    .WithLimitation("The provider value could not be attributed to the target account's connection or to a single unambiguous connection; it is not accepted as the evidence provider.")
+                    .WithNextAction("Confirm the target account is bound to the required connection, then re-run.");
             }
             else if (matches)
             {
@@ -158,15 +188,21 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
 
             return result
                 .WithFindingId("M2.PROVIDER_IDENTITY")
-                .WithObservation("provider=" + rawValue + " resolution=" + (evidence != null ? evidence.ResolutionMethod : "String"))
+                .WithObservation("provider=" + rawValue
+                    + " resolution=" + (evidence != null ? evidence.ResolutionMethod : "String")
+                    + " attributed=" + attributed)
                 .WithSource(isStub ? FindingFactory.SourceUnobservable : FindingFactory.SourcePublicApi)
-                .WithMethod("ConnectOptions.Provider.ToString() string comparison (no guaranteed Rithmic enum member).")
+                .WithMethod("ConnectOptions.Provider.ToString() string comparison (no guaranteed Rithmic enum member), "
+                    + "attributed to the target account's own connection rather than the first connection.")
                 .WithNextAction(isStub
                     ? "Run inside the real host."
-                    : (matches ? "None." : "Confirm which provider is configured for the evidence connection."))
+                    : (!attributed
+                        ? "Confirm the target account is bound to the required connection, then re-run."
+                        : (matches ? "None." : "Confirm which provider is configured for the evidence connection.")))
                 .WithEvidence(
                     DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "provider=" + rawValue, now),
                     DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "resolution=" + (evidence != null ? evidence.ResolutionMethod : "String"), now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "attributed=" + attributed, now),
                     DiagnosticEvidence.Unobservable(FindingFactory.SourcePublicApi,
                         evidence != null ? evidence.ProviderBuildUnobservableReason : "NO_PUBLIC_API_FOR_PROVIDER_BUILD", now));
         }
@@ -254,7 +290,84 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             return array;
         }
 
-        private DiagnosticResult BuildAccountAssociationCheck(ProbeContext context, string correlation, System.DateTime now)
+        /// <summary>
+        /// Proves that the target account is actually bound to the required connection and
+        /// provider. This is the authoritative association check: it never accepts the first (or
+        /// any arbitrary) connection. The host resolves the target account's own
+        /// <c>Account.Connection</c> and reduces it to booleans/counts; the verifier
+        /// (<see cref="Core.Identity.TargetAccountConnectionVerifier"/>) decides PASS/FAIL/
+        /// INCONCLUSIVE, including the multiple-connection and ambiguous-association cases. The
+        /// raw account and connection names never enter the finding.
+        /// </summary>
+        private DiagnosticResult BuildTargetAccountAssociationCheck(ProbeContext context, string correlation, System.DateTime now)
+        {
+            var snapshot = context.Snapshot;
+            var observation = snapshot != null ? snapshot.TargetAccountConnection : null;
+            var verdict = Core.Identity.TargetAccountConnectionVerifier.Evaluate(observation);
+
+            var result = verdict.Status == DiagnosticStatus.PASS
+                ? DiagnosticResult.Pass(ModuleId, "M2.ACCOUNT_CONNECTION_ASSOCIATION", correlation, now)
+                : (verdict.Status == DiagnosticStatus.FAIL
+                    ? DiagnosticResult.Fail(ModuleId, "M2.ACCOUNT_CONNECTION_ASSOCIATION", ErrorClass.ConfigurationInvalid, correlation, now)
+                    : DiagnosticResult.Inconclusive(ModuleId, "M2.ACCOUNT_CONNECTION_ASSOCIATION", correlation, now));
+
+            var observationText = "accounts=" + verdict.ObservedAccountCount
+                + " exactNameMatches=" + verdict.MatchingAccountCount
+                + " connections=" + verdict.ConnectionCount
+                + " matchingConnections=" + verdict.MatchingConnectionCount
+                + " mismatchedFields=" + Describe(verdict.MismatchedFields)
+                + " unobservableFields=" + Describe(verdict.UnobservableFields);
+
+            var evidence = new List<DiagnosticEvidence>();
+            foreach (var code in verdict.ReasonCodes)
+            {
+                evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "reason=" + code, now));
+            }
+
+            evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi,
+                "accounts=" + verdict.ObservedAccountCount, now));
+            evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi,
+                "exactNameMatches=" + verdict.MatchingAccountCount, now));
+            evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi,
+                "connections=" + verdict.ConnectionCount, now));
+            evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi,
+                "matchingConnections=" + verdict.MatchingConnectionCount, now));
+
+            if (verdict.Status == DiagnosticStatus.INCONCLUSIVE
+                && verdict.ObservedAccountCount == 0
+                && verdict.MatchingAccountCount == 0)
+            {
+                evidence.Add(DiagnosticEvidence.Unobservable(FindingFactory.SourcePublicApi,
+                    "no account surface was observable to resolve the connection association", now));
+            }
+
+            return result
+                .WithFindingId("M2.ACCOUNT_CONNECTION_ASSOCIATION")
+                .WithReasonCode(ToArray(verdict.ReasonCodes))
+                .WithObservation(observationText)
+                .WithSource(verdict.Status == DiagnosticStatus.INCONCLUSIVE && verdict.ObservedAccountCount == 0
+                    ? FindingFactory.SourceUnobservable
+                    : FindingFactory.SourcePublicApi)
+                .WithMethod("Resolved the target account's own Account.Connection and compared its name and "
+                    + "provider, and the account provider, against the required connection identity; the raw names "
+                    + "are never reported.")
+                .WithLimitation("Only the account-to-connection relationship the host reports is compared; a field "
+                    + "that could not be read, an account with no reported connection, or more than one connection "
+                    + "matching the required identity keeps the association unproven (INCONCLUSIVE). The tool never "
+                    + "selects or rebinds an account or connection.")
+                .WithNextAction(verdict.Status == DiagnosticStatus.PASS
+                    ? "None."
+                    : "Confirm the target account is bound to the required connection and provider, then re-run.")
+                .WithEvidence(evidence.ToArray());
+        }
+
+        /// <summary>
+        /// Generic per-account provider agreement (kept for breadth): compares each observed
+        /// account's provider with the provider of its reported connection. It does not prove the
+        /// target identity; the authoritative check is
+        /// <see cref="BuildTargetAccountAssociationCheck"/>.
+        /// </summary>
+        private DiagnosticResult BuildAccountProviderAgreementCheck(ProbeContext context, string correlation, System.DateTime now)
         {
             var snapshot = context.Snapshot;
             var associations = snapshot != null && snapshot.AccountAssociations != null
@@ -264,8 +377,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             if (associations.Count == 0)
             {
                 return DiagnosticResult
-                    .Inconclusive(ModuleId, "M2.ACCOUNT_CONNECTION_ASSOCIATION", correlation, now)
-                    .WithFindingId("M2.ACCOUNT_CONNECTION_ASSOCIATION")
+                    .Inconclusive(ModuleId, "M2.ACCOUNT_PROVIDER_AGREEMENT", correlation, now)
+                    .WithFindingId("M2.ACCOUNT_PROVIDER_AGREEMENT")
                     .WithReasonCode("NO_ACCOUNT_ASSOCIATION_OBSERVED")
                     .WithObservation("accounts=0")
                     .WithSource(FindingFactory.SourcePublicApi)
@@ -300,13 +413,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             }
 
             var result = mismatched > 0
-                ? DiagnosticResult.Fail(ModuleId, "M2.ACCOUNT_CONNECTION_ASSOCIATION", ErrorClass.DataUnavailable, correlation, now)
+                ? DiagnosticResult.Fail(ModuleId, "M2.ACCOUNT_PROVIDER_AGREEMENT", ErrorClass.DataUnavailable, correlation, now)
                 : (withConnection == 0
-                    ? DiagnosticResult.Inconclusive(ModuleId, "M2.ACCOUNT_CONNECTION_ASSOCIATION", correlation, now)
-                    : DiagnosticResult.Pass(ModuleId, "M2.ACCOUNT_CONNECTION_ASSOCIATION", correlation, now));
+                    ? DiagnosticResult.Inconclusive(ModuleId, "M2.ACCOUNT_PROVIDER_AGREEMENT", correlation, now)
+                    : DiagnosticResult.Pass(ModuleId, "M2.ACCOUNT_PROVIDER_AGREEMENT", correlation, now));
 
             return result
-                .WithFindingId("M2.ACCOUNT_CONNECTION_ASSOCIATION")
+                .WithFindingId("M2.ACCOUNT_PROVIDER_AGREEMENT")
                 .WithReasonCode(
                     "ACCOUNTS=" + associations.Count,
                     "WITH_CONNECTION=" + withConnection,

@@ -331,6 +331,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             writer.EndArray();
 
             WriteIdentityVerification(writer, dataset);
+            WriteConnectionAssociation(writer, dataset);
 
             var associations = dataset.Snapshot != null ? dataset.Snapshot.AccountAssociations : null;
             writer.BeginArray("associations");
@@ -372,6 +373,32 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             writer.WriteStringArrayProperty("unobservableFields", SecretRedactor.RedactArray(ToArray(verdict.UnobservableFields)));
             writer.WriteProperty("observedAccountCount", verdict.ObservedAccountCount);
             writer.WriteProperty("exactNameMatchCount", verdict.MatchingAccountCount);
+            writer.WriteProperty("accountRef", string.IsNullOrEmpty(verdict.AccountRef)
+                ? string.Empty
+                : SyntheticRef.For("account", verdict.AccountRef));
+            writer.EndObject();
+        }
+
+        /// <summary>
+        /// Writes the target-account→connection→provider association result. Only a status,
+        /// reason codes, field-level detail and counts are written: the required account and
+        /// connection names and the observed raw names are never emitted, so the artifact proves
+        /// the association without disclosing an identifier.
+        /// </summary>
+        private static void WriteConnectionAssociation(JsonWriter writer, EvidenceDataset dataset)
+        {
+            var observation = dataset.Snapshot != null ? dataset.Snapshot.TargetAccountConnection : null;
+            var verdict = TargetAccountConnectionVerifier.Evaluate(observation);
+
+            writer.BeginObject("connectionAssociation");
+            writer.WriteProperty("status", verdict.Status.ToWire());
+            writer.WriteStringArrayProperty("reasonCodes", SecretRedactor.RedactArray(ToArray(verdict.ReasonCodes)));
+            writer.WriteStringArrayProperty("mismatchedFields", SecretRedactor.RedactArray(ToArray(verdict.MismatchedFields)));
+            writer.WriteStringArrayProperty("unobservableFields", SecretRedactor.RedactArray(ToArray(verdict.UnobservableFields)));
+            writer.WriteProperty("observedAccountCount", verdict.ObservedAccountCount);
+            writer.WriteProperty("exactNameMatchCount", verdict.MatchingAccountCount);
+            writer.WriteProperty("connectionCount", verdict.ConnectionCount);
+            writer.WriteProperty("matchingConnectionCount", verdict.MatchingConnectionCount);
             writer.WriteProperty("accountRef", string.IsNullOrEmpty(verdict.AccountRef)
                 ? string.Empty
                 : SyntheticRef.For("account", verdict.AccountRef));

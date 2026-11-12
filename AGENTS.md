@@ -138,6 +138,29 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   it never carries the raw identity. `EvidencePackageBuilder` re-evaluates the verifier from
   `dataset.Snapshot.AccountIdentity`.
 
+## Exact account→connection→provider association (P2)
+
+- `M2.ACCOUNT_CONNECTION_ASSOCIATION` **proves** the target account's own binding: the host reads
+  the matched account's `Account.Connection` (never the first of `Connection.Connections`) and
+  reduces it to booleans/counts + `SyntheticRef` in `TargetAccountConnectionObservation`; the
+  decision is `Core/Identity/TargetAccountConnectionVerifier` (fail-closed).
+- Ambiguity is detected, not accepted: `ConnectionCount`/`MatchingConnectionCount` (more than one
+  connection matching the required identity ⇒ `INCONCLUSIVE`,
+  `TARGET_ACCOUNT_CONNECTION_AMBIGUOUS`) and `MatchingAccountCount > 1` ⇒ `INCONCLUSIVE`.
+  `ConnectionObserved=false` (account reports no connection) ⇒ `INCONCLUSIVE`. An observed field
+  that contradicts the requirement ⇒ `FAIL` (outranks an unobservable field).
+- Provider attribution: `Nt8HostDataProvider.GetProvider()`/`BuildProviderEvidence()` attribute the
+  provider to the target account's own connection, else to a **single** unambiguous connection;
+  `ProviderEvidence.ResolutionBasis` records which. Never the first of several connections. If it
+  cannot be attributed, `M2.PROVIDER_IDENTITY` stays `INCONCLUSIVE` (`PROVIDER_NOT_ATTRIBUTED`).
+- `M2.ACCOUNT_PROVIDER_AGREEMENT` is the generic per-account provider-agreement check (kept for
+  breadth); it does not prove the target identity.
+- The check is emitted even with no connections (as `INCONCLUSIVE`), so it is never omitted.
+- No raw account/connection name ever reaches a finding, log or artifact; `accounts.json` carries a
+  `connectionAssociation` block with only status/reason codes/counts + a synthetic `accountRef`.
+- The host adapter is exercised over the offline stub surface by
+  `tests/.../HostTargetAccountConnectionTests.cs`; a green stub run is **not** real-host proof.
+
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live

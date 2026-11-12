@@ -107,26 +107,53 @@ NormalizedRecord ─────────────────────
 ## 4. ماژول ۲ — Connection / Provider Identity
 
 **پیاده‌سازی:** `Probes/M2ConnectionProbe.cs`، `Host/Nt8HostDataProvider.GetConnections()/GetProvider()`،
-`BuildProviderEvidence()`، `BuildAccountAssociations()`.
+`BuildProviderEvidence()`، `BuildTargetAccountConnectionObservation()`، `BuildAccountAssociations()`،
+`Identity/TargetAccountConnectionVerifier.cs`.
 
 | Check | معنا |
 |---|---|
 | `M2.CONNECTIONS` | وجود Connection |
 | `M2.CONNECTION.<role>` | PriceStatus و Status (کانال سفارش) جداگانه |
-| `M2.PROVIDER_IDENTITY` | Provider واقعی با `ConnectOptions.Provider.ToString()` |
+| `M2.PROVIDER_IDENTITY` | Provider واقعی با `ConnectOptions.Provider.ToString()`، **منسوب به Connection خودِ حساب هدف** (نه اولین Connection) |
 | `M2.RECONNECT` | شناسایی Reconnect از توالی وضعیت |
-| `M2.ACCOUNT_CONNECTION_ASSOCIATION` | تطابق provider حساب و Connection |
+| `M2.ACCOUNT_CONNECTION_ASSOCIATION` | **اثبات** تعلقِ حساب هدف به Connection/provider موردنیاز (نه فرض اولین Connection) |
+| `M2.ACCOUNT_PROVIDER_AGREEMENT` | تطابق provider هر حساب با Connection گزارش‌شدهٔ همان حساب |
 | `M2.ACCOUNT_IDENTITY` | تطابق **دقیق** هویت حساب با هویت دائم RiskPilot.BOT (D-095/D-096) |
 
 **بررسی PR #275 (BOT):** در BOT تشخیص Provider با `provider.ToString()` انجام شده چون عضو enum
 `Provider.Rithmic` تضمین‌شده نیست. این ابزار همان روش را mirror می‌کند و **علاوه بر آن**:
 
 - `ResolutionMethod = "String"` را ثبت می‌کند؛
+- `ProviderEvidence.ResolutionBasis` را ثبت می‌کند: `TARGET_ACCOUNT_CONNECTION` (از Connection خودِ
+  حساب هدف)، `SINGLE_CONNECTION` (تنها Connection قابل‌شمارش؛ بدون ابهام) یا `UNAVAILABLE`. Provider
+  **هرگز** از اولین Connection در میان چند Connection برداشته نمی‌شود؛ اگر منسوب نشود،
+  `M2.PROVIDER_IDENTITY` **`INCONCLUSIVE`** می‌شود (reason: `PROVIDER_NOT_ATTRIBUTED`).
 - `ProviderEvidence.IsStubOrMockValue` — اگر مقدار از stub/mock بیاید، `M2.PROVIDER_IDENTITY`
   **`INCONCLUSIVE`** می‌شود (reason: `PROVIDER_VALUE_FROM_STUB_OR_MOCK`). صرف نتیجهٔ Mock/Stub
   برای PASS کافی نیست.
 
-### ۴.۱ هویت دقیق حساب (`M2.ACCOUNT_IDENTITY`)
+### ۴.۱ تعلقِ دقیق حساب به Connection/provider (`M2.ACCOUNT_CONNECTION_ASSOCIATION`)
+
+این check اثبات می‌کند که **حساب هدف** به Connection موردنیاز (`My Rithmic`) و provider موردنیاز
+(`Rithmic`) **متعلق** است، به‌جای بازرسی یک Connection دلخواه یا اولین Connection موجود. لایهٔ Host
+(`Nt8HostDataProvider.BuildTargetAccountConnectionObservation()`) تنها Connection خودِ حساب هدف
+(`Account.Connection`) را می‌خواند و همهٔ نام‌های خام را به boolean/count و یک `SyntheticRef` کاهش
+می‌دهد؛ تصمیم با `TargetAccountConnectionVerifier` است (fail-closed):
+
+- نبودِ سطح حساب یا مقدار stub/mock ⇒ `INCONCLUSIVE`؛
+- نبودِ حساب ⇒ `INCONCLUSIVE`؛ نامِ متفاوت (case/مشابه) ⇒ `FAIL`؛
+- بیش از یک حساب با تطابق دقیق ⇒ `INCONCLUSIVE` (ابهام)؛
+- بیش از یک Connection با هویت موردنیاز ⇒ `INCONCLUSIVE` (ابهام؛ `TARGET_ACCOUNT_CONNECTION_AMBIGUOUS`)؛
+- حساب بدون Connection گزارش‌شده ⇒ `INCONCLUSIVE`؛
+- فیلد مشاهده‌شده و مغایر ⇒ `FAIL` (outrank بر فیلد غیرقابل‌مشاهده)؛
+- فیلد موردنیازِ غیرقابل‌مشاهده ⇒ `INCONCLUSIVE`؛
+- تنها تطابق کامل و کاملاً مشاهده‌شده ⇒ `PASS`.
+
+خروجی هیچ‌گاه نام خام حساب/Connection را در finding، log یا artifact نمی‌گذارد؛ `accounts.json` یک
+بلوک `connectionAssociation` (status/reasonCodes/counts + `accountRef` مصنوعی) دارد.
+
+
+### ۴.۲ هویت دقیق حساب (`M2.ACCOUNT_IDENTITY`)
 
 هویت دائم مورد نیاز BOT: حساب `SimRP.BOT`، Connection `My Rithmic`، provider `Rithmic`،
 mode `Simulation`، currency `USD`.
