@@ -200,6 +200,55 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void PostTradeAuditMode_ObservesHostSurface_Live()
+        {
+            // Post-Trade Audit run through the real coordinator: M9 must see the host's
+            // Account.Orders surface live (not only in the exported package).
+            var provider = new FakeDataProvider
+            {
+                Snapshot = new Core.Models.Observations.DiagnosticSnapshot
+                {
+                    OrderLifecycle = new Core.Models.Observations.OrderLifecycleObservation
+                    {
+                        OrderSurfaceObservable = true,
+                        OrderSnapshotCount = 1,
+                        Events = new List<Core.Models.Observations.OrderLifecycleEvent>
+                        {
+                            new Core.Models.Observations.OrderLifecycleEvent
+                            {
+                                OrderRef = "order#abc",
+                                OrderIdClass = OrderIdClass.Valid,
+                                State = OrderLifecycleState.Working,
+                                InstrumentId = "ES",
+                                Source = "Account.Orders",
+                                IngestedAtUtc = DateTime.UtcNow
+                            }
+                        }
+                    }
+                }
+            };
+
+            using var runtime = Runtime(provider, 256, 256);
+            runtime.Start();
+
+            var viewState = new DiagnosticViewState();
+            var runner = new RuntimeDiagnosticRunner(runtime, new InMemoryEvidenceSink());
+            var coordinator = new DiagnosticRunCoordinator(runner, new FakeUiDispatcher(), runtime.Log);
+            coordinator.ProgressChanged += viewState.ApplyProgress;
+            coordinator.RunCompleted += result => viewState.ApplyResult(result, true);
+
+            Assert.True(coordinator.Start(DiagnosticMode.PostTradeAudit));
+            Assert.True(coordinator.WaitForCompletion(TimeSpan.FromSeconds(10)));
+
+            var result = viewState.Result;
+            Assert.NotNull(result);
+            Assert.Contains(result.Report.Results, r => r.ModuleId == "M9");
+            var surface = result.Report.Results.FirstOrDefault(r => r.CheckId == "M9.AUDIT_SURFACE");
+            Assert.NotNull(surface);
+            Assert.Equal(Core.Status.DiagnosticStatus.PASS, surface.Status);
+        }
+
+        [Fact]
         public void PostTradeAudit_WithoutExecutionCoverage_DoesNotPassCorrelation()
         {
             // The host reads Account.Orders only and reports ExecutionsInScope=false. Even with

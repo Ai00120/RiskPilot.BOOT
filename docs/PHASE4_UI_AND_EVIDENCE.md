@@ -45,7 +45,7 @@ dotnet build src/RiskPilot.Diagnostics.Nt8/RiskPilot.Diagnostics.Nt8.csproj -p:U
   → Build succeeded. 0 Warning(s), 0 Error(s)
 
 dotnet test tests/RiskPilot.Diagnostics.Nt8.Tests/RiskPilot.Diagnostics.Nt8.Tests.csproj
-  → Passed! Failed: 0, Passed: 199, Skipped: 0, Total: 199
+  → Passed! Failed: 0, Passed: 200, Skipped: 0, Total: 200
 
 python3 verification/addon-smoke/test_diagnostic_safety.py
   → STATIC SAFETY CHECK: PASS (103 production source files, 34 forbidden patterns)
@@ -145,17 +145,29 @@ throw نمی‌شود. تست `Dispose_DuringActiveRun_DoesNotHang` تضمین �
 | `M9.CORRELATION_TIMING` | همبستگی و ترتیب زمانی | رویداد بی‌همتا یا timestamp نامعتبر → `INCONCLUSIVE`/`FAIL` |
 | `M9.MISSING_OR_DUPLICATE` | رویدادهای گم‌شده/تکراری | تکرار یا گم‌شدگی → `FAIL` |
 
-سطح audit از `DiagnosticSnapshot.PostTradeAudit` خوانده می‌شود؛ `DiagnosticRuntime`
-این observation را از دو منبع **واقعی** می‌سازد:
+سطح audit از `DiagnosticSnapshot.PostTradeAudit` خوانده می‌شود. `DiagnosticRuntime` این
+observation را از دو منبع **واقعی** می‌سازد:
 
 1. رکوردهایی که از طریق pipeline دریافت شده‌اند (`EvidenceCollector`)، و
 2. snapshotهای **`Account.Orders`** که لایهٔ میزبان قبلاً برای M3 خوانده است
    (`Snapshot.OrderLifecycle`).
 
 این ادغام در `MergeOrderLifecycleSnapshot` انجام می‌شود و رویدادهای تکراری (بر اساس
-`OrderRef` مصنوعی) را یک‌بار می‌شمارد. بنابراین در میزبان واقعی، حتی وقتی pipeline هیچ
-رویدادی دریافت نکرده باشد (ابزار به هیچ feed رویداد میزبان subscribe نمی‌کند)، audit سطح
-مشاهده‌پذیر دارد و به‌جای `INCONCLUSIVE` نتیجهٔ واقعی می‌دهد.
+`OrderRef` مصنوعی) را یک‌بار می‌شمارد.
+
+مهم: این observation به دو مسیر می‌رسد و **هر دو** باید پر شوند:
+
+- **اجرای زنده:** `EnrichWithPostTradeAudit` (یک enricher روی `EnrichedDataProvider`) snapshot
+  را پیش از رسیدن به probe پر می‌کند؛ بدون آن probe همیشه `UNOBSERVABLE` می‌داد.
+- **بستهٔ شواهد:** `BuildEvidenceDataset` همان observation را برای خروجی می‌سازد.
+
+بنابراین در میزبان واقعی، حتی وقتی pipeline هیچ رویدادی دریافت نکرده باشد (ابزار به هیچ feed
+رویداد میزبان subscribe نمی‌کند)، audit سطح مشاهده‌پذیر دارد و به‌جای `INCONCLUSIVE` نتیجهٔ
+واقعی می‌دهد.
+
+`ExecutionsInScope` هرگز hardcode نمی‌شود: میزبان فقط `Account.Orders` را می‌خواند و
+`ExecutionsInScope=false` گزارش می‌کند، پس ادعای پوشش execution می‌توانست
+`M9.CORRELATION_TIMING` را بدون هیچ execution مشاهده‌شده `PASS` کند (نقض fail-closed).
 
 ---
 
@@ -273,7 +285,8 @@ findings.json               manifest.json
 | Queue overflow | `Phase4RuntimeIntegrationTests` | `M0.EVENT_INTEGRITY` → `FAIL` |
 | Secret redaction | `Phase4EvidencePackageTests` | رمز در observation ماسک می‌شود |
 | Status correctness | `Phase4PostTradeAuditTests` | PASS/FAIL/INCONCLUSIVE درست |
-| M9 bridge | `Phase4RuntimeIntegrationTests` (`PostTradeAudit_FoldsIn*`) | سطح `Account.Orders` واقعی + بدون شمارش مضاعف |
+| M9 bridge (export) | `Phase4RuntimeIntegrationTests` (`PostTradeAudit_FoldsIn*`) | سطح `Account.Orders` واقعی + بدون شمارش مضاعف |
+| M9 live (probe) | `Phase4RuntimeIntegrationTests` (`PostTradeAuditMode_ObservesHostSurface_Live`) | enricher سطح audit را در اجرای زنده پر می‌کند |
 | Source-time basis | `Phase4EvidencePackageTests` (`MarketDataSummary_*`) | مقدار مشتق‌شده، نه hardcoded |
 | Coordinator→ViewState | `Phase4RuntimeIntegrationTests` (`Coordinator_WiredToViewState_*`) | grid/result/acceptance پر می‌شوند |
 | Execution scope fail-closed | `Phase4RuntimeIntegrationTests` (`PostTradeAudit_WithoutExecutionCoverage_*`) | بدون پوشش execution → `INCONCLUSIVE` نه `PASS` |
@@ -287,9 +300,9 @@ findings.json               manifest.json
 | `Phase4RunCoordinatorTests` | 9 | PASS |
 | `Phase4EvidencePackageTests` | 17 | PASS |
 | `Phase4PostTradeAuditTests` | 10 | PASS |
-| `Phase4RuntimeIntegrationTests` | 14 | PASS |
+| `Phase4RuntimeIntegrationTests` | 15 | PASS |
 | سوئیت قبلی (فاز ۱–۳) | 149 | PASS |
-| **مجموع کل سوئیت** | **199** | **PASS** |
+| **مجموع کل سوئیت** | **200** | **PASS** |
 
 Static safety scan: **PASS** (103 فایل production، 34 الگو).
 

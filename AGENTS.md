@@ -88,6 +88,9 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - M9's `PostTradeAudit` observation is built from BOTH the ingest collector AND the host's
   already-read `Account.Orders` snapshot (`Snapshot.OrderLifecycle`), deduped by order ref, so
   the audit has a real surface even though the tool subscribes to no host event feed.
+- The audit observation must reach BOTH paths: the live probe (via the `EnrichWithPostTradeAudit`
+  enricher on `EnrichedDataProvider`) and the exported package (`BuildEvidenceDataset`). Setting
+  it only in `BuildEvidenceDataset` leaves the live M9 probe UNOBSERVABLE.
 - `PostTradeAuditObservation.ExecutionsInScope` must be derived, never hardcoded true: the host
   reads only `Account.Orders` (`AccountRecord.ExecutionsInScope=false`), so claiming execution
   coverage would let `M9.CORRELATION_TIMING` PASS without an observed execution (fail-closed).

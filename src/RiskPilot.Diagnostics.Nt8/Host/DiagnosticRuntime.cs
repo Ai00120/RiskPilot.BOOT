@@ -64,6 +64,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             // enriches the host snapshot with evidence the host layer does not have.
             _enrichedProvider = new EnrichedDataProvider(dataProvider);
             _enrichedProvider.AddEnricher(EnrichWithSafetyEvidence);
+            _enrichedProvider.AddEnricher(EnrichWithPostTradeAudit);
             _dataProvider = _enrichedProvider;
         }
 
@@ -451,16 +452,64 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 }
             }
 
-            // The post-trade audit observation is derived from the collected lifecycle events.
+            // The post-trade audit observation is derived from the collected lifecycle events
+            // and the host's read-only Account.Orders snapshot.
             if (dataset.Snapshot != null)
             {
-                dataset.Snapshot.PostTradeAudit = BuildPostTradeAuditObservation(dataset, session);
+                dataset.Snapshot.PostTradeAudit = BuildPostTradeAuditObservation(dataset, dataset.Snapshot, session);
             }
 
             return dataset;
         }
 
-        private PostTradeAuditObservation BuildPostTradeAuditObservation(EvidenceDataset dataset, SessionContext session)
+        /// <summary>
+        /// Snapshot of the collected records only, without touching the host. Used to build the
+        /// post-trade audit observation for the live diagnostic pass.
+        /// </summary>
+        private EvidenceDataset CollectEvidence()
+        {
+            try
+            {
+                return _evidenceCollector != null ? _evidenceCollector.Snapshot() : new EvidenceDataset();
+            }
+            catch (Exception)
+            {
+                return new EvidenceDataset();
+            }
+        }
+
+        /// <summary>
+        /// Adds the post-trade audit observation to the snapshot the engine hands to the M9
+        /// probe, so the audit analyses the same recorded events during a run that the evidence
+        /// package exports. The observation folds in the host's read-only <c>Account.Orders</c>
+        /// snapshot; without this the M9 probe would always report UNOBSERVABLE.
+        /// </summary>
+        private void EnrichWithPostTradeAudit(DiagnosticSnapshot snapshot)
+        {
+            if (snapshot == null)
+            {
+                return;
+            }
+
+            var dataset = CollectEvidence();
+            dataset.Snapshot = snapshot;
+            try
+            {
+                var accounts = _dataProvider.GetAccounts();
+                if (accounts != null)
+                {
+                    dataset.Accounts = new List<AccountRecord>(accounts);
+                }
+            }
+            catch (Exception)
+            {
+                // Leave accounts empty; the audit reports what it could observe.
+            }
+
+            snapshot.PostTradeAudit = BuildPostTradeAuditObservation(dataset, snapshot, Session);
+        }
+
+        private PostTradeAuditObservation BuildPostTradeAuditObservation(EvidenceDataset dataset, DiagnosticSnapshot snapshot, SessionContext session)
         {
             var observation = new PostTradeAuditObservation
             {
@@ -548,7 +597,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             // These are recorded events that happened before the audit ran, so they belong in
             // the post-trade audit even when the live ingest pipeline captured nothing (the
             // default posture: the tool subscribes to no host event feed).
-            MergeOrderLifecycleSnapshot(dataset.Snapshot != null ? dataset.Snapshot.OrderLifecycle : null, observation);
+            MergeOrderLifecycleSnapshot(snapshot != null ? snapshot.OrderLifecycle : null, observation);
 
             // Derive the snapshot count from the deduped order events so a snapshot that was
             // both ingested and read from Account.Orders is counted once.
