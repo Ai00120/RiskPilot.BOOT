@@ -79,6 +79,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
                 DroppedCount = dataset.DroppedCount,
                 Truncated = !string.IsNullOrEmpty(dataset.TruncationReason),
                 TruncationReason = dataset.TruncationReason ?? string.Empty,
+                Provenance = string.IsNullOrEmpty(dataset.Provenance) ? EvidenceProvenance.Runtime : dataset.Provenance,
                 AggregateStatus = (result != null ? result.AggregateStatus : DiagnosticStatus.NOT_APPLICABLE).ToWire()
             };
 
@@ -701,7 +702,17 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             html.Element("h1", "RiskPilot NT8 Diagnostic Center — Summary");
             html.Element("div", "Trading: DISABLED — read-only diagnostics. No order, execution, account or connection mutation.", "note");
 
+            var provenance = string.IsNullOrEmpty(dataset.Provenance) ? EvidenceProvenance.Runtime : dataset.Provenance;
+            if (provenance == EvidenceProvenance.Sample)
+            {
+                html.Element("div",
+                    "SAMPLE DATA — this package was produced from synthetic documentation data, not a live "
+                    + "NinjaTrader run. It must not be read as a runtime diagnostic result.",
+                    "note");
+            }
+
             html.Open("table");
+            WriteKeyValue(html, "Evidence provenance", provenance);
             WriteKeyValue(html, "Session ID", result != null ? result.SessionId : string.Empty);
             WriteKeyValue(html, "Mode", result != null ? result.ModeId : string.Empty);
             WriteKeyValue(html, "Aggregate status", result != null ? result.AggregateStatus.ToWire() : "NOT_APPLICABLE");

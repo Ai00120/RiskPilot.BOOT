@@ -171,7 +171,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     + " source=" + lifecycleEvent.Source
                     + " orderIdClass=" + lifecycleEvent.OrderIdClass.ToWire()
                     + " state=" + lifecycleEvent.State.ToWire()
-                    + " ingestedAt=" + lifecycleEvent.IngestedAtUtc.ToString("O"), now));
+                    + " ingestedAt=" + lifecycleEvent.IngestedAtUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture), now));
             }
 
             // Correlation is only PASS when it is positively complete; any unmatched event is

@@ -47,6 +47,7 @@
     <Compile Include="Phase4EvidencePackageTests.cs" />
     <Compile Include="Phase4PostTradeAuditTests.cs" />
     <Compile Include="Phase4RuntimeIntegrationTests.cs" />
+    <Compile Include="Phase5ScenarioTests.cs" />
   </ItemGroup>
 
 </Project>

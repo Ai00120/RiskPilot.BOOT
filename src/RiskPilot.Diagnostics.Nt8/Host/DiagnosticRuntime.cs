@@ -735,13 +735,28 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 var package = EvidencePackageBuilder.Build(runResult, dataset);
                 if (!package.VerifyIntegrity(out var failure))
                 {
-                    if (_log != null)
-                    {
-                        _log.Write(_clock.UtcNow, LogLevel.Error, runResult != null ? runResult.CorrelationId : string.Empty,
-                            runResult != null ? runResult.SessionId : string.Empty,
-                            "Evidence package integrity check failed: " + failure);
-                    }
+                    LogPackageFailure(runResult, "Evidence package integrity check failed: " + failure);
+                    return false;
+                }
 
+                // A package that is missing an artifact, that leaks a credential-like token, or
+                // whose manifest carries a raw identity is not a valid package. Refuse to write
+                // it rather than present it as evidence.
+                if (!package.HasCompleteArtifactSet())
+                {
+                    LogPackageFailure(runResult, "Evidence package is missing one or more required artifacts.");
+                    return false;
+                }
+
+                if (!package.IsSecretFree(out var offender))
+                {
+                    LogPackageFailure(runResult, "Evidence package is not secret-free (offender: " + offender + ").");
+                    return false;
+                }
+
+                if (!package.ManifestIsIdentitySafe())
+                {
+                    LogPackageFailure(runResult, "Evidence manifest carries a raw identity reference.");
                     return false;
                 }
 
@@ -765,6 +780,19 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
                 return false;
             }
+        }
+
+        private void LogPackageFailure(DiagnosticRunResult runResult, string message)
+        {
+            if (_log == null)
+            {
+                return;
+            }
+
+            _log.Write(_clock.UtcNow, LogLevel.Error,
+                runResult != null ? runResult.CorrelationId : string.Empty,
+                runResult != null ? runResult.SessionId : string.Empty,
+                message);
         }
 
         private void DrainLoop()

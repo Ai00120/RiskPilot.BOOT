@@ -29,6 +29,10 @@ repository [`Ai00120/RiskPilot.BOT`](https://github.com/Ai00120/RiskPilot.BOT).
   (Quick / Full / Post-Trade Audit), the run coordinator (single-run, cancel, dispatcher
   marshalling), the 17-artifact evidence package, M9 post-trade audit and the Control Center
   window. See [`docs/PHASE4_UI_AND_EVIDENCE.md`](docs/PHASE4_UI_AND_EVIDENCE.md).
+- **Phase 5 complete** — final independent audit, defect fixes, acceptance-scenario tests,
+  sample evidence package and release documentation. See
+  [`docs/FINAL_AUDIT_AND_HANDOFF.md`](docs/FINAL_AUDIT_AND_HANDOFF.md) and
+  [`CHANGELOG.md`](CHANGELOG.md).
 
 > **Real NinjaTrader host compatibility is NOT yet verified.** The offline build compiles against
 > compile-time stubs for CI validation. A green offline build is a syntax/contract check only, not
@@ -52,7 +56,9 @@ src/RiskPilot.Diagnostics.Nt8/          The AddOn (shippable product)
 └── Properties/AssemblyInfo.cs
 tests/RiskPilot.Diagnostics.Nt8.Tests/   xUnit unit tests
 verification/addon-smoke/                 Static safety scan (no NT8 required)
-docs/                                     Phase 1–4 records
+tools/RiskPilot.Diagnostics.SampleReport/ SAMPLE evidence-package generator
+docs/                                     Phase 1–5 records, guides, sample package
+CHANGELOG.md                              Release history
 ```
 
 ## Build

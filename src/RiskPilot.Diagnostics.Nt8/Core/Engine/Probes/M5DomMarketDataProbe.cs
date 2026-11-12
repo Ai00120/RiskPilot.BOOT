@@ -241,8 +241,26 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
         {
             var gaps = observation.SequenceGapCount;
             var dropped = observation.DroppedEventCount;
-            var clean = gaps == 0 && dropped == 0;
 
+            // A positive gap/drop count is itself evidence of a problem, so it fails regardless.
+            // A zero count is only meaningful once the market-data/DOM stream was actually
+            // observed: with no observed stream there is nothing to have been continuous, so the
+            // check stays INCONCLUSIVE rather than reporting a clean PASS on absent data.
+            if (gaps == 0 && dropped == 0)
+            {
+                var streamObserved = observation.Level1QuoteObserved
+                    || observation.LastTradeObserved
+                    || (observation.HostAdapter != null && observation.HostAdapter.Observable);
+
+                if (!streamObserved)
+                {
+                    return FindingFactory.Unobservable(ModuleId, "M5.DATA_INTEGRITY", correlation, now,
+                        "No market-data/DOM stream was observed, so sequence continuity could not be evaluated.",
+                        "Subscribe an instrument and run the pass while market data is flowing.");
+                }
+            }
+
+            var clean = gaps == 0 && dropped == 0;
             return (clean
                     ? DiagnosticResult.Pass(ModuleId, "M5.DATA_INTEGRITY", correlation, now)
                     : DiagnosticResult.Fail(ModuleId, "M5.DATA_INTEGRITY", ErrorClass.SequenceGap, correlation, now))

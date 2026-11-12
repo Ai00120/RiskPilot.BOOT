@@ -1,0 +1,2 @@
+accountRef,instrumentId,side,quantity,averagePrice,ingestedAtUtc
+SAMPLE,ES 12-26,FLAT,0,0,2026-11-12T08:00:02.000Z

@@ -186,6 +186,23 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
         private DiagnosticResult BuildSequenceContinuityCheck(TradeDeltaObservation observation, string correlation, DateTime now)
         {
             var gaps = observation.SequenceGapCount;
+
+            // A positive gap count is itself evidence of a problem, so it fails regardless. A zero
+            // count is only meaningful once the order-flow/trade stream was actually observed:
+            // with no observed stream there is nothing to have been continuous, so the check stays
+            // INCONCLUSIVE rather than reporting a clean PASS on absent data.
+            if (gaps == 0)
+            {
+                var observedTrades = observation.BuyDerivedCount + observation.SellDerivedCount
+                    + observation.UnknownCount;
+                if (observedTrades == 0 && !observation.ResetObserved)
+                {
+                    return FindingFactory.Unobservable(ModuleId, "M6.SEQUENCE_CONTINUITY", correlation, now,
+                        "No order-flow/trade stream was observed, so sequence continuity could not be evaluated.",
+                        "Subscribe the order-flow/trade stream and re-run while trades are arriving.");
+                }
+            }
+
             return (gaps == 0
                     ? DiagnosticResult.Pass(ModuleId, "M6.SEQUENCE_CONTINUITY", correlation, now)
                     : DiagnosticResult.Fail(ModuleId, "M6.SEQUENCE_CONTINUITY", ErrorClass.SequenceGap, correlation, now))

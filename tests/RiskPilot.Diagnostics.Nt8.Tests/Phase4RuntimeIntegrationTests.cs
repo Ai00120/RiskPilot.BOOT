@@ -28,6 +28,23 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             return runtime;
         }
 
+        /// <summary>
+        /// Waits until the drain thread has processed at least <paramref name="expected"/>
+        /// records. Replaces a fixed sleep so the evidence tests are deterministic rather than
+        /// racing the drain thread.
+        /// </summary>
+        private static void WaitProcessed(DiagnosticRuntime runtime, long expected)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (runtime.Session.ProcessedCount < expected && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(5);
+            }
+
+            Assert.True(runtime.Session.ProcessedCount >= expected,
+                "drain thread did not process the expected records before the deadline");
+        }
+
         private static DiagnosticRunResult RunFull(DiagnosticRuntime runtime)
         {
             var result = new DiagnosticRunResult
@@ -79,8 +96,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 FilledQuantity = 1
             });
 
-            // Give the drain thread a moment to consume the record.
-            Thread.Sleep(50);
+            WaitProcessed(runtime, 1);
 
             var result = RunFull(runtime);
             var sink = new InMemoryEvidenceSink();
@@ -190,7 +206,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Quantity = 1
             });
 
-            Thread.Sleep(50);
+            WaitProcessed(runtime, 2);
 
             var dataset = runtime.BuildEvidenceDataset();
             Assert.NotNull(dataset.Snapshot);
@@ -385,7 +401,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Quantity = 1,
                 FilledQuantity = 1
             });
-            Thread.Sleep(50);
+            WaitProcessed(runtime, 1);
 
             var dataset = runtime.BuildEvidenceDataset();
             var audit = dataset.Snapshot.PostTradeAudit;

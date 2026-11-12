@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/><title>RiskPilot NT8 Diagnostic Center — Full Report</title><style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#1a1a1a}table{border-collapse:collapse;margin:8px 0 20px}th,td{border:1px solid #ccc;padding:4px 8px;text-align:left;font-size:13px;vertical-align:top}th{background:#f0f0f0}.PASS{color:#0a7a0a}.FAIL{color:#b00020}.INCONCLUSIVE{color:#a06000}.NOT_APPLICABLE{color:#555}h1{font-size:20px}h2{font-size:16px;border-bottom:1px solid #ddd;padding-bottom:4px}.note{background:#fff8e1;padding:8px;border:1px solid #e0c060}</style></head><body>
+<h1>RiskPilot NT8 Diagnostic Center — Full Report</h1>
+<div class="note">Trading: DISABLED — read-only. Historical baseline figures are NOT current runtime data.</div>
+<h2>Run</h2>
+<table>
+  <tr>
+    <th>Session ID</th>
+    <td>diag_20261112_080000_7db1552e82dc423c9c262c686b57f89e</td>
+  </tr>
+  <tr>
+    <th>Correlation ID</th>
+    <td>sample000000</td>
+  </tr>
+  <tr>
+    <th>Mode</th>
+    <td>full</td>
+  </tr>
+  <tr>
+    <th>Final state</th>
+    <td>Completed</td>
+  </tr>
+  <tr>
+    <th>Aggregate status</th>
+    <td>FAIL</td>
+  </tr>
+</table>
+<h2>Checks</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Module</th>
+      <th>Check</th>
+      <th>Status</th>
+      <th>Severity</th>
+      <th>Observation</th>
+      <th>Source</th>
+      <th>Method</th>
+      <th>Limitation</th>
+      <th>Next action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>M1</td>
+      <td>M1.API_SURFACE</td>
+      <td>PASS</td>
+      <td>INFO</td>
+      <td>present=7 missing=0</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M1</td>
+      <td>M1.HOST_VERSION</td>
+      <td>INCONCLUSIVE</td>
+      <td>MEDIUM</td>
+      <td>NOT OBSERVED: no public API</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M2</td>
+      <td>M2.CONNECTION.BROKER</td>
+      <td>PASS</td>
+      <td>INFO</td>
+      <td>price=CONNECTED order=CONNECTED</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M2</td>
+      <td>M2.PROVIDER_IDENTITY</td>
+      <td>PASS</td>
+      <td>INFO</td>
+      <td>provider=Rithmic resolution=String</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M3</td>
+      <td>M3.ACCOUNT_SURFACE</td>
+      <td>PASS</td>
+      <td>INFO</td>
+      <td>accounts=1 orderSnapshots=2</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M3</td>
+      <td>M3.F05_ORDER_FILL_CONTINUITY</td>
+      <td>INCONCLUSIVE</td>
+      <td>MEDIUM</td>
+      <td>unmatchedTerminalOrders=0 unmatchedExecutions=0</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M4</td>
+      <td>M4.D078_APPROVAL</td>
+      <td>FAIL</td>
+      <td>HIGH</td>
+      <td>No D-078 operator field approval is recorded.</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M5</td>
+      <td>M5.SNAPSHOT_SYNC</td>
+      <td>FAIL</td>
+      <td>HIGH</td>
+      <td>sync=265 failure=1 outOfBounds=265</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M6</td>
+      <td>M6.DIRECTION_SOURCE</td>
+      <td>INCONCLUSIVE</td>
+      <td>MEDIUM</td>
+      <td>provenance=ALL_QUOTE_DERIVED</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M7</td>
+      <td>M7.CANDIDATE_REJECTION</td>
+      <td>INCONCLUSIVE</td>
+      <td>MEDIUM</td>
+      <td>allCandidatesInvalid=311179</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M8</td>
+      <td>M8.TRADING_DISABLED</td>
+      <td>PASS</td>
+      <td>INFO</td>
+      <td>tradingDisabledRuntimeEvidence=true</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M9</td>
+      <td>M9.AUDIT_SURFACE</td>
+      <td>PASS</td>
+      <td>INFO</td>
+      <td>accounts=1 orderSnapshots=2</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+  </tbody>
+</table>
+<h2>Findings</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Finding</th>
+      <th>Module</th>
+      <th>Status</th>
+      <th>Severity</th>
+      <th>Observation</th>
+      <th>Source</th>
+      <th>Collection method</th>
+      <th>Limitation</th>
+      <th>Recommended next action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>M1.API_SURFACE</td>
+      <td>M1</td>
+      <td>PASS</td>
+      <td>INFO</td>
+      <td>present=7 missing=0</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M1.HOST_VERSION</td>
+      <td>M1</td>
+      <td>INCONCLUSIVE</td>
+      <td>INFO</td>
+      <td>NOT OBSERVED: no public API</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M2.CONNECTION.BROKER</td>
+      <td>M2</td>
+      <td>PASS</td>
+      <td>INFO</td>
+      <td>price=CONNECTED order=CONNECTED</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M2.PROVIDER_IDENTITY</td>
+      <td>M2</td>
+      <td>PASS</td>
+      <td>INFO</td>
+      <td>provider=Rithmic resolution=String</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M3.ACCOUNT_SURFACE</td>
+      <td>M3</td>
+      <td>PASS</td>
+      <td>INFO</td>
+      <td>accounts=1 orderSnapshots=2</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M3.F05_ORDER_FILL_CONTINUITY</td>
+      <td>M3</td>
+      <td>INCONCLUSIVE</td>
+      <td>INFO</td>
+      <td>unmatchedTerminalOrders=0 unmatchedExecutions=0</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M4.D078_APPROVAL</td>
+      <td>M4</td>
+      <td>FAIL</td>
+      <td>HIGH</td>
+      <td>No D-078 operator field approval is recorded.</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M5.SNAPSHOT_SYNC</td>
+      <td>M5</td>
+      <td>FAIL</td>
+      <td>HIGH</td>
+      <td>sync=265 failure=1 outOfBounds=265</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M6.DIRECTION_SOURCE</td>
+      <td>M6</td>
+      <td>INCONCLUSIVE</td>
+      <td>INFO</td>
+      <td>provenance=ALL_QUOTE_DERIVED</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M7.CANDIDATE_REJECTION</td>
+      <td>M7</td>
+      <td>INCONCLUSIVE</td>
+      <td>INFO</td>
+      <td>allCandidatesInvalid=311179</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M8.TRADING_DISABLED</td>
+      <td>M8</td>
+      <td>PASS</td>
+      <td>INFO</td>
+      <td>tradingDisabledRuntimeEvidence=true</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+    <tr>
+      <td>M9.AUDIT_SURFACE</td>
+      <td>M9</td>
+      <td>PASS</td>
+      <td>INFO</td>
+      <td>accounts=1 orderSnapshots=2</td>
+      <td>NinjaTrader Public API</td>
+      <td>SAMPLE data (synthetic).</td>
+      <td>Synthetic documentation sample; not a runtime observation.</td>
+      <td>None (sample).</td>
+    </tr>
+  </tbody>
+</table>
+<h2>Counters</h2>
+<table>
+  <tr>
+    <th>Enqueued</th>
+    <td>0</td>
+  </tr>
+  <tr>
+    <th>Processed</th>
+    <td>0</td>
+  </tr>
+  <tr>
+    <th>Dropped</th>
+    <td>0</td>
+  </tr>
+  <tr>
+    <th>Duplicates</th>
+    <td>0</td>
+  </tr>
+  <tr>
+    <th>Sequence gaps</th>
+    <td>0</td>
+  </tr>
+  <tr>
+    <th>Timestamp invalid</th>
+    <td>0</td>
+  </tr>
+</table>
+<h2>Unobservable</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Item</th>
+    </tr>
+  </thead>
+  <tbody>
+  </tbody>
+</table>
+</body></html>
