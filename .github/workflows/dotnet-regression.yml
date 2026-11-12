@@ -1,6 +1,8 @@
 name: BOOT - Regression
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
