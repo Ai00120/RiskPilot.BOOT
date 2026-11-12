@@ -1,0 +1,22 @@
+# Build output
+bin/
+obj/
+
+# .NET / IDE
+.vs/
+*.user
+*.suo
+.vscode/
+
+# Test results
+TestResults/
+*.trx
+
+# Report output (governance: reports are written outside the repository)
+artifacts/
+reports/
+out/
+
+# OS
+.DS_Store
+Thumbs.db

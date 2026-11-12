@@ -1,0 +1,118 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RiskPilot NT8 Diagnostic Center — standalone, read-only NinjaTrader 8 AddOn.
+    Target host: NinjaTrader 8.1.8.4 (64-bit), .NET Framework 4.8, C# 8.0.
+
+    TWO BUILD MODES (identical to the RiskPilot.BOT convention):
+
+    1) Inside NinjaTrader (canonical / real host):
+       Compile the .cs files placed in Documents\NinjaTrader 8\bin\Custom\AddOns\
+       with the NinjaScript Editor. The real NT8 assemblies are referenced there.
+       A real build requires -p:UseStubs=false on Windows with NT8 installed.
+
+    2) Outside NinjaTrader (offline CI / syntax check):
+       dotnet build -p:UseStubs=true   -> net8.0 + Stubs/NinjaTraderStubs.cs + USE_STUBS
+       dotnet build -p:UseStubs=false  -> net48, expects real NT8 assemblies
+
+    A successful offline stub build is NOT proof of real host compatibility.
+    This project has NO dependency on RiskPilot.BOT or its binaries.
+  -->
+
+  <PropertyGroup>
+    <UseStubs Condition="'$(UseStubs)' == ''">true</UseStubs>
+    <TargetFramework Condition="'$(UseStubs)' == 'true'">net8.0</TargetFramework>
+    <TargetFramework Condition="'$(UseStubs)' != 'true'">net48</TargetFramework>
+    <LangVersion>8.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AssemblyName>RiskPilot.Diagnostics.Nt8</AssemblyName>
+    <RootNamespace>RiskPilot.Diagnostics.Nt8</RootNamespace>
+    <Description>RiskPilot NT8 Diagnostic Center — read-only diagnostics and host acceptance.</Description>
+    <Version>1.0.0-phase2</Version>
+    <Authors>RiskPilot</Authors>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(UseStubs)' == 'true'">
+    <DefineConstants>$(DefineConstants);USE_STUBS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+
+    <!-- Core: pure domain, no NinjaTrader types -->
+    <Compile Include="Core\Clock\IClock.cs" />
+    <Compile Include="Core\Identity\CorrelationId.cs" />
+    <Compile Include="Core\Identity\BuildIdentity.cs" />
+    <Compile Include="Core\Status\DiagnosticStatus.cs" />
+    <Compile Include="Core\Security\SecretRedactor.cs" />
+    <Compile Include="Core\Security\SyntheticRef.cs" />
+    <Compile Include="Core\Models\ModelEnums.cs" />
+    <Compile Include="Core\Models\NormalizedRecord.cs" />
+    <Compile Include="Core\Models\EnvironmentRecord.cs" />
+    <Compile Include="Core\Models\ConnectionRecord.cs" />
+    <Compile Include="Core\Models\ProviderRecord.cs" />
+    <Compile Include="Core\Models\AccountRecord.cs" />
+    <Compile Include="Core\Models\InstrumentRecord.cs" />
+    <Compile Include="Core\Models\OrderRecord.cs" />
+    <Compile Include="Core\Models\ExecutionRecord.cs" />
+    <Compile Include="Core\Models\PositionRecord.cs" />
+    <Compile Include="Core\Models\MarketDataRecord.cs" />
+    <Compile Include="Core\Models\DomRecord.cs" />
+    <Compile Include="Core\Models\StrategyRecord.cs" />
+    <Compile Include="Core\Models\DiagnosticFinding.cs" />
+    <Compile Include="Core\Session\SessionId.cs" />
+    <Compile Include="Core\Session\SessionContext.cs" />
+    <Compile Include="Core\Result\DiagnosticEvidence.cs" />
+    <Compile Include="Core\Result\DiagnosticResult.cs" />
+    <Compile Include="Core\Queue\EventQueue.cs" />
+    <Compile Include="Core\Queue\SequenceGapDetector.cs" />
+    <Compile Include="Core\Queue\DuplicateEventDetector.cs" />
+    <Compile Include="Core\Queue\EventIngestPipeline.cs" />
+    <Compile Include="Core\Logging\DiagnosticLog.cs" />
+    <Compile Include="Core\Errors\ErrorClassifier.cs" />
+    <Compile Include="Core\Report\JsonWriter.cs" />
+    <Compile Include="Core\Report\Hashing.cs" />
+    <Compile Include="Core\Report\ReportManifest.cs" />
+    <Compile Include="Core\Report\ManifestSerializer.cs" />
+    <Compile Include="Core\Report\DiagnosticReport.cs" />
+    <Compile Include="Core\Report\ReportSerializer.cs" />
+    <Compile Include="Core\Engine\IDiagnosticDataProvider.cs" />
+    <Compile Include="Core\Engine\IDiagnosticProbe.cs" />
+    <Compile Include="Core\Engine\ProbeContext.cs" />
+    <Compile Include="Core\Engine\DiagnosticEngine.cs" />
+    <Compile Include="Core\Engine\Probes\M1EnvironmentProbe.cs" />
+    <Compile Include="Core\Engine\Probes\M2ConnectionProbe.cs" />
+    <Compile Include="Core\Contract\IReadOnlyDiagnosticSource.cs" />
+
+    <!-- Host: the only layer that touches NinjaTrader types -->
+    <Compile Include="Host\DispatcherBridge.cs" />
+    <Compile Include="Host\FileReportSink.cs" />
+    <Compile Include="Host\Nt8HostDataProvider.cs" />
+    <Compile Include="Host\DiagnosticRuntime.cs" />
+    <Compile Include="Host\DiagnosticAddOn.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseStubs)' == 'true'">
+    <Compile Include="Stubs\NinjaTraderStubs.cs" />
+  </ItemGroup>
+
+  <!-- When UseStubs=false, build against the locally installed NT assemblies. -->
+  <ItemGroup Condition="'$(UseStubs)' != 'true'">
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="NinjaTrader.Core">
+      <HintPath>C:\Program Files\NinjaTrader 8\bin\NinjaTrader.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="NinjaTrader.Gui">
+      <HintPath>C:\Program Files\NinjaTrader 8\bin\NinjaTrader.Gui.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
