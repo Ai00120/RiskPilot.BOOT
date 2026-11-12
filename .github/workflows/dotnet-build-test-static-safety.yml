@@ -1,0 +1,52 @@
+name: BOOT - Build, Test & Static Safety
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: boot-build-safety-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-safety:
+    name: Stub build, xUnit and read-only safety scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build AddOn against offline NT8 stubs
+        run: dotnet build src/RiskPilot.Diagnostics.Nt8/RiskPilot.Diagnostics.Nt8.csproj --configuration Release -p:UseStubs=true
+
+      - name: Run complete xUnit suite
+        run: dotnet test tests/RiskPilot.Diagnostics.Nt8.Tests/RiskPilot.Diagnostics.Nt8.Tests.csproj --configuration Release
+
+      - name: Run read-only diagnostic safety scan
+        run: python3 verification/addon-smoke/test_diagnostic_safety.py
+
+      - name: Upload test results
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-build-test-results
+          path: "**/TestResults/**/*.trx"
+          if-no-files-found: ignore
+          retention-days: 3
