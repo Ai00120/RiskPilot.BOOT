@@ -727,6 +727,60 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void Scenario_AccountAssociation_IsInconclusiveWhenNoAccountHasAConnection()
+        {
+            var provider = new FakeDataProvider();
+            provider.Connections.Add(new ConnectionRecord
+            {
+                ProviderName = "Rithmic",
+                PriceState = ConnectionState.Connected,
+                OrderChannelState = ConnectionState.Connected,
+                Role = ConnectionRole.Broker
+            });
+            provider.Snapshot = new DiagnosticSnapshot
+            {
+                AccountAssociations = new List<AccountConnectionAssociation>
+                {
+                    new AccountConnectionAssociation { AccountRef = "acct-1", HasConnection = false }
+                }
+            };
+
+            var results = new M2ConnectionProbe().Evaluate(Context(provider));
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M2.ACCOUNT_CONNECTION_ASSOCIATION").Status);
+        }
+
+        [Fact]
+        public void Scenario_AccountAssociation_PassesOnlyWithAnObservedConnectedAccount()
+        {
+            var provider = new FakeDataProvider();
+            provider.Connections.Add(new ConnectionRecord
+            {
+                ProviderName = "Rithmic",
+                PriceState = ConnectionState.Connected,
+                OrderChannelState = ConnectionState.Connected,
+                Role = ConnectionRole.Broker
+            });
+            provider.Snapshot = new DiagnosticSnapshot
+            {
+                AccountAssociations = new List<AccountConnectionAssociation>
+                {
+                    new AccountConnectionAssociation
+                    {
+                        AccountRef = "acct-1",
+                        AccountProvider = "Rithmic",
+                        HasConnection = true,
+                        ConnectionName = "Rithmic",
+                        ConnectionProvider = "Rithmic",
+                        ProvidersAgree = true
+                    }
+                }
+            };
+
+            var results = new M2ConnectionProbe().Evaluate(Context(provider));
+            Assert.Equal(DiagnosticStatus.PASS, Find(results, "M2.ACCOUNT_CONNECTION_ASSOCIATION").Status);
+        }
+
+        [Fact]
         public void Scenario_EvidencePackage_VerifiesIntegrityEndToEnd()
         {
             var provider = new FakeDataProvider();

@@ -37,6 +37,10 @@ sample evidence package, and produced the release documentation.
 - **`M8.EVIDENCE_INTEGRITY` passed on an empty session (fail-open).** A session that ingested no
   records at all has all-zero drop/gap counters and returned `PASS`. It now stays `INCONCLUSIVE`
   until at least one record has been ingested; a positive counter still fails.
+- **`M2.ACCOUNT_CONNECTION_ASSOCIATION` passed with no observable association (fail-open).** When
+  accounts were present but none reported a connection (`withConnection == 0`) the check returned
+  `PASS`. It now stays `INCONCLUSIVE` until at least one account has an observed connection; a
+  provider mismatch still fails.
 - **The evidence write path did not enforce the documented invariants.** `WriteEvidencePackage`
   verified the hash manifest only; it now also refuses to write unless `HasCompleteArtifactSet`,
   `IsSecretFree` and `ManifestIsIdentitySafe` all pass, so a package that leaks a credential-like
