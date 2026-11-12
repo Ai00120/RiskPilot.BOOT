@@ -174,13 +174,20 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             }
 
             var mode = SelectedMode();
-            _viewState.BeginRun(mode);
+            _viewState.SelectedMode = mode;
+
+            // Attempt the start first: only reset the module grid once the coordinator has
+            // accepted the run. Resetting before the attempt would wipe the view of an
+            // already-active run when the start is rejected.
             if (!_coordinator.Start(mode))
             {
                 // A run is already active; the coordinator refused the start. The UI stays
                 // responsive and the status line explains why.
                 _viewState.SetStatusLine("Trading: DISABLED | A diagnostic run is already in progress.");
+                return;
             }
+
+            _viewState.BeginRun(mode);
         }
 
         private void ExportEvidence()

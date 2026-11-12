@@ -52,22 +52,34 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
             {
                 lock (_gate)
                 {
-                    return _inner == null || _inner.HasShutdownStarted;
+                    // "No target attached yet" is not "shutting down": until a window exists
+                    // the holder runs notifications inline (see Post) rather than dropping
+                    // them, so a run's progress is never lost before the window opens.
+                    return _inner != null && _inner.HasShutdownStarted;
                 }
             }
         }
 
         public bool Post(Action action)
         {
+            if (action == null)
+            {
+                return false;
+            }
+
             IUiDispatcher inner;
             lock (_gate)
             {
                 inner = _inner;
             }
 
-            if (inner == null || action == null)
+            if (inner == null)
             {
-                return false;
+                // No window is attached. Execute inline so a run's progress/result is applied
+                // to the (thread-safe) view state; the window marshals its own rendering onto
+                // the UI thread when it reads the state.
+                action();
+                return true;
             }
 
             return inner.Post(action);

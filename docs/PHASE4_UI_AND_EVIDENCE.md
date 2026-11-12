@@ -45,7 +45,7 @@ dotnet build src/RiskPilot.Diagnostics.Nt8/RiskPilot.Diagnostics.Nt8.csproj -p:U
   → Build succeeded. 0 Warning(s), 0 Error(s)
 
 dotnet test tests/RiskPilot.Diagnostics.Nt8.Tests/RiskPilot.Diagnostics.Nt8.Tests.csproj
-  → Passed! Failed: 0, Passed: 197, Skipped: 0, Total: 197
+  → Passed! Failed: 0, Passed: 198, Skipped: 0, Total: 198
 
 python3 verification/addon-smoke/test_diagnostic_safety.py
   → STATIC SAFETY CHECK: PASS (103 production source files, 34 forbidden patterns)
@@ -97,6 +97,12 @@ progress» را نشان می‌دهد. این رفتار با `FakeDiagnosticRu
 اجرا روی یک thread پس‌زمینه (`RiskPilot.Diagnostics.Run`) انجام می‌شود، هرگز روی thread رابط
 کاربری یا thread callback نینجاتریلر. هر اعلان UI از طریق `IUiDispatcher` و فقط با
 `InvokeAsync` (هرگز `Invoke` مسدودکننده) marshal می‌شود.
+
+`DiagnosticAddOn.SafeInitialize` رویدادهای coordinator (`ProgressChanged` / `RunCompleted`) را
+به `DiagnosticViewState` وصل می‌کند (`WireViewState`)، و پنجره با خواندن همان state آن را
+رندر می‌کند. تا وقتی پنجره‌ای وجود ندارد، `SwitchableUiDispatcher` اعلان‌ها را **inline** روی
+همان thread اجرا می‌کند (state داخلاً thread-safe است) تا پیشرفت اجرا گم نشود؛ پس از اتصال
+پنجره، اعلان‌ها با `InvokeAsync` به thread UI منتقل می‌شوند.
 
 ### 3.3 Cancel
 
@@ -269,6 +275,7 @@ findings.json               manifest.json
 | Status correctness | `Phase4PostTradeAuditTests` | PASS/FAIL/INCONCLUSIVE درست |
 | M9 bridge | `Phase4RuntimeIntegrationTests` (`PostTradeAudit_FoldsIn*`) | سطح `Account.Orders` واقعی + بدون شمارش مضاعف |
 | Source-time basis | `Phase4EvidencePackageTests` (`MarketDataSummary_*`) | مقدار مشتق‌شده، نه hardcoded |
+| Coordinator→ViewState | `Phase4RuntimeIntegrationTests` (`Coordinator_WiredToViewState_*`) | grid/result/acceptance پر می‌شوند |
 
 ---
 
@@ -279,9 +286,9 @@ findings.json               manifest.json
 | `Phase4RunCoordinatorTests` | 9 | PASS |
 | `Phase4EvidencePackageTests` | 17 | PASS |
 | `Phase4PostTradeAuditTests` | 10 | PASS |
-| `Phase4RuntimeIntegrationTests` | 12 | PASS |
+| `Phase4RuntimeIntegrationTests` | 13 | PASS |
 | سوئیت قبلی (فاز ۱–۳) | 149 | PASS |
-| **مجموع کل سوئیت** | **197** | **PASS** |
+| **مجموع کل سوئیت** | **198** | **PASS** |
 
 Static safety scan: **PASS** (103 فایل production، 34 الگو).
 

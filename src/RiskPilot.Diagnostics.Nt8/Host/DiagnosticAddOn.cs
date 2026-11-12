@@ -91,11 +91,12 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
                     // The run coordinator owns the single-run guarantee and marshals its UI
                     // notifications through the switchable dispatcher. The dispatcher has no
-                    // target until a host window exists, so notifications are dropped until
-                    // then rather than executed on the wrong thread.
+                    // target until a host window exists; until then it applies notifications
+                    // inline to the view state, so a run's progress and result are never lost.
                     _viewState = new DiagnosticViewState();
                     var runner = new RuntimeDiagnosticRunner(_runtime, BuildEvidenceSink());
                     _coordinator = new DiagnosticRunCoordinator(runner, _uiDispatcher, _runtime.Log);
+                    WireViewState();
 
                     Log("RiskPilot Diagnostics initialized. Trading=Disabled.", NinjaTrader.Cbi.LogLevel.Information);
                 }
@@ -108,6 +109,25 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                         NinjaTrader.Cbi.LogLevel.Error);
                 }
             }
+        }
+
+        /// <summary>
+        /// Connects the run coordinator's progress and completion notifications to the view
+        /// state. Without this the window would never see a run's module grid, progress or
+        /// result. The view state raises its own <c>Changed</c> event, which the window
+        /// marshals onto the UI thread for rendering.
+        /// </summary>
+        private void WireViewState()
+        {
+            var viewState = _viewState;
+            var coordinator = _coordinator;
+            if (viewState == null || coordinator == null)
+            {
+                return;
+            }
+
+            coordinator.ProgressChanged += viewState.ApplyProgress;
+            coordinator.RunCompleted += result => viewState.ApplyResult(result, Core.Identity.BuildIdentity.IsStubBuild);
         }
 
         private IEvidenceSink BuildEvidenceSink()

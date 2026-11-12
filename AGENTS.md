@@ -74,6 +74,10 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   the offline stub build. All UI-adjacent logic that must be testable lives in `Core/Run`.
 - `DiagnosticRunCoordinator` owns the single-run guarantee; `Start` returns false when a run is
   active. It marshals notifications through `IUiDispatcher` (async post only).
+- The AddOn wires `ProgressChanged`/`RunCompleted` to `DiagnosticViewState` in
+  `SafeInitialize` (`WireViewState`); the window renders from that state. `SwitchableUiDispatcher`
+  runs notifications inline until a window attaches (then `InvokeAsync`), so a run before the
+  window opens is still reflected.
 - Cancel is polled by the engine between modules via `Func<bool> shouldStop`; a cancelled run
   never writes an evidence package.
 - `EvidencePackageBuilder.Build` is pure (no host/FS/clock). `VerifyIntegrity` checks all 17

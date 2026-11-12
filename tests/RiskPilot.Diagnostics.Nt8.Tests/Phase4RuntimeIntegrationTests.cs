@@ -303,6 +303,33 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void Coordinator_WiredToViewState_PopulatesModulesResultAndAcceptance()
+        {
+            // End-to-end: the real runtime runner through the real coordinator, with the
+            // view state wired exactly as the AddOn wires it. This is the path the window
+            // renders from; the fakes bypass it.
+            var provider = new FakeDataProvider();
+            using var runtime = Runtime(provider, 256, 256);
+            runtime.Start();
+
+            var viewState = new DiagnosticViewState();
+            var runner = new RuntimeDiagnosticRunner(runtime, new InMemoryEvidenceSink());
+            var coordinator = new DiagnosticRunCoordinator(runner, new FakeUiDispatcher(), runtime.Log);
+            coordinator.ProgressChanged += viewState.ApplyProgress;
+            coordinator.RunCompleted += result => viewState.ApplyResult(result, true);
+
+            Assert.True(coordinator.Start(DiagnosticMode.Full));
+            Assert.True(coordinator.WaitForCompletion(TimeSpan.FromSeconds(10)));
+
+            // The window reads these; all must be populated by the run.
+            Assert.NotNull(viewState.Result);
+            Assert.Equal(8, viewState.Modules.Count);
+            Assert.NotEmpty(viewState.Acceptance);
+            Assert.Equal(3, viewState.Acceptance.Count);
+            Assert.False(viewState.IsRunning);
+        }
+
+        [Fact]
         public void EvidenceDirectorySink_WritesEachRunToItsOwnDirectory()
         {
             var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "rp-diag-" + Guid.NewGuid().ToString("N"));
