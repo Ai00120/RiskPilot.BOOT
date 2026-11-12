@@ -1,0 +1,51 @@
+name: BOOT - Linux Runner Smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: boot-linux-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-smoke:
+    name: Verify Linux GitHub Actions execution environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify runner identity and required tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Runner: ${RUNNER_NAME}"
+          echo "OS: ${RUNNER_OS}"
+          echo "Architecture: ${RUNNER_ARCH}"
+          test "${RUNNER_OS}" = "Linux"
+          test "$(id -u)" -ne 0
+          python3 --version
+          dotnet --version
+          git --version
+
+      - name: Verify temporary file and JSON operations
+        run: |
+          python3 - <<'PY'
+          import json
+          import tempfile
+          from pathlib import Path
+          payload = {"repository": "RiskPilot.BOOT", "purpose": "runner-smoke"}
+          with tempfile.TemporaryDirectory(prefix="riskpilot-boot-smoke-") as tmp:
+              target = Path(tmp) / "probe.json"
+              target.write_text(json.dumps(payload), encoding="utf-8")
+              assert json.loads(target.read_text(encoding="utf-8")) == payload
+          print("PASS: Linux runner, Python, .NET, Git and temporary file operations.")
+          PY
