@@ -136,7 +136,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             });
             provider.Snapshot = new DiagnosticSnapshot
             {
-                Provider = new ProviderEvidence { RawProviderValue = "Rithmic", ResolutionMethod = "String" }
+                Provider = new ProviderEvidence { RawProviderValue = "Rithmic", ResolutionMethod = "String", ResolutionBasis = ProviderResolutionBasis.SingleConnection }
             };
 
             var results = new M2ConnectionProbe().Evaluate(Context(provider));
@@ -171,7 +171,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             };
 
             var results = new M2ConnectionProbe().Evaluate(Context(provider));
-            Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M2.ACCOUNT_CONNECTION_ASSOCIATION").Status);
+            Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M2.ACCOUNT_PROVIDER_AGREEMENT").Status);
         }
 
         // ---------------- M3 ----------------

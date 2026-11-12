@@ -7,6 +7,59 @@ dependency on it.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **`M2.ACCOUNT_CONNECTION_ASSOCIATION` did not prove the target account's actual connection.**
+  The check compared each account's provider with the provider of *its* reported connection, but
+  it never proved that the *target* account (D-095/D-096: `SimRP.BOT`) is bound to the required
+  connection (`My Rithmic`) and provider (`Rithmic`); a set of accounts whose providers agreed
+  could pass even when the target account was absent or bound to a different connection. The
+  check now resolves the target account's **own** `Account.Connection` and compares its name and
+  provider (and the account provider) against the required identity, via the new fail-closed
+  `TargetAccountConnectionVerifier`. It returns `INCONCLUSIVE` when the account surface is
+  unobservable, no account is observed, an account reports no connection, a required field is
+  unreadable, or the association is ambiguous; it returns `FAIL` when an observed field
+  contradicts the required association (a wrong or differently-cased account/connection name or a
+  wrong provider). The generic per-account comparison is retained as
+  `M2.ACCOUNT_PROVIDER_AGREEMENT`.
+- **The provider probe could inspect the first available connection instead of the target
+  account's connection (fail-open).** `Nt8HostDataProvider.GetProvider()`/`BuildProviderEvidence()`
+  returned the provider of the first enumerated `Connection.Connections` entry, so an unrelated
+  Rithmic connection could be reported as the evidence provider. The provider is now attributed
+  to the target account's own connection, or, only when there is no target account, to a single
+  unambiguous connection; with multiple connections and no target account it is not attributed at
+  all and `M2.PROVIDER_IDENTITY` stays `INCONCLUSIVE` (`PROVIDER_NOT_ATTRIBUTED`). The resolution
+  basis is recorded (`TARGET_ACCOUNT_CONNECTION` / `SINGLE_CONNECTION` / `UNAVAILABLE`).
+- **Multiple and ambiguous associations were not detected.** The host now enumerates the
+  connections and counts how many match the required connection identity; more than one match
+  (ambiguous association) or more than one exact account match keeps the association
+  `INCONCLUSIVE` rather than silently accepting the first one.
+- **The raw connection name was still emitted, contradicting the documented privacy invariant
+  (fail-open for identity privacy).** Although the exact-identity check reduced its own result to
+  booleans/counts, the configured connection name still reached a finding and two artifacts:
+  `M2.ACCOUNT_PROVIDER_AGREEMENT` wrote `connection=<raw name>` into its evidence, `connections.json`
+  wrote the name as `name`, and `accounts.json` wrote it as `associations[].connectionName`. The
+  name is now reduced to a non-reversible `SyntheticRef` token (`connection#<hash>`): the finding
+  emits `connection=connection#<hash>`, `connections.json` carries `connectionRef`, and
+  `accounts.json` carries `associations[].connectionRef`. No raw account or connection name now
+  reaches a finding, log, report or artifact, matching the documented invariant.
+
+### Added
+
+- `TargetAccountConnectionObservation` (host-free; booleans/counts + synthetic account ref only)
+  and `TargetAccountConnectionVerifier`, which decide the target account→connection→provider
+  association with no raw identity in the result.
+- A privacy-preserving `connectionAssociation` block in `accounts.json` (status, reason codes,
+  field-level detail, counts and a synthetic account ref; no raw account or connection name).
+- Regression tests: `TargetAccountConnectionTests` (verifier + M2 probe: exact match, wrong
+  account, missing account, wrong/unrelated connection, wrong provider, multiple connections,
+  ambiguous association, missing surface, no raw-identity leak) and
+  `HostTargetAccountConnectionTests` (host adapter over the offline stub surface, including the
+  "provider is not the first connection" and "multiple connections without a target account"
+  cases).
+
 ## [1.0.0] — Phase 5 final audit & release
 
 Phase 5 is an independent end-to-end audit of everything built in Phases 1–4. It found and fixed

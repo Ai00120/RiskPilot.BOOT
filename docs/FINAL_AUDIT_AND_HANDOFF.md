@@ -235,6 +235,33 @@ Every package now carries `evidenceProvenance` (`RUNTIME` or `SAMPLE`) in `manif
 `Provenance` row in `summary.html`, and a visible banner for `SAMPLE`. This makes it impossible to
 mistake a mock/test artifact for a runtime result.
 
+### 4.5 Exact account→connection→provider association (P2 follow-up)
+
+A follow-up hardened the account/connection/provider association so the tool proves the **target
+account's own** connection instead of inspecting the first available connection:
+
+- The provider probe previously returned the provider of the first enumerated
+  `Connection.Connections` entry, so an unrelated Rithmic connection could be reported as the
+  evidence provider. `Nt8HostDataProvider.GetProvider()`/`BuildProviderEvidence()` now attribute the
+  provider to the target account's own connection, or, only when there is no target account, to a
+  **single** unambiguous connection. The resolution basis (`TARGET_ACCOUNT_CONNECTION` /
+  `SINGLE_CONNECTION` / `UNAVAILABLE`) is recorded in `ProviderEvidence.ResolutionBasis`.
+- `M2.ACCOUNT_CONNECTION_ASSOCIATION` now resolves the matched account's own `Account.Connection`
+  and proves name + provider against the required identity (`TargetAccountConnectionVerifier`).
+  Multiple connections matching the required identity, more than one exact account match, an
+  account with no reported connection, or an unreadable required field all keep the check
+  `INCONCLUSIVE`; a wrong account/connection name or provider is `FAIL`. The previous generic
+  per-account comparison is retained as `M2.ACCOUNT_PROVIDER_AGREEMENT`.
+- No raw account or connection name reaches a finding, log or artifact; `accounts.json` carries a
+  `connectionAssociation` block (status, reason codes, counts, synthetic `accountRef`), and the
+  generic `M2.ACCOUNT_PROVIDER_AGREEMENT` evidence plus the `connections.json` /
+  `accounts.json` association rows expose only a `SyntheticRef` `connection#<hash>` token
+  (`connectionRef`), never the configured name.
+- Regression tests: `TargetAccountConnectionTests` and `HostTargetAccountConnectionTests` cover
+  exact match, missing account/connection, wrong/unrelated connection, wrong provider, multiple
+  connections and ambiguous associations. The host adapter tests run over the offline stub surface
+  and are **not** a substitute for real-host validation (§9).
+
 ---
 
 ## 5. Real NinjaTrader build — exact, reproducible result

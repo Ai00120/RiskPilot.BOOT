@@ -3,6 +3,23 @@ using System.Collections.Generic;
 namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
 {
     /// <summary>
+    /// How the provider identity was attributed to a connection. It records whether the provider
+    /// was read from the target account's own connection (authoritative) or from a single
+    /// unambiguous connection, so a reader can see the tool never assumed the first connection.
+    /// </summary>
+    public static class ProviderResolutionBasis
+    {
+        /// <summary>Read from the exact target account's own associated connection.</summary>
+        public const string TargetAccountConnection = "TARGET_ACCOUNT_CONNECTION";
+
+        /// <summary>Read from the only enumerated connection (unambiguous, no target account).</summary>
+        public const string SingleConnection = "SINGLE_CONNECTION";
+
+        /// <summary>No connection could be attributed to the provider (fail closed).</summary>
+        public const string Unavailable = "UNAVAILABLE";
+    }
+
+    /// <summary>
     /// Provider identity evidence for M2. Records the *raw* provider value the host reported
     /// and how it was resolved, plus whether the value is real runtime evidence or a
     /// stub/mock value. The module must never treat a stub value as proof of the real
@@ -16,6 +33,12 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
 
         /// <summary>How the value was resolved ("String" / "Enum" / "Unavailable").</summary>
         public string ResolutionMethod { get; set; }
+
+        /// <summary>
+        /// Which connection the provider was attributed to
+        /// (<see cref="ProviderResolutionBasis"/>). Never the first of several connections.
+        /// </summary>
+        public string ResolutionBasis { get; set; }
 
         /// <summary>True when the raw value equals the expected evidence provider ("Rithmic").</summary>
         public bool MatchesExpectedProvider { get; set; }
@@ -36,6 +59,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         {
             RawProviderValue = string.Empty;
             ResolutionMethod = string.Empty;
+            ResolutionBasis = ProviderResolutionBasis.Unavailable;
             ProviderBuildUnobservableReason = "NO_PUBLIC_API_FOR_PROVIDER_BUILD";
         }
     }
@@ -92,6 +116,15 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         /// observed, which M2 reports as INCONCLUSIVE.
         /// </summary>
         public AccountIdentityObservation AccountIdentity { get; set; }
+
+        /// <summary>
+        /// Observation of the target account's actual connection/provider association for M2. It
+        /// proves which connection the target account is bound to, instead of assuming the first
+        /// (or any arbitrary) connection. Like the identity observation it carries only booleans,
+        /// counts and a synthetic account reference; a null member means the association surface
+        /// could not be observed, which M2 reports as INCONCLUSIVE.
+        /// </summary>
+        public TargetAccountConnectionObservation TargetAccountConnection { get; set; }
 
         public OrderLifecycleObservation OrderLifecycle { get; set; }
 

@@ -8,6 +8,7 @@ using RiskPilot.Diagnostics.Nt8.Core.Models.Observations;
 using RiskPilot.Diagnostics.Nt8.Core.Report;
 using RiskPilot.Diagnostics.Nt8.Core.Result;
 using RiskPilot.Diagnostics.Nt8.Core.Run;
+using RiskPilot.Diagnostics.Nt8.Core.Security;
 using RiskPilot.Diagnostics.Nt8.Core.Session;
 using RiskPilot.Diagnostics.Nt8.Core.Status;
 
@@ -257,6 +258,22 @@ namespace RiskPilot.Diagnostics.SampleReport
 
             dataset.Snapshot = new DiagnosticSnapshot
             {
+                TargetAccountConnection = new TargetAccountConnectionObservation
+                {
+                    AccountSurfaceObservable = true,
+                    ObservedAccountCount = 1,
+                    MatchingAccountCount = 1,
+                    ConnectionCount = 1,
+                    MatchingConnectionCount = 1,
+                    AccountRef = SyntheticRef.For("account", "SAMPLE-ACCOUNT"),
+                    AccountProviderObservable = true,
+                    AccountProviderMatches = true,
+                    ConnectionObserved = true,
+                    ConnectionNameObservable = true,
+                    ConnectionNameMatches = true,
+                    ConnectionProviderObservable = true,
+                    ConnectionProviderMatches = true
+                },
                 DomMarketData = new DomMarketDataObservation
                 {
                     HostAdapter = new DomCounterBlock

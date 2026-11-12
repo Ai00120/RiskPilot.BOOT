@@ -73,9 +73,11 @@ ALLOWED_REFLECTION_FILES = {
 # The exact Owner-specified account/connection identifiers (RiskPilot.BOT D-096) are
 # Owner-provided configuration constants. They may be defined in exactly one reviewed core
 # file (the identity definition) and must not be emitted to diagnostics, logs or reports.
-# This check fails if the literal account name appears anywhere else in production source,
-# which is how an accidental identity leak would first appear.
-IDENTITY_LITERAL = "SimRP.BOT"
+# This check fails if a literal appears anywhere else in production source, which is how an
+# accidental hardcoded identity leak would first appear. It catches a hardcoded literal only;
+# it does not prove that a runtime value (for example a host-reported connection name) is never
+# emitted -- that is enforced by the artifact/finding tests.
+IDENTITY_LITERALS = ["SimRP.BOT", "My Rithmic"]
 IDENTITY_DEFINITION_FILE = "src/RiskPilot.Diagnostics.Nt8/Core/Identity/AccountIdentityVerifier.cs"
 
 
@@ -116,8 +118,8 @@ def main():
     if "TradingDisabled" not in addon:
         failures.append("DiagnosticAddOn.cs: TradingDisabled declaration missing")
 
-    # The Owner-specified identity literal must exist (the verifier compares against it) and
-    # must not appear anywhere else in production source, so it can never be emitted to a
+    # The Owner-specified identity literals must exist (the verifier compares against them) and
+    # must not appear anywhere else in production source, so they can never be emitted to a
     # diagnostic, log or report by accident.
     definition = REPO / IDENTITY_DEFINITION_FILE
     if not definition.exists():
@@ -126,8 +128,10 @@ def main():
         for path, rel in files:
             if rel == IDENTITY_DEFINITION_FILE:
                 continue
-            if IDENTITY_LITERAL in path.read_text(encoding="utf-8"):
-                failures.append(f"{rel}: owner account identity literal '{IDENTITY_LITERAL}' must not appear outside {IDENTITY_DEFINITION_FILE}")
+            text = path.read_text(encoding="utf-8")
+            for literal in IDENTITY_LITERALS:
+                if literal in text:
+                    failures.append(f"{rel}: owner identity literal '{literal}' must not appear outside {IDENTITY_DEFINITION_FILE}")
 
     if failures:
         print("STATIC SAFETY CHECK: FAIL")
