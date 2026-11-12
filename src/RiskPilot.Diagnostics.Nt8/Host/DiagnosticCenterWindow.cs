@@ -191,18 +191,23 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             {
                 if (!_coordinator.Start(mode))
                 {
-                    _runButton.IsEnabled = true;
                     var reason = _coordinator.IsRunning
                         ? "A diagnostic run is already in progress."
                         : "The diagnostic coordinator rejected the start. Close and reopen the Diagnostic Center; check the NinjaTrader Log.";
-                    _viewState.SetStatusLine("Trading: DISABLED | " + reason);
+                    if (_coordinator.IsRunning)
+                    {
+                        _viewState.SetStatusLine("Trading: DISABLED | " + reason);
+                    }
+                    else
+                    {
+                        _viewState.MarkStartFailed(mode, reason);
+                    }
                     return;
                 }
             }
             catch (Exception ex)
             {
-                _runButton.IsEnabled = true;
-                _viewState.SetStatusLine("Trading: DISABLED | Start failed: " + Core.Errors.ErrorClassifier.Describe(ex));
+                _viewState.MarkStartFailed(mode, "Start failed: " + Core.Errors.ErrorClassifier.Describe(ex));
             }
         }
 
