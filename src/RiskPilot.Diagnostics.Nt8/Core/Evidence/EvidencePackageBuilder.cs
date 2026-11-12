@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using RiskPilot.Diagnostics.Nt8.Core.Identity;
 using RiskPilot.Diagnostics.Nt8.Core.Models;
 using RiskPilot.Diagnostics.Nt8.Core.Models.Observations;
 using RiskPilot.Diagnostics.Nt8.Core.Report;
@@ -329,6 +330,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
 
             writer.EndArray();
 
+            WriteIdentityVerification(writer, dataset);
+
             var associations = dataset.Snapshot != null ? dataset.Snapshot.AccountAssociations : null;
             writer.BeginArray("associations");
             if (associations != null)
@@ -349,6 +352,30 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             writer.EndArray();
             writer.EndObject();
             return writer.ToString();
+        }
+
+        /// <summary>
+        /// Writes the exact account-identity verification result. Only a status, reason codes and
+        /// the synthetic account reference are written: the required account/connection names and
+        /// the observed raw names are never emitted, so the artifact proves the result without
+        /// disclosing an identifier.
+        /// </summary>
+        private static void WriteIdentityVerification(JsonWriter writer, EvidenceDataset dataset)
+        {
+            var observation = dataset.Snapshot != null ? dataset.Snapshot.AccountIdentity : null;
+            var verdict = AccountIdentityVerifier.Evaluate(observation);
+
+            writer.BeginObject("identityVerification");
+            writer.WriteProperty("status", verdict.Status.ToWire());
+            writer.WriteStringArrayProperty("reasonCodes", SecretRedactor.RedactArray(ToArray(verdict.ReasonCodes)));
+            writer.WriteStringArrayProperty("mismatchedFields", SecretRedactor.RedactArray(ToArray(verdict.MismatchedFields)));
+            writer.WriteStringArrayProperty("unobservableFields", SecretRedactor.RedactArray(ToArray(verdict.UnobservableFields)));
+            writer.WriteProperty("observedAccountCount", verdict.ObservedAccountCount);
+            writer.WriteProperty("exactNameMatchCount", verdict.MatchingAccountCount);
+            writer.WriteProperty("accountRef", string.IsNullOrEmpty(verdict.AccountRef)
+                ? string.Empty
+                : SyntheticRef.For("account", verdict.AccountRef));
+            writer.EndObject();
         }
 
         private static string BuildInstrumentsJson(EvidenceDataset dataset)

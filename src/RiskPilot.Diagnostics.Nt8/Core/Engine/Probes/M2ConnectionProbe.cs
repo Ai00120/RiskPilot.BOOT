@@ -41,6 +41,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     .WithNextAction("Connect the provider in NinjaTrader and re-run the diagnostic pass.")
                     .WithEvidence(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "connections=0", now))
                     .WithRemediation("No connection was observable; connect the provider and re-run."));
+                results.Add(BuildAccountIdentityCheck(context, correlation, now));
                 results.Add(DiagnosticResult
                     .NotApplicable(ModuleId, "M2.PROVIDER_IDENTITY", correlation, now)
                     .WithFindingId("M2.PROVIDER_IDENTITY")
@@ -75,6 +76,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
 
             results.Add(BuildReconnectCheck(connections, correlation, now));
             results.Add(BuildProviderIdentityCheck(context, correlation, now));
+            results.Add(BuildAccountIdentityCheck(context, correlation, now));
             results.Add(BuildAccountAssociationCheck(context, correlation, now));
 
             return results;
@@ -167,6 +169,89 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "resolution=" + (evidence != null ? evidence.ResolutionMethod : "String"), now),
                     DiagnosticEvidence.Unobservable(FindingFactory.SourcePublicApi,
                         evidence != null ? evidence.ProviderBuildUnobservableReason : "NO_PUBLIC_API_FOR_PROVIDER_BUILD", now));
+        }
+
+        /// <summary>
+        /// Verifies that the observed account is exactly the permanent RiskPilot.BOT identity
+        /// (D-095/D-096): account name, connection name, provider, simulation mode and currency.
+        /// The comparison is exact and fail-closed; a missing or unreadable field is
+        /// INCONCLUSIVE, and a similar or differently-cased name is not a match. The raw account
+        /// and connection names never enter the observation, so no identifier can leak into a
+        /// finding or an evidence artifact.
+        /// </summary>
+        private DiagnosticResult BuildAccountIdentityCheck(ProbeContext context, string correlation, System.DateTime now)
+        {
+            var snapshot = context.Snapshot;
+            var observation = snapshot != null ? snapshot.AccountIdentity : null;
+            var verdict = Core.Identity.AccountIdentityVerifier.Evaluate(observation);
+
+            var result = verdict.Status == DiagnosticStatus.PASS
+                ? DiagnosticResult.Pass(ModuleId, "M2.ACCOUNT_IDENTITY", correlation, now)
+                : (verdict.Status == DiagnosticStatus.FAIL
+                    ? DiagnosticResult.Fail(ModuleId, "M2.ACCOUNT_IDENTITY", ErrorClass.ConfigurationInvalid, correlation, now)
+                    : DiagnosticResult.Inconclusive(ModuleId, "M2.ACCOUNT_IDENTITY", correlation, now));
+
+            var observationText = "accounts=" + verdict.ObservedAccountCount
+                + " exactNameMatches=" + verdict.MatchingAccountCount
+                + " mismatchedFields=" + Describe(verdict.MismatchedFields)
+                + " unobservableFields=" + Describe(verdict.UnobservableFields);
+
+            var evidence = new List<DiagnosticEvidence>();
+            foreach (var code in verdict.ReasonCodes)
+            {
+                evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "reason=" + code, now));
+            }
+
+            evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi,
+                "accounts=" + verdict.ObservedAccountCount, now));
+            evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi,
+                "exactNameMatches=" + verdict.MatchingAccountCount, now));
+
+            if (verdict.Status == DiagnosticStatus.INCONCLUSIVE
+                && verdict.ObservedAccountCount == 0
+                && verdict.MatchingAccountCount == 0)
+            {
+                evidence.Add(DiagnosticEvidence.Unobservable(FindingFactory.SourcePublicApi,
+                    "no account identity was observable", now));
+            }
+
+            return result
+                .WithFindingId("M2.ACCOUNT_IDENTITY")
+                .WithReasonCode(ToArray(verdict.ReasonCodes))
+                .WithObservation(observationText)
+                .WithSource(verdict.Status == DiagnosticStatus.INCONCLUSIVE && verdict.ObservedAccountCount == 0
+                    ? FindingFactory.SourceUnobservable
+                    : FindingFactory.SourcePublicApi)
+                .WithMethod("Exact comparison of Account.Name, Account.Provider, Account.Connection.Options.Name, "
+                    + "Account.Connection.Options.Provider, Account.Connection.Options.Mode and Account.Denomination "
+                    + "against the permanent RiskPilot.BOT identity; the raw names are never reported.")
+                .WithLimitation("Only the fields the host reports are compared; a field that could not be read keeps the "
+                    + "identity unproven (INCONCLUSIVE). The tool reports the result, it never rebinds or selects an account.")
+                .WithNextAction(verdict.Status == DiagnosticStatus.PASS
+                    ? "None."
+                    : "Confirm the running account and connection are exactly the permanent RiskPilot.BOT identity, then re-run.")
+                .WithEvidence(evidence.ToArray());
+        }
+
+        private static string Describe(IList<string> fields)
+        {
+            return fields == null || fields.Count == 0 ? "none" : string.Join("|", fields);
+        }
+
+        private static string[] ToArray(IList<string> values)
+        {
+            if (values == null || values.Count == 0)
+            {
+                return new string[0];
+            }
+
+            var array = new string[values.Count];
+            for (var i = 0; i < values.Count; i++)
+            {
+                array[i] = values[i];
+            }
+
+            return array;
         }
 
         private DiagnosticResult BuildAccountAssociationCheck(ProbeContext context, string correlation, System.DateTime now)

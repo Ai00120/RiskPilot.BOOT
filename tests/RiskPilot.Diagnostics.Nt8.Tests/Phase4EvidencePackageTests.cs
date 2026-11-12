@@ -272,6 +272,57 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void AccountsJson_ReportsIdentityVerification_WithNoRawIdentity()
+        {
+            // A fully matching identity is reported as PASS in the accounts artifact, and the
+            // artifact never carries the raw account/connection names.
+            var dataset = new EvidenceDataset();
+            dataset.Snapshot = new DiagnosticSnapshot
+            {
+                AccountIdentity = new AccountIdentityObservation
+                {
+                    AccountSurfaceObservable = true,
+                    ObservedAccountCount = 1,
+                    MatchingAccountCount = 1,
+                    AccountRef = SyntheticRef.For("account", "SimRP.BOT"),
+                    AccountProviderObservable = true,
+                    AccountProviderMatches = true,
+                    ConnectionObserved = true,
+                    ConnectionNameObservable = true,
+                    ConnectionNameMatches = true,
+                    ConnectionProviderObservable = true,
+                    ConnectionProviderMatches = true,
+                    ConnectionStatusObservable = true,
+                    ConnectionConnected = true,
+                    ModeObservable = true,
+                    ModeIsSimulation = true,
+                    DenominationObservable = true,
+                    DenominationIsUsd = true
+                }
+            };
+
+            var package = EvidencePackageBuilder.Build(RunResult(), dataset);
+            Assert.True(package.VerifyIntegrity(out var failure), failure);
+
+            var accounts = package.Read(EvidencePackageCatalog.AccountsJson);
+            Assert.Contains("\"identityVerification\"", accounts);
+            Assert.Contains("ACCOUNT_IDENTITY_MATCH", accounts);
+            Assert.Contains("\"status\":\"PASS\"", accounts);
+
+            Assert.DoesNotContain("SimRP.BOT", accounts);
+            Assert.DoesNotContain("My Rithmic", accounts);
+        }
+
+        [Fact]
+        public void AccountsJson_IdentityVerification_IsInconclusive_WhenUnobservable()
+        {
+            var package = EvidencePackageBuilder.Build(RunResult(), new EvidenceDataset());
+            var accounts = package.Read(EvidencePackageCatalog.AccountsJson);
+            Assert.Contains("\"identityVerification\"", accounts);
+            Assert.Contains("ACCOUNT_IDENTITY_UNOBSERVABLE", accounts);
+        }
+
+        [Fact]
         public void PartialDataset_ReportsOnlyObservedSectionsAvailable()
         {
             // Only connections + accounts are observable; every other section must be

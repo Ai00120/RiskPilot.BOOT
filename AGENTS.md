@@ -117,6 +117,27 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - The `UseStubs=false` configuration references five NT8 assemblies (Core, Cbi, Data,
   NinjaScript, Gui). The real-host build is not verifiable offline; never claim it is.
 
+## Exact account identity notes (P16 / D-095 / D-096)
+
+- M2 verifies the **exact** permanent RiskPilot.BOT identity: account `SimRP.BOT`, connection
+  `My Rithmic`, provider `Rithmic`, mode `Simulation`, currency `USD`.
+- The only place the raw account/connection name literals live is
+  `Core/Identity/AccountIdentityVerifier.cs` (`ExpectedAccountIdentity`). The static safety scan
+  fails if `SimRP.BOT` appears in any other production source file, so an accidental identity
+  leak into a diagnostic/log/report is caught. Tests and docs are not scanned.
+- The Host adapter (`Nt8HostDataProvider.BuildAccountIdentityObservation()`) does the exact
+  ordinal name comparison and reduces everything to booleans/counts + `SyntheticRef`; the raw
+  names never enter `AccountIdentityObservation`, a finding, or an artifact.
+- Fail-closed: no account surface / stub value / zero accounts / ambiguous multi-match /
+  any unobserved required field ⇒ `INCONCLUSIVE`; a similar or differently-cased name, wrong
+  provider/connection/mode/currency ⇒ `FAIL`. Only a fully observed, fully matching identity is
+  `PASS`. A mismatch outranks an unobservable field (proven wrong beats unproven).
+- `Account.Denomination` is mapped to an ISO code (`Currency.UsDollar` → `USD`) in the host; an
+  unmapped member is unobservable, never guessed from the member name.
+- `accounts.json` carries an `identityVerification` block (status, reason codes, masked ref);
+  it never carries the raw identity. `EvidencePackageBuilder` re-evaluates the verifier from
+  `dataset.Snapshot.AccountIdentity`.
+
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live

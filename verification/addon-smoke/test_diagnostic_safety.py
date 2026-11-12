@@ -70,6 +70,14 @@ ALLOWED_REFLECTION_FILES = {
     "src/RiskPilot.Diagnostics.Nt8/Properties/AssemblyInfo.cs",
 }
 
+# The exact Owner-specified account/connection identifiers (RiskPilot.BOT D-096) are
+# Owner-provided configuration constants. They may be defined in exactly one reviewed core
+# file (the identity definition) and must not be emitted to diagnostics, logs or reports.
+# This check fails if the literal account name appears anywhere else in production source,
+# which is how an accidental identity leak would first appear.
+IDENTITY_LITERAL = "SimRP.BOT"
+IDENTITY_DEFINITION_FILE = "src/RiskPilot.Diagnostics.Nt8/Core/Identity/AccountIdentityVerifier.cs"
+
 
 def iter_source_files():
     for path in SRC_DIR.rglob("*.cs"):
@@ -107,6 +115,19 @@ def main():
     addon = (SRC_DIR / "Host" / "DiagnosticAddOn.cs").read_text(encoding="utf-8")
     if "TradingDisabled" not in addon:
         failures.append("DiagnosticAddOn.cs: TradingDisabled declaration missing")
+
+    # The Owner-specified identity literal must exist (the verifier compares against it) and
+    # must not appear anywhere else in production source, so it can never be emitted to a
+    # diagnostic, log or report by accident.
+    definition = REPO / IDENTITY_DEFINITION_FILE
+    if not definition.exists():
+        failures.append(f"{IDENTITY_DEFINITION_FILE}: identity definition file is missing")
+    else:
+        for path, rel in files:
+            if rel == IDENTITY_DEFINITION_FILE:
+                continue
+            if IDENTITY_LITERAL in path.read_text(encoding="utf-8"):
+                failures.append(f"{rel}: owner account identity literal '{IDENTITY_LITERAL}' must not appear outside {IDENTITY_DEFINITION_FILE}")
 
     if failures:
         print("STATIC SAFETY CHECK: FAIL")
