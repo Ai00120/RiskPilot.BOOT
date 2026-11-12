@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using RiskPilot.Diagnostics.Nt8.Core.Models;
+using RiskPilot.Diagnostics.Nt8.Core.Models.Observations;
 
 namespace RiskPilot.Diagnostics.Nt8.Core.Engine
 {
@@ -31,5 +32,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
 
         /// <summary>Names of the required public APIs the host found missing.</summary>
         IReadOnlyList<string> GetMissingApis();
+
+        /// <summary>
+        /// Complete read-only observation set for the M1–M8 modules. A member of the
+        /// returned snapshot may be null when the host could not provide it; the modules
+        /// treat a null member as INCONCLUSIVE, never PASS. Implementations must be
+        /// read-only and must never throw for a normal "not available" condition.
+        /// </summary>
+        DiagnosticSnapshot GetSnapshot();
     }
 }

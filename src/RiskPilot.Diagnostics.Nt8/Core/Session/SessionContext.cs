@@ -30,11 +30,19 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Session
             SessionId = sessionId;
             StartedAtUtc = startedAtUtc;
             SourceTimeBasis = SourceTimeBasis.ServerTimeUnverified;
+            Counters = new RuntimeCounters();
         }
 
         public string SessionId { get; private set; }
 
         public DateTime StartedAtUtc { get; private set; }
+
+        /// <summary>
+        /// Shared runtime counters populated by the M3–M8 event consumers on the drain
+        /// thread and read by the probes on the diagnostic pass. Session-scoped, so a new
+        /// session starts from zero.
+        /// </summary>
+        public RuntimeCounters Counters { get; private set; }
 
         /// <summary>Trust basis asserted for source timestamps in this session.</summary>
         public SourceTimeBasis SourceTimeBasis { get; set; }

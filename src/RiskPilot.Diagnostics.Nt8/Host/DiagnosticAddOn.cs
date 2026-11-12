@@ -20,6 +20,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
     public sealed class DiagnosticAddOn : AddOnBase
     {
         private readonly object _gate = new object();
+        private readonly System.Collections.Generic.List<string> _lifecycleStates = new System.Collections.Generic.List<string>();
         private DiagnosticRuntime _runtime;
         private bool _started;
         private bool _disposed;
@@ -29,6 +30,11 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
         protected override void OnStateChange()
         {
+            lock (_gate)
+            {
+                _lifecycleStates.Add(State.ToString());
+            }
+
             switch (State)
             {
                 case State.SetDefaults:
@@ -46,6 +52,12 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     SafeDispose();
                     break;
             }
+        }
+
+        /// <summary>Lifecycle states observed so far, in order. Used by M1.</summary>
+        public System.Collections.Generic.IReadOnlyList<string> LifecycleStates
+        {
+            get { lock (_gate) { return new System.Collections.Generic.List<string>(_lifecycleStates); } }
         }
 
         /// <summary>

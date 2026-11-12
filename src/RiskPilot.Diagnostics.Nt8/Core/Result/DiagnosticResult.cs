@@ -8,6 +8,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Result
     /// <summary>
     /// Outcome of a single diagnostic check, carrying status, severity, sanitized
     /// evidence and reason codes. This is the unit the report serializes per check.
+    /// <para>
+    /// Every check is also a *finding*: it carries a stable id, a human-readable
+    /// observation, the evidence source, the observation method, the known limitation and
+    /// a next action, so a reader can act on it without re-deriving the reasoning.
+    /// </para>
     /// </summary>
     public sealed class DiagnosticResult
     {
@@ -15,16 +20,35 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Result
 
         public string CheckId { get; set; }
 
+        /// <summary>Stable finding id (for example "F-05" or "M4.ATTESTATION").</summary>
+        public string FindingId { get; set; }
+
         public DiagnosticStatus Status { get; set; }
 
         public DiagnosticSeverity Severity { get; set; }
 
         public ErrorClass ErrorClass { get; set; }
 
+        /// <summary>Human-readable description of what was observed.</summary>
+        public string Observation { get; set; }
+
+        /// <summary>Source of the evidence ("NinjaTrader Public API", "Unobservable", ...).</summary>
+        public string Source { get; set; }
+
+        /// <summary>How the observation was made (public API read, counter snapshot, ...).</summary>
+        public string Method { get; set; }
+
+        /// <summary>Known limitation of this check, stated explicitly.</summary>
+        public string Limitation { get; set; }
+
+        /// <summary>Concrete next action for an operator. Never an automated mutation.</summary>
+        public string NextAction { get; set; }
+
         public IReadOnlyList<DiagnosticEvidence> Evidence { get; set; }
 
         public string[] ReasonCodes { get; set; }
 
+        /// <summary>Non-operational guidance retained for backward compatibility.</summary>
         public string RemediationHint { get; set; }
 
         public string CorrelationId { get; set; }
@@ -35,6 +59,12 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Result
         {
             ModuleId = string.Empty;
             CheckId = string.Empty;
+            FindingId = string.Empty;
+            Observation = string.Empty;
+            Source = string.Empty;
+            Method = string.Empty;
+            Limitation = string.Empty;
+            NextAction = string.Empty;
             Evidence = new List<DiagnosticEvidence>();
             ReasonCodes = new string[0];
             RemediationHint = string.Empty;
@@ -80,11 +110,55 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Result
             {
                 ModuleId = moduleId ?? string.Empty,
                 CheckId = checkId ?? string.Empty,
+                FindingId = checkId ?? string.Empty,
                 Status = status,
                 Severity = severity,
                 CorrelationId = correlationId ?? string.Empty,
                 EvaluatedAtUtc = atUtc
             };
+        }
+
+        public DiagnosticResult WithFindingId(string findingId)
+        {
+            FindingId = findingId ?? string.Empty;
+            return this;
+        }
+
+        public DiagnosticResult WithObservation(string observation)
+        {
+            Observation = observation ?? string.Empty;
+            return this;
+        }
+
+        public DiagnosticResult WithSource(string source)
+        {
+            Source = source ?? string.Empty;
+            return this;
+        }
+
+        public DiagnosticResult WithMethod(string method)
+        {
+            Method = method ?? string.Empty;
+            return this;
+        }
+
+        public DiagnosticResult WithLimitation(string limitation)
+        {
+            Limitation = limitation ?? string.Empty;
+            return this;
+        }
+
+        public DiagnosticResult WithNextAction(string nextAction)
+        {
+            NextAction = nextAction ?? string.Empty;
+            return this;
+        }
+
+        /// <summary>Sets severity explicitly, overriding the status default.</summary>
+        public DiagnosticResult WithSeverity(DiagnosticSeverity severity)
+        {
+            Severity = severity;
+            return this;
         }
 
         public DiagnosticResult WithReasonCode(params string[] codes)

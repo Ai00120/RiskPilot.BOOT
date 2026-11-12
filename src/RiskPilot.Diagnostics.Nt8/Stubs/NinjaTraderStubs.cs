@@ -170,6 +170,7 @@ namespace NinjaTrader.Cbi
         public Currency Currency { get; set; }
         public double TickSize { get; set; }
         public double PointValue { get; set; }
+        public List<Exchange> Exchanges { get; set; } = new List<Exchange>();
     }
 
     public class Instrument

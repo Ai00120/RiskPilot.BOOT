@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using RiskPilot.Diagnostics.Nt8.Core.Engine;
 using RiskPilot.Diagnostics.Nt8.Core.Models;
+using RiskPilot.Diagnostics.Nt8.Core.Models.Observations;
 
 namespace RiskPilot.Diagnostics.Nt8.Tests.Fakes
 {
@@ -24,6 +25,12 @@ namespace RiskPilot.Diagnostics.Nt8.Tests.Fakes
         public List<string> PresentApis { get; private set; }
 
         public List<string> MissingApis { get; private set; }
+
+        /// <summary>
+        /// The M1–M8 observation snapshot. A test sets this to drive the phase-3 modules;
+        /// when left null the probes report INCONCLUSIVE for the snapshot-backed checks.
+        /// </summary>
+        public DiagnosticSnapshot Snapshot { get; set; }
 
         public FakeDataProvider()
         {
@@ -56,5 +63,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests.Fakes
         public IReadOnlyList<string> GetPresentApis() { return PresentApis; }
 
         public IReadOnlyList<string> GetMissingApis() { return MissingApis; }
+
+        public DiagnosticSnapshot GetSnapshot() { return Snapshot; }
     }
 }
