@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using RiskPilot.Diagnostics.Nt8.Core.Models;
 using RiskPilot.Diagnostics.Nt8.Core.Models.Observations;
 using RiskPilot.Diagnostics.Nt8.Core.Result;
+using RiskPilot.Diagnostics.Nt8.Core.Security;
 using RiskPilot.Diagnostics.Nt8.Core.Status;
 
 namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
@@ -406,9 +407,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     }
                 }
 
+                // The raw connection name is never emitted: it is reduced to a non-reversible
+                // synthetic token, so a finding, log or report can never disclose it.
                 evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi,
-                    "account=" + association.AccountRef
-                    + " connection=" + (association.HasConnection ? association.ConnectionName : "none")
+                    "account=" + SecretRedactor.Redact(association.AccountRef)
+                    + " connection=" + (association.HasConnection
+                        ? SyntheticRef.For("connection", association.ConnectionName)
+                        : "none")
                     + " providersAgree=" + association.ProvidersAgree, now));
             }
 

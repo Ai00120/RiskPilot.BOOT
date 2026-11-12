@@ -269,7 +269,9 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             foreach (var connection in dataset.Connections)
             {
                 writer.BeginObject();
-                writer.WriteProperty("name", SecretRedactor.Redact(connection.ConnectionName));
+                // The raw connection name is an identity: only a non-reversible synthetic token
+                // is exported, so the artifact can never disclose the configured connection name.
+                writer.WriteProperty("connectionRef", SyntheticRef.For("connection", connection.ConnectionName));
                 writer.WriteProperty("priceState", connection.PriceState.ToWire());
                 writer.WriteProperty("orderChannelState", connection.OrderChannelState.ToWire());
                 writer.WriteProperty("providerName", SecretRedactor.Redact(connection.ProviderName));
@@ -343,7 +345,9 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
                     writer.WriteProperty("accountRef", SecretRedactor.Redact(association.AccountRef));
                     writer.WriteProperty("accountProvider", SecretRedactor.Redact(association.AccountProvider));
                     writer.WriteProperty("hasConnection", association.HasConnection);
-                    writer.WriteProperty("connectionName", SecretRedactor.Redact(association.ConnectionName));
+                    writer.WriteProperty("connectionRef", association.HasConnection
+                        ? SyntheticRef.For("connection", association.ConnectionName)
+                        : string.Empty);
                     writer.WriteProperty("connectionProvider", SecretRedactor.Redact(association.ConnectionProvider));
                     writer.WriteProperty("providersAgree", association.ProvidersAgree);
                     writer.EndObject();

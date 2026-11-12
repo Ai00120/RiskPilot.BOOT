@@ -395,6 +395,101 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.DoesNotContain(ExpectedConnection, accounts);
         }
 
+        [Fact]
+        public void M2_ProviderAgreementFinding_NeverContainsRawConnectionName()
+        {
+            // The generic provider-agreement check reports each association; it must reduce the
+            // raw connection name to a synthetic token so no finding/log/report can disclose it.
+            var provider = new FakeDataProvider();
+            provider.Connections.Add(new ConnectionRecord
+            {
+                ConnectionName = ExpectedConnection,
+                ProviderName = ExpectedProvider,
+                PriceState = ConnectionState.Connected,
+                OrderChannelState = ConnectionState.Connected,
+                Role = ConnectionRole.Broker
+            });
+            provider.Snapshot = new DiagnosticSnapshot
+            {
+                AccountAssociations = new List<AccountConnectionAssociation>
+                {
+                    new AccountConnectionAssociation
+                    {
+                        AccountRef = SyntheticRef.For("account", ExpectedAccount),
+                        AccountProvider = ExpectedProvider,
+                        HasConnection = true,
+                        ConnectionName = ExpectedConnection,
+                        ConnectionProvider = ExpectedProvider,
+                        ProvidersAgree = true
+                    }
+                }
+            };
+
+            var results = new M2ConnectionProbe().Evaluate(Context(provider));
+            var agreement = Find(results, "M2.ACCOUNT_PROVIDER_AGREEMENT");
+
+            var text = agreement.Observation + "|" + agreement.Method + "|" + agreement.Limitation
+                + "|" + agreement.NextAction + "|" + string.Join(",", agreement.ReasonCodes);
+            foreach (var evidence in agreement.Evidence)
+            {
+                text += "|" + evidence.ObservedValue;
+            }
+
+            Assert.DoesNotContain(ExpectedConnection, text);
+            Assert.Contains(SyntheticRef.For("connection", ExpectedConnection), text);
+        }
+
+        [Fact]
+        public void ConnectionsJson_NeverContainsRawConnectionName()
+        {
+            var dataset = new Core.Evidence.EvidenceDataset();
+            dataset.Connections.Add(new ConnectionRecord
+            {
+                ConnectionName = ExpectedConnection,
+                ProviderName = ExpectedProvider,
+                PriceState = ConnectionState.Connected,
+                OrderChannelState = ConnectionState.Connected,
+                Role = ConnectionRole.Broker
+            });
+
+            var package = Core.Evidence.EvidencePackageBuilder.Build(RunResult(), dataset);
+            Assert.True(package.VerifyIntegrity(out var failure), failure);
+
+            var connections = package.Read(Core.Evidence.EvidencePackageCatalog.ConnectionsJson);
+            Assert.DoesNotContain(ExpectedConnection, connections);
+            Assert.Contains("\"connectionRef\"", connections);
+            Assert.Contains(SyntheticRef.For("connection", ExpectedConnection), connections);
+        }
+
+        [Fact]
+        public void AccountsJson_Associations_NeverContainRawConnectionName()
+        {
+            var dataset = new Core.Evidence.EvidenceDataset();
+            dataset.Snapshot = new DiagnosticSnapshot
+            {
+                AccountAssociations = new List<AccountConnectionAssociation>
+                {
+                    new AccountConnectionAssociation
+                    {
+                        AccountRef = SyntheticRef.For("account", ExpectedAccount),
+                        AccountProvider = ExpectedProvider,
+                        HasConnection = true,
+                        ConnectionName = ExpectedConnection,
+                        ConnectionProvider = ExpectedProvider,
+                        ProvidersAgree = true
+                    }
+                }
+            };
+
+            var package = Core.Evidence.EvidencePackageBuilder.Build(RunResult(), dataset);
+            Assert.True(package.VerifyIntegrity(out var failure), failure);
+
+            var accounts = package.Read(Core.Evidence.EvidencePackageCatalog.AccountsJson);
+            Assert.DoesNotContain(ExpectedConnection, accounts);
+            Assert.Contains("\"connectionRef\"", accounts);
+            Assert.Contains(SyntheticRef.For("connection", ExpectedConnection), accounts);
+        }
+
         private static Core.Run.DiagnosticRunResult RunResult()
         {
             return new Core.Run.DiagnosticRunResult

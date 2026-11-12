@@ -150,7 +150,10 @@ NormalizedRecord ─────────────────────
 - تنها تطابق کامل و کاملاً مشاهده‌شده ⇒ `PASS`.
 
 خروجی هیچ‌گاه نام خام حساب/Connection را در finding، log یا artifact نمی‌گذارد؛ `accounts.json` یک
-بلوک `connectionAssociation` (status/reasonCodes/counts + `accountRef` مصنوعی) دارد.
+بلوک `connectionAssociation` (status/reasonCodes/counts + `accountRef` مصنوعی) دارد. همین قاعده بر
+check عمومی `M2.ACCOUNT_PROVIDER_AGREEMENT` و artifactهای `connections.json` و `accounts.json`
+(`associations[]`) نیز اعمال می‌شود: نام Connection فقط به‌صورت توکن `SyntheticRef`
+(`connection#<hash>`، فیلد `connectionRef`) نوشته می‌شود.
 
 
 ### ۴.۲ هویت دقیق حساب (`M2.ACCOUNT_IDENTITY`)

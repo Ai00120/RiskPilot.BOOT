@@ -253,7 +253,10 @@ account's own** connection instead of inspecting the first available connection:
   `INCONCLUSIVE`; a wrong account/connection name or provider is `FAIL`. The previous generic
   per-account comparison is retained as `M2.ACCOUNT_PROVIDER_AGREEMENT`.
 - No raw account or connection name reaches a finding, log or artifact; `accounts.json` carries a
-  `connectionAssociation` block (status, reason codes, counts, synthetic `accountRef`).
+  `connectionAssociation` block (status, reason codes, counts, synthetic `accountRef`), and the
+  generic `M2.ACCOUNT_PROVIDER_AGREEMENT` evidence plus the `connections.json` /
+  `accounts.json` association rows expose only a `SyntheticRef` `connection#<hash>` token
+  (`connectionRef`), never the configured name.
 - Regression tests: `TargetAccountConnectionTests` and `HostTargetAccountConnectionTests` cover
   exact match, missing account/connection, wrong/unrelated connection, wrong provider, multiple
   connections and ambiguous associations. The host adapter tests run over the offline stub surface

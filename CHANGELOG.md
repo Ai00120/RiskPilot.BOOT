@@ -36,6 +36,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   connections and counts how many match the required connection identity; more than one match
   (ambiguous association) or more than one exact account match keeps the association
   `INCONCLUSIVE` rather than silently accepting the first one.
+- **The raw connection name was still emitted, contradicting the documented privacy invariant
+  (fail-open for identity privacy).** Although the exact-identity check reduced its own result to
+  booleans/counts, the configured connection name still reached a finding and two artifacts:
+  `M2.ACCOUNT_PROVIDER_AGREEMENT` wrote `connection=<raw name>` into its evidence, `connections.json`
+  wrote the name as `name`, and `accounts.json` wrote it as `associations[].connectionName`. The
+  name is now reduced to a non-reversible `SyntheticRef` token (`connection#<hash>`): the finding
+  emits `connection=connection#<hash>`, `connections.json` carries `connectionRef`, and
+  `accounts.json` carries `associations[].connectionRef`. No raw account or connection name now
+  reaches a finding, log, report or artifact, matching the documented invariant.
 
 ### Added
 

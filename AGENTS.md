@@ -158,6 +158,9 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - The check is emitted even with no connections (as `INCONCLUSIVE`), so it is never omitted.
 - No raw account/connection name ever reaches a finding, log or artifact; `accounts.json` carries a
   `connectionAssociation` block with only status/reason codes/counts + a synthetic `accountRef`.
+  The generic `M2.ACCOUNT_PROVIDER_AGREEMENT` evidence and the `connections.json` /
+  `accounts.json` association rows reduce the connection name to a `SyntheticRef`
+  `connection#<hash>` token (`connectionRef`), so the name is never written.
 - The host adapter is exercised over the offline stub surface by
   `tests/.../HostTargetAccountConnectionTests.cs`; a green stub run is **not** real-host proof.
 
