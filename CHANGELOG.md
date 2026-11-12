@@ -66,7 +66,8 @@ sample evidence package, and produced the release documentation.
 - **Reproducible sample report generator** (`tools/RiskPilot.Diagnostics.SampleReport`) that builds
   a clearly-labelled sample package with the real production `EvidencePackageBuilder`.
 - **A committed sample evidence package** at `docs/samples/sample-evidence-package/` (synthetic;
-  labelled `SAMPLE`).
+  labelled `SAMPLE`). Its values are deliberately distinct from the historical 11 Nov 2026 baseline
+  so the sample can never be mistaken for that recorded run.
 - Release documentation: `docs/INSTALL.md`, `docs/USAGE.md`, `docs/FINAL_AUDIT_AND_HANDOFF.md`,
   and a SHA-256 manifest (`docs/samples/sample-evidence-package/SHA256SUMS.txt`).
 

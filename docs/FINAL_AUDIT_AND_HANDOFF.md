@@ -221,6 +221,8 @@ capability; queue overflow; shutdown mid-capture; report integrity; and trading 
 `tools/RiskPilot.Diagnostics.SampleReport` builds a complete 17-artifact package using the real
 production `EvidencePackageBuilder`, so the package shape and SHA-256 manifest match a real run.
 The committed sample is at `docs/samples/sample-evidence-package/` and is **labelled `SAMPLE`**.
+Its numeric values are deliberately different from the historical 11 Nov 2026 baseline (§7) so the
+sample can never be mistaken for that recorded run.
 
 ### 4.3 Documentation
 

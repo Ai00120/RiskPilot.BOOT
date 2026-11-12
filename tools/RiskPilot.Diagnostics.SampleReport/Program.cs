@@ -68,7 +68,8 @@ namespace RiskPilot.Diagnostics.SampleReport
                 + "tools/RiskPilot.Diagnostics.SampleReport. It is NOT a runtime diagnostic result\r\n"
                 + "and contains no real account, connection, order or market data. The package was\r\n"
                 + "built with the real EvidencePackageBuilder so its shape and SHA-256 manifest match\r\n"
-                + "a real run.\r\n");
+                + "a real run. The numeric values here are deliberately different from the historical\r\n"
+                + "11 Nov 2026 baseline so this sample can never be mistaken for that recorded run.\r\n");
 
             Console.WriteLine("SAMPLE evidence package written to: " + Path.GetFullPath(outputRoot));
             Console.WriteLine("Artifacts: " + EvidencePackageCatalog.All.Count);
@@ -135,9 +136,9 @@ namespace RiskPilot.Diagnostics.SampleReport
             Add("M3", "M3.ACCOUNT_SURFACE", DiagnosticStatus.PASS, "accounts=1 orderSnapshots=2", ErrorClass.None, "ACCOUNT_SURFACE_OBSERVED");
             Add("M3", "M3.F05_ORDER_FILL_CONTINUITY", DiagnosticStatus.INCONCLUSIVE, "unmatchedTerminalOrders=0 unmatchedExecutions=0", ErrorClass.None, "ORDER_FILL_CONTINUITY_INCOMPLETE");
             Add("M4", "M4.D078_APPROVAL", DiagnosticStatus.FAIL, "No D-078 operator field approval is recorded.", ErrorClass.ApprovalRequired, "D078_FIELD_APPROVAL_NOT_APPROVED");
-            Add("M5", "M5.SNAPSHOT_SYNC", DiagnosticStatus.FAIL, "sync=265 failure=1 outOfBounds=265", ErrorClass.DataUnavailable, "SYNC_FAILURE=1", "UPDATE_OOB=264");
+            Add("M5", "M5.SNAPSHOT_SYNC", DiagnosticStatus.FAIL, "sync=42 failure=1 outOfBounds=41", ErrorClass.DataUnavailable, "SYNC_FAILURE=1", "UPDATE_OOB=41");
             Add("M6", "M6.DIRECTION_SOURCE", DiagnosticStatus.INCONCLUSIVE, "provenance=ALL_QUOTE_DERIVED", ErrorClass.None, "PROVENANCE=ALL_QUOTE_DERIVED");
-            Add("M7", "M7.CANDIDATE_REJECTION", DiagnosticStatus.INCONCLUSIVE, "allCandidatesInvalid=311179", ErrorClass.None, "ALL_CANDIDATES_INVALID=311179");
+            Add("M7", "M7.CANDIDATE_REJECTION", DiagnosticStatus.INCONCLUSIVE, "allCandidatesInvalid=1234", ErrorClass.None, "ALL_CANDIDATES_INVALID=1234");
             Add("M8", "M8.TRADING_DISABLED", DiagnosticStatus.PASS, "tradingDisabledRuntimeEvidence=true", ErrorClass.None, "TRADING_DISABLED_RUNTIME_EVIDENCE_PRESENT");
             Add("M9", "M9.AUDIT_SURFACE", DiagnosticStatus.PASS, "accounts=1 orderSnapshots=2", ErrorClass.None, "AUDIT_SURFACE_OBSERVED");
 
@@ -262,24 +263,24 @@ namespace RiskPilot.Diagnostics.SampleReport
                     {
                         Layer = "HOST_ADAPTER",
                         Observable = true,
-                        SnapshotSyncCount = 265,
+                        SnapshotSyncCount = 42,
                         SnapshotSyncFailureCount = 1,
-                        UpdateOutOfBoundsCount = 264,
+                        UpdateOutOfBoundsCount = 41,
                         InsertOutOfBoundsCount = 1,
-                        NativeSnapshotBids = 64,
-                        NativeSnapshotAsks = 64,
-                        InternalBidLevels = 10,
-                        InternalAskLevels = 6
+                        NativeSnapshotBids = 48,
+                        NativeSnapshotAsks = 48,
+                        InternalBidLevels = 8,
+                        InternalAskLevels = 5
                     },
                     Level1QuoteObserved = true,
                     LastTradeObserved = true
                 },
                 TradeDelta = new TradeDeltaObservation
                 {
-                    BuyDerivedCount = 12074,
-                    SellDerivedCount = 12414,
-                    UnknownCount = 96,
-                    UnknownInsideSpreadCount = 96,
+                    BuyDerivedCount = 118,
+                    SellDerivedCount = 122,
+                    UnknownCount = 4,
+                    UnknownInsideSpreadCount = 4,
                     AllDirectionsQuoteDerived = true,
                     TradeDeltaCompleteness = "INCOMPLETE",
                     TradeDeltaUnavailableReason = "UNAVAILABLE_TRADE_DELTA",
@@ -288,7 +289,7 @@ namespace RiskPilot.Diagnostics.SampleReport
                 StrategyRiskGate = new StrategyRiskGateObservation
                 {
                     StrategySurfaceObservable = true,
-                    AllCandidatesInvalidCount = 311179
+                    AllCandidatesInvalidCount = 1234
                 },
                 Safety = new SafetyObservation
                 {
