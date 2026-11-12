@@ -342,7 +342,8 @@ result of running this tool in this environment, and no definitive root cause is
 - **Sample report (SAMPLE-labelled):** `docs/samples/sample-evidence-package/`, with
   `SHA256SUMS.txt`.
 - **Changelog:** `CHANGELOG.md`.
-- **Version:** `1.0.0`; release tag `v1.0.0`.
+- **Version:** `1.0.0`; release tag `v1.0.0` (annotated, pointing at the final audit commit).
+- **Release commit:** the commit tagged `v1.0.0` on branch `main` (see `git rev-list -n1 v1.0.0`).
 
 ### Installation (short form)
 
