@@ -40,6 +40,7 @@
     <Compile Include="ErrorClassificationTests.cs" />
     <Compile Include="StatusPropagationTests.cs" />
     <Compile Include="ProbeTests.cs" />
+    <Compile Include="Phase3ModuleTests.cs" />
   </ItemGroup>
 
 </Project>

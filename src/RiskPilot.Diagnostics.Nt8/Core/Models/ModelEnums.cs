@@ -63,6 +63,36 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
         Short = 2
     }
 
+    /// <summary>Direction of a trade print, when one could be determined.</summary>
+    public enum TradeDirection
+    {
+        Unknown = 0,
+        Buy = 1,
+        Sell = 2
+    }
+
+    /// <summary>
+    /// Provenance of a trade print's direction. A direction derived by comparing the print
+    /// price to a known bid/ask is an inference and is never reported as provider-confirmed.
+    /// </summary>
+    public enum TradeDirectionSource
+    {
+        Unspecified = 0,
+        ProviderSupplied = 1,
+        DerivedFromQuote = 2
+    }
+
+    /// <summary>Exact reason a trade direction could not be determined.</summary>
+    public enum TradeDirectionUnknownReason
+    {
+        NotApplicable = 0,
+        ProviderReportedUnknown = 1,
+        NoBboAvailable = 2,
+        BboIncomplete = 3,
+        PriceInsideSpread = 4,
+        BboInvalid = 5
+    }
+
     /// <summary>Normalized order lifecycle state (read-only mirror of NT8 OrderState).</summary>
     public enum OrderLifecycleState
     {
@@ -86,6 +116,30 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
         Stopped = 3
     }
 
+    /// <summary>
+    /// Classification of an order identifier as observed from the host. The categories
+    /// are deliberately distinct so that a missing identifier is never conflated with an
+    /// empty or whitespace one, and an identifier that could not be read at all is
+    /// distinguished from one the host reported as absent.
+    /// </summary>
+    public enum OrderIdClass
+    {
+        /// <summary>The identifier was not read (no observation was attempted).</summary>
+        Unavailable = 0,
+
+        /// <summary>The identifier field was null.</summary>
+        Null = 1,
+
+        /// <summary>The identifier field was the empty string.</summary>
+        Empty = 2,
+
+        /// <summary>The identifier field contained only whitespace.</summary>
+        Whitespace = 3,
+
+        /// <summary>The identifier field contained a non-empty, non-whitespace value.</summary>
+        Valid = 4
+    }
+
     /// <summary>Classification of an error surfaced by the diagnostic pipeline.</summary>
     public enum ErrorClass
     {
@@ -98,7 +152,10 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
         TimestampInvalid = 6,
         SerializationFailure = 7,
         ConfigurationInvalid = 8,
-        Unexpected = 9
+        Unexpected = 9,
+        CorrelationIncomplete = 10,
+        MissingInstrumentSpecification = 11,
+        ApprovalRequired = 12
     }
 
     public static class ModelEnums
@@ -218,6 +275,23 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
             return activity.ToString().ToUpperInvariant();
         }
 
+        public static string ToWire(this OrderIdClass orderIdClass)
+        {
+            switch (orderIdClass)
+            {
+                case OrderIdClass.Null:
+                    return "NULL";
+                case OrderIdClass.Empty:
+                    return "EMPTY";
+                case OrderIdClass.Whitespace:
+                    return "WHITESPACE";
+                case OrderIdClass.Valid:
+                    return "VALID";
+                default:
+                    return "UNAVAILABLE";
+            }
+        }
+
         public static string ToWire(this ErrorClass errorClass)
         {
             switch (errorClass)
@@ -238,6 +312,12 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
                     return "SERIALIZATION_FAILURE";
                 case ErrorClass.ConfigurationInvalid:
                     return "CONFIGURATION_INVALID";
+                case ErrorClass.CorrelationIncomplete:
+                    return "CORRELATION_INCOMPLETE";
+                case ErrorClass.MissingInstrumentSpecification:
+                    return "MISSING_INSTRUMENT_SPECIFICATION";
+                case ErrorClass.ApprovalRequired:
+                    return "APPROVAL_REQUIRED";
                 case ErrorClass.Unexpected:
                     return "UNEXPECTED_ERROR";
                 default:

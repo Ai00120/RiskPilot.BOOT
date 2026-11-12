@@ -12,11 +12,29 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
 
         public string ModuleId { get; set; }
 
+        /// <summary>Stable finding id carried from the originating result.</summary>
+        public string FindingId { get; set; }
+
         public DiagnosticStatus Status { get; set; }
 
         public DiagnosticSeverity Severity { get; set; }
 
         public string Message { get; set; }
+
+        /// <summary>Human-readable description of what was observed.</summary>
+        public string Observation { get; set; }
+
+        /// <summary>Source of the evidence behind this finding.</summary>
+        public string Source { get; set; }
+
+        /// <summary>How the observation was made.</summary>
+        public string Method { get; set; }
+
+        /// <summary>Known limitation of the finding.</summary>
+        public string Limitation { get; set; }
+
+        /// <summary>Concrete next action for an operator.</summary>
+        public string NextAction { get; set; }
 
         /// <summary>Machine-readable reason codes, sanitized.</summary>
         public string[] ReasonCodes { get; set; }
@@ -34,7 +52,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
         {
             CheckId = string.Empty;
             ModuleId = string.Empty;
+            FindingId = string.Empty;
             Message = string.Empty;
+            Observation = string.Empty;
+            Source = string.Empty;
+            Method = string.Empty;
+            Limitation = string.Empty;
+            NextAction = string.Empty;
             ReasonCodes = new string[0];
             CorrelationId = string.Empty;
             SessionId = string.Empty;
