@@ -200,6 +200,109 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void PostTradeAudit_FoldsInHostAccountOrdersSnapshot()
+        {
+            // The host reads Account.Orders for M3 even when nothing was ingested. The
+            // post-trade audit must observe that already-recorded surface rather than
+            // reporting INCONCLUSIVE.
+            var provider = new FakeDataProvider
+            {
+                Snapshot = new Core.Models.Observations.DiagnosticSnapshot
+                {
+                    OrderLifecycle = new Core.Models.Observations.OrderLifecycleObservation
+                    {
+                        OrderSurfaceObservable = true,
+                        AccountCount = 1,
+                        OrderSnapshotCount = 2,
+                        Events = new List<Core.Models.Observations.OrderLifecycleEvent>
+                        {
+                            new Core.Models.Observations.OrderLifecycleEvent
+                            {
+                                OrderRef = "order#abc",
+                                OrderIdClass = OrderIdClass.Valid,
+                                State = OrderLifecycleState.Working,
+                                InstrumentId = "ES 03-26",
+                                Source = "Account.Orders",
+                                IngestedAtUtc = DateTime.UtcNow
+                            },
+                            new Core.Models.Observations.OrderLifecycleEvent
+                            {
+                                OrderRef = "order#def",
+                                OrderIdClass = OrderIdClass.Valid,
+                                State = OrderLifecycleState.Filled,
+                                InstrumentId = "ES 03-26",
+                                Source = "Account.Orders",
+                                IngestedAtUtc = DateTime.UtcNow
+                            }
+                        }
+                    }
+                }
+            };
+
+            using var runtime = Runtime(provider, 256, 256);
+            var dataset = runtime.BuildEvidenceDataset();
+            var audit = dataset.Snapshot.PostTradeAudit;
+
+            Assert.NotNull(audit);
+            Assert.True(audit.AuditSurfaceObservable);
+            Assert.Equal(2, audit.OrderSnapshotCount);
+            Assert.Equal(2, audit.Events.Count);
+            Assert.Equal(1, audit.AccountCount);
+
+            var report = runtime.RunDiagnosticPass();
+            var surface = report.Results.FirstOrDefault(r => r.CheckId == "M9.AUDIT_SURFACE");
+            Assert.NotNull(surface);
+            Assert.Equal(Core.Status.DiagnosticStatus.PASS, surface.Status);
+        }
+
+        [Fact]
+        public void PostTradeAudit_DoesNotDoubleCountRecordsAlreadyIngested()
+        {
+            var provider = new FakeDataProvider
+            {
+                Snapshot = new Core.Models.Observations.DiagnosticSnapshot
+                {
+                    OrderLifecycle = new Core.Models.Observations.OrderLifecycleObservation
+                    {
+                        OrderSurfaceObservable = true,
+                        OrderSnapshotCount = 1,
+                        Events = new List<Core.Models.Observations.OrderLifecycleEvent>
+                        {
+                            new Core.Models.Observations.OrderLifecycleEvent
+                            {
+                                OrderRef = "ord-1",
+                                OrderIdClass = OrderIdClass.Valid,
+                                State = OrderLifecycleState.Filled,
+                                InstrumentId = "ES",
+                                Source = "Account.Orders",
+                                IngestedAtUtc = DateTime.UtcNow
+                            }
+                        }
+                    }
+                }
+            };
+
+            using var runtime = Runtime(provider, 256, 256);
+            runtime.Start();
+            runtime.Ingest(new OrderRecord
+            {
+                OrderRef = "ord-1",
+                InstrumentId = "ES",
+                State = OrderLifecycleState.Filled,
+                Quantity = 1,
+                FilledQuantity = 1
+            });
+            Thread.Sleep(50);
+
+            var dataset = runtime.BuildEvidenceDataset();
+            var audit = dataset.Snapshot.PostTradeAudit;
+
+            // The same order ref appears in the collector and in the host snapshot; it must
+            // be present exactly once in the audit event list.
+            Assert.Equal(1, audit.Events.Count(e => e.OrderRef == "ord-1"));
+        }
+
+        [Fact]
         public void EvidenceDirectorySink_WritesEachRunToItsOwnDirectory()
         {
             var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "rp-diag-" + Guid.NewGuid().ToString("N"));

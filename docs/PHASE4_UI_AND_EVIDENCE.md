@@ -45,7 +45,7 @@ dotnet build src/RiskPilot.Diagnostics.Nt8/RiskPilot.Diagnostics.Nt8.csproj -p:U
   → Build succeeded. 0 Warning(s), 0 Error(s)
 
 dotnet test tests/RiskPilot.Diagnostics.Nt8.Tests/RiskPilot.Diagnostics.Nt8.Tests.csproj
-  → Passed! Failed: 0, Passed: 193, Skipped: 0, Total: 193
+  → Passed! Failed: 0, Passed: 197, Skipped: 0, Total: 197
 
 python3 verification/addon-smoke/test_diagnostic_safety.py
   → STATIC SAFETY CHECK: PASS (103 production source files, 34 forbidden patterns)
@@ -140,8 +140,16 @@ throw نمی‌شود. تست `Dispose_DuringActiveRun_DoesNotHang` تضمین �
 | `M9.MISSING_OR_DUPLICATE` | رویدادهای گم‌شده/تکراری | تکرار یا گم‌شدگی → `FAIL` |
 
 سطح audit از `DiagnosticSnapshot.PostTradeAudit` خوانده می‌شود؛ `DiagnosticRuntime`
-این observation را از رکوردهای جمع‌آوری‌شده می‌سازد (`BuildEvidenceDataset` →
-`BuildPostTradeAudit`).
+این observation را از دو منبع **واقعی** می‌سازد:
+
+1. رکوردهایی که از طریق pipeline دریافت شده‌اند (`EvidenceCollector`)، و
+2. snapshotهای **`Account.Orders`** که لایهٔ میزبان قبلاً برای M3 خوانده است
+   (`Snapshot.OrderLifecycle`).
+
+این ادغام در `MergeOrderLifecycleSnapshot` انجام می‌شود و رویدادهای تکراری (بر اساس
+`OrderRef` مصنوعی) را یک‌بار می‌شمارد. بنابراین در میزبان واقعی، حتی وقتی pipeline هیچ
+رویدادی دریافت نکرده باشد (ابزار به هیچ feed رویداد میزبان subscribe نمی‌کند)، audit سطح
+مشاهده‌پذیر دارد و به‌جای `INCONCLUSIVE` نتیجهٔ واقعی می‌دهد.
 
 ---
 
@@ -166,7 +174,9 @@ findings.json               manifest.json
 
 - `connections.json` بدون اتصال → `UNAVAILABLE`؛
 - `dom-summary.json` بدون snapshot → `UNAVAILABLE`؛
-- `orders.csv` خالی → فقط سطر header، بدون سطر جعلی.
+- `orders.csv` خالی → فقط سطر header، بدون سطر جعلی؛
+- `market-data-summary.json` → `sourceTimeBasis` از خود رکوردهای مشاهده‌شده مشتق می‌شود
+  (ضعیف‌ترین basis)، و بدون رکورد `UNOBSERVABLE` است — هرگز مقدار ثابت/فرضی نوشته نمی‌شود.
 
 ### 5.2 Manifest
 
@@ -251,12 +261,14 @@ findings.json               manifest.json
 | SHA-256 verification | `Phase4EvidencePackageTests` | هش با بایت‌های واقعی مطابقت دارد |
 | Manifest consistency | `Phase4EvidencePackageTests` | ۱۶ فایل، فیلدهای اجباری، mask |
 | Empty data | `Phase4EvidencePackageTests` / `Phase4RuntimeIntegrationTests` | `UNAVAILABLE` / `INCONCLUSIVE` |
-| Partial data | `Phase4RuntimeIntegrationTests` | اجرای نیمه‌کاره بسته نمی‌نویسد |
+| Partial data | `Phase4EvidencePackageTests` (`PartialDataset_*`) | فقط بخش‌های مشاهده‌شده `AVAILABLE` |
 | Missing events | `Phase4PostTradeAuditTests` | `M9.CORRELATION_TIMING` → `INCONCLUSIVE` |
 | Duplicate events | `Phase4PostTradeAuditTests` | `M9.MISSING_OR_DUPLICATE` → `FAIL` |
 | Queue overflow | `Phase4RuntimeIntegrationTests` | `M0.EVENT_INTEGRITY` → `FAIL` |
 | Secret redaction | `Phase4EvidencePackageTests` | رمز در observation ماسک می‌شود |
 | Status correctness | `Phase4PostTradeAuditTests` | PASS/FAIL/INCONCLUSIVE درست |
+| M9 bridge | `Phase4RuntimeIntegrationTests` (`PostTradeAudit_FoldsIn*`) | سطح `Account.Orders` واقعی + بدون شمارش مضاعف |
+| Source-time basis | `Phase4EvidencePackageTests` (`MarketDataSummary_*`) | مقدار مشتق‌شده، نه hardcoded |
 
 ---
 
@@ -265,11 +277,11 @@ findings.json               manifest.json
 | مجموعه | تعداد | نتیجه |
 |---|---|---|
 | `Phase4RunCoordinatorTests` | 9 | PASS |
-| `Phase4EvidencePackageTests` | 15 | PASS |
+| `Phase4EvidencePackageTests` | 17 | PASS |
 | `Phase4PostTradeAuditTests` | 10 | PASS |
-| `Phase4RuntimeIntegrationTests` | 10 | PASS |
+| `Phase4RuntimeIntegrationTests` | 12 | PASS |
 | سوئیت قبلی (فاز ۱–۳) | 149 | PASS |
-| **مجموع کل سوئیت** | **193** | **PASS** |
+| **مجموع کل سوئیت** | **197** | **PASS** |
 
 Static safety scan: **PASS** (103 فایل production، 34 الگو).
 

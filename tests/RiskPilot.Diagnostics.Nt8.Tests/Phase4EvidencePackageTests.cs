@@ -272,6 +272,53 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void PartialDataset_ReportsOnlyObservedSectionsAvailable()
+        {
+            // Only connections + accounts are observable; every other section must be
+            // reported UNAVAILABLE with a reason, never fabricated.
+            var dataset = new EvidenceDataset();
+            dataset.Connections.Add(new ConnectionRecord
+            {
+                ConnectionName = "Sim101",
+                PriceState = ConnectionState.Connected,
+                OrderChannelState = ConnectionState.Connected,
+                ProviderName = "Rithmic",
+                Role = ConnectionRole.Broker
+            });
+            dataset.Accounts.Add(new AccountRecord
+            {
+                AccountRef = "ACC-0001",
+                AccountClass = EnvironmentClass.Simulation,
+                ProviderName = "Rithmic"
+            });
+
+            var package = EvidencePackageBuilder.Build(RunResult(), dataset);
+            Assert.True(package.VerifyIntegrity(out var failure), failure);
+
+            Assert.Contains("AVAILABLE", package.Read(EvidencePackageCatalog.ConnectionsJson));
+            Assert.Contains("AVAILABLE", package.Read(EvidencePackageCatalog.AccountsJson));
+            Assert.Contains("UNAVAILABLE", package.Read(EvidencePackageCatalog.EnvironmentJson));
+            Assert.Contains("UNAVAILABLE", package.Read(EvidencePackageCatalog.DomSummaryJson));
+            Assert.Contains("UNAVAILABLE", package.Read(EvidencePackageCatalog.OrderFlowSummaryJson));
+            Assert.Contains("UNAVAILABLE", package.Read(EvidencePackageCatalog.SafetyAuditJson));
+        }
+
+        [Fact]
+        public void MarketDataSummary_DerivesSourceTimeBasis_NotHardcoded()
+        {
+            // No market-data records: the basis must be UNOBSERVABLE, not a fabricated claim.
+            var empty = EvidencePackageBuilder.Build(RunResult(), new EvidenceDataset());
+            Assert.Contains("UNOBSERVABLE", empty.Read(EvidencePackageCatalog.MarketDataSummaryJson));
+
+            // Records with an unverified basis: the aggregate must reflect the weakest basis.
+            var dataset = new EvidenceDataset();
+            dataset.MarketData.Add(new MarketDataRecord { Kind = MarketDataKind.Trade, SourceTimeBasis = SourceTimeBasis.ServerTimeUnverified });
+            dataset.MarketData.Add(new MarketDataRecord { Kind = MarketDataKind.Quote, SourceTimeBasis = SourceTimeBasis.ExchangeTimeVerified });
+            var package = EvidencePackageBuilder.Build(RunResult(), dataset);
+            Assert.Contains("SERVER_TIME_UNVERIFIED", package.Read(EvidencePackageCatalog.MarketDataSummaryJson));
+        }
+
+        [Fact]
         public void TruncatedDataset_IsReportedInManifest()
         {
             var dataset = FullDataset();

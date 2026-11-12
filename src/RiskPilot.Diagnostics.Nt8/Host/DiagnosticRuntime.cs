@@ -544,9 +544,84 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 });
             }
 
+            // Fold in the read-only Account.Orders snapshots the host already read for M3.
+            // These are recorded events that happened before the audit ran, so they belong in
+            // the post-trade audit even when the live ingest pipeline captured nothing (the
+            // default posture: the tool subscribes to no host event feed).
+            MergeOrderLifecycleSnapshot(dataset.Snapshot != null ? dataset.Snapshot.OrderLifecycle : null, observation);
+
+            // Derive the snapshot count from the deduped order events so a snapshot that was
+            // both ingested and read from Account.Orders is counted once.
+            var orderSnapshots = 0;
+            foreach (var evt in observation.Events)
+            {
+                if (string.Equals(evt.Source, "Account.Orders", StringComparison.Ordinal))
+                {
+                    orderSnapshots++;
+                }
+            }
+
+            observation.OrderSnapshotCount = orderSnapshots;
+
             observation.InvalidTimestampCount = session != null ? (int)session.TimestampInvalidCount : 0;
             observation.DuplicateEventCount = session != null ? (int)session.DuplicateCount : 0;
             return observation;
+        }
+
+        /// <summary>
+        /// Merges the host's already-read <c>Account.Orders</c> lifecycle snapshot into the
+        /// audit observation. It only adds recorded events that the audit has not already seen
+        /// (matched by synthetic order ref), so nothing is double-counted. The audit surface
+        /// becomes observable as soon as the host exposed any order snapshot.
+        /// </summary>
+        private static void MergeOrderLifecycleSnapshot(OrderLifecycleObservation lifecycle, PostTradeAuditObservation observation)
+        {
+            if (lifecycle == null)
+            {
+                return;
+            }
+
+            if (lifecycle.OrderSnapshotCount > 0 || (lifecycle.Events != null && lifecycle.Events.Count > 0))
+            {
+                observation.AuditSurfaceObservable = true;
+            }
+
+            if (lifecycle.AccountCount > observation.AccountCount)
+            {
+                observation.AccountCount = lifecycle.AccountCount;
+            }
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var existing in observation.Events)
+            {
+                if (!string.IsNullOrEmpty(existing.OrderRef))
+                {
+                    seen.Add(existing.OrderRef);
+                }
+            }
+
+            if (lifecycle.Events == null)
+            {
+                return;
+            }
+
+            foreach (var evt in lifecycle.Events)
+            {
+                if (evt == null || (evt.OrderRef != null && seen.Contains(evt.OrderRef)))
+                {
+                    continue;
+                }
+
+                observation.Events.Add(evt);
+                if (!string.IsNullOrEmpty(evt.OrderRef))
+                {
+                    seen.Add(evt.OrderRef);
+                }
+
+                var cls = evt.OrderIdClass;
+                observation.OrderIdClassCounts.TryGetValue(cls, out var current);
+                observation.OrderIdClassCounts[cls] = current + 1;
+            }
         }
 
         private static bool IsTerminal(OrderLifecycleState state)

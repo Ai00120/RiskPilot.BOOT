@@ -428,7 +428,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             writer.WriteProperty("trades", trades);
             writer.WriteProperty("bars", bars);
             writer.WriteProperty("resets", resets);
-            writer.WriteProperty("sourceTimeBasis", SourceTimeBasis.ServerTimeUnverified.ToWire());
+
+            // The trust basis of the source timestamps is derived from what was actually
+            // observed, never assumed. With no records it is UNOBSERVABLE; if any record's
+            // basis is Unknown the aggregate is UNKNOWN (fail-closed: never claim a stronger
+            // basis than the weakest observed record).
+            var basis = AggregateSourceTimeBasis(dataset.MarketData);
+            writer.WriteProperty("sourceTimeBasis", basis.HasValue ? basis.Value.ToWire() : "UNOBSERVABLE");
 
             var dom = dataset.Snapshot != null ? dataset.Snapshot.DomMarketData : null;
             if (dom != null)
@@ -451,6 +457,29 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
 
             writer.EndObject();
             return writer.ToString();
+        }
+
+        /// <summary>
+        /// Aggregates the source-time basis across market-data records using the weakest
+        /// (most conservative) basis present. Returns null when there is no record to observe.
+        /// </summary>
+        private static SourceTimeBasis? AggregateSourceTimeBasis(IList<MarketDataRecord> records)
+        {
+            if (records == null || records.Count == 0)
+            {
+                return null;
+            }
+
+            var worst = SourceTimeBasis.ExchangeTimeVerified;
+            foreach (var record in records)
+            {
+                if (record.SourceTimeBasis < worst)
+                {
+                    worst = record.SourceTimeBasis;
+                }
+            }
+
+            return worst;
         }
 
         private static string BuildDomSummaryJson(EvidenceDataset dataset)
