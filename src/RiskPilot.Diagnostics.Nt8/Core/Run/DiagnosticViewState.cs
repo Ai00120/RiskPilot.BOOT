@@ -98,6 +98,21 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
             Raise();
         }
 
+        /// <summary>Marks a rejected/failed start as terminal so the Run button is re-enabled.</summary>
+        public void MarkStartFailed(DiagnosticMode mode, string message)
+        {
+            var definition = DiagnosticModeCatalog.For(mode);
+            var now = DateTime.UtcNow;
+            lock (_gate)
+            {
+                _progress = new DiagnosticRunProgress(RunState.Failed, definition.Id, string.Empty,
+                    0, definition.ModuleIds.Count, now, now);
+                _statusLine = "Trading: DISABLED | " + (message ?? "Diagnostic run could not be started.");
+            }
+
+            Raise();
+        }
+
         /// <summary>Applies a progress update from the coordinator (already on the UI thread).</summary>
         public void ApplyProgress(DiagnosticRunProgress progress)
         {

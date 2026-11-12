@@ -168,26 +168,47 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
         private void StartSelectedMode()
         {
+            // Never fail silently: a stale window after an AddOn reload, or a failed AddOn
+            // initialization, must be visible to the operator instead of leaving the UI at
+            // "Not run" with an apparently working Run button.
             if (_coordinator == null)
             {
+                _viewState.SetStatusLine("Trading: DISABLED | Cannot start: diagnostic coordinator is unavailable. Close and reopen the Diagnostic Center; check the NinjaTrader Log.");
                 return;
             }
 
             var mode = SelectedMode();
             _viewState.SelectedMode = mode;
 
-            // Attempt the start first: only reset the module grid once the coordinator has
-            // accepted the run. Resetting before the attempt would wipe the view of an
-            // already-active run when the start is rejected.
-            if (!_coordinator.Start(mode))
-            {
-                // A run is already active; the coordinator refused the start. The UI stays
-                // responsive and the status line explains why.
-                _viewState.SetStatusLine("Trading: DISABLED | A diagnostic run is already in progress.");
-                return;
-            }
-
+            // Reset the view before starting. Start publishes its initial progress
+            // synchronously when already on the UI dispatcher; doing BeginRun afterwards
+            // could overwrite that notification and create a misleading Idle/0% display.
             _viewState.BeginRun(mode);
+            _runButton.IsEnabled = false;
+            _statusBar.Text = "Trading: DISABLED | Starting " + DiagnosticModeCatalog.For(mode).Title + "...";
+
+            try
+            {
+                if (!_coordinator.Start(mode))
+                {
+                    var reason = _coordinator.IsRunning
+                        ? "A diagnostic run is already in progress."
+                        : "The diagnostic coordinator rejected the start. Close and reopen the Diagnostic Center; check the NinjaTrader Log.";
+                    if (_coordinator.IsRunning)
+                    {
+                        _viewState.SetStatusLine("Trading: DISABLED | " + reason);
+                    }
+                    else
+                    {
+                        _viewState.MarkStartFailed(mode, reason);
+                    }
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                _viewState.MarkStartFailed(mode, "Start failed: " + Core.Errors.ErrorClassifier.Describe(ex));
+            }
         }
 
         private void ExportEvidence()
