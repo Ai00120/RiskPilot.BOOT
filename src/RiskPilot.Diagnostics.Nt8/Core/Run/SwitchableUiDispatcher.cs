@@ -6,8 +6,9 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
     /// An <see cref="IUiDispatcher"/> whose target can be attached after construction. The
     /// AddOn builds its run coordinator while the host is initialising, before any window
     /// exists; when the Control Center window is created the real dispatcher is attached here.
-    /// Until then the holder reports that it is not on a dispatcher thread and refuses to post,
-    /// so notifications are dropped rather than executed on the wrong thread.
+    /// Until a target is attached, <see cref="Post"/> runs the action inline on the calling
+    /// thread (the view state it updates is thread-safe), so a run started before the window
+    /// opens is not lost. Once a target is attached, posts go through it.
     /// </summary>
     public sealed class SwitchableUiDispatcher : IUiDispatcher
     {
