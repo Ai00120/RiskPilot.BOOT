@@ -200,6 +200,50 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void PostTradeAudit_WithoutExecutionCoverage_DoesNotPassCorrelation()
+        {
+            // The host reads Account.Orders only and reports ExecutionsInScope=false. Even with
+            // matched-looking order snapshots, the audit must not claim correlation PASS when
+            // no execution was actually observable (fail-closed).
+            var provider = new FakeDataProvider();
+            provider.Accounts.Add(new AccountRecord
+            {
+                AccountRef = "ACC-0001",
+                AccountClass = EnvironmentClass.Simulation,
+                ExecutionsInScope = false
+            });
+            provider.Snapshot = new Core.Models.Observations.DiagnosticSnapshot
+            {
+                OrderLifecycle = new Core.Models.Observations.OrderLifecycleObservation
+                {
+                    OrderSurfaceObservable = true,
+                    OrderSnapshotCount = 1,
+                    Events = new List<Core.Models.Observations.OrderLifecycleEvent>
+                    {
+                        new Core.Models.Observations.OrderLifecycleEvent
+                        {
+                            OrderRef = "order#abc",
+                            OrderIdClass = OrderIdClass.Valid,
+                            State = OrderLifecycleState.Filled,
+                            InstrumentId = "ES",
+                            Source = "Account.Orders",
+                            IngestedAtUtc = DateTime.UtcNow
+                        }
+                    }
+                }
+            };
+
+            using var runtime = Runtime(provider, 256, 256);
+            var dataset = runtime.BuildEvidenceDataset();
+            Assert.False(dataset.Snapshot.PostTradeAudit.ExecutionsInScope);
+
+            var report = runtime.RunDiagnosticPass();
+            var correlation = report.Results.FirstOrDefault(r => r.CheckId == "M9.CORRELATION_TIMING");
+            Assert.NotNull(correlation);
+            Assert.Equal(Core.Status.DiagnosticStatus.INCONCLUSIVE, correlation.Status);
+        }
+
+        [Fact]
         public void PostTradeAudit_FoldsInHostAccountOrdersSnapshot()
         {
             // The host reads Account.Orders for M3 even when nothing was ingested. The

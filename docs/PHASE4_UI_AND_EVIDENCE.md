@@ -45,7 +45,7 @@ dotnet build src/RiskPilot.Diagnostics.Nt8/RiskPilot.Diagnostics.Nt8.csproj -p:U
   → Build succeeded. 0 Warning(s), 0 Error(s)
 
 dotnet test tests/RiskPilot.Diagnostics.Nt8.Tests/RiskPilot.Diagnostics.Nt8.Tests.csproj
-  → Passed! Failed: 0, Passed: 198, Skipped: 0, Total: 198
+  → Passed! Failed: 0, Passed: 199, Skipped: 0, Total: 199
 
 python3 verification/addon-smoke/test_diagnostic_safety.py
   → STATIC SAFETY CHECK: PASS (103 production source files, 34 forbidden patterns)
@@ -276,6 +276,7 @@ findings.json               manifest.json
 | M9 bridge | `Phase4RuntimeIntegrationTests` (`PostTradeAudit_FoldsIn*`) | سطح `Account.Orders` واقعی + بدون شمارش مضاعف |
 | Source-time basis | `Phase4EvidencePackageTests` (`MarketDataSummary_*`) | مقدار مشتق‌شده، نه hardcoded |
 | Coordinator→ViewState | `Phase4RuntimeIntegrationTests` (`Coordinator_WiredToViewState_*`) | grid/result/acceptance پر می‌شوند |
+| Execution scope fail-closed | `Phase4RuntimeIntegrationTests` (`PostTradeAudit_WithoutExecutionCoverage_*`) | بدون پوشش execution → `INCONCLUSIVE` نه `PASS` |
 
 ---
 
@@ -286,9 +287,9 @@ findings.json               manifest.json
 | `Phase4RunCoordinatorTests` | 9 | PASS |
 | `Phase4EvidencePackageTests` | 17 | PASS |
 | `Phase4PostTradeAuditTests` | 10 | PASS |
-| `Phase4RuntimeIntegrationTests` | 13 | PASS |
+| `Phase4RuntimeIntegrationTests` | 14 | PASS |
 | سوئیت قبلی (فاز ۱–۳) | 149 | PASS |
-| **مجموع کل سوئیت** | **198** | **PASS** |
+| **مجموع کل سوئیت** | **199** | **PASS** |
 
 Static safety scan: **PASS** (103 فایل production، 34 الگو).
 

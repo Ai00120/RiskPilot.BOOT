@@ -88,6 +88,9 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - M9's `PostTradeAudit` observation is built from BOTH the ingest collector AND the host's
   already-read `Account.Orders` snapshot (`Snapshot.OrderLifecycle`), deduped by order ref, so
   the audit has a real surface even though the tool subscribes to no host event feed.
+- `PostTradeAuditObservation.ExecutionsInScope` must be derived, never hardcoded true: the host
+  reads only `Account.Orders` (`AccountRecord.ExecutionsInScope=false`), so claiming execution
+  coverage would let `M9.CORRELATION_TIMING` PASS without an observed execution (fail-closed).
 - Never hardcode an observation in an artifact: `market-data-summary.sourceTimeBasis` is derived
   from the observed records (weakest basis) and is `UNOBSERVABLE` with no records.
 

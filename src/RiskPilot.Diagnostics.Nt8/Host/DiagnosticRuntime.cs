@@ -468,7 +468,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 OrderSnapshotCount = dataset.Orders.Count,
                 ExecutionUpdateCount = dataset.Executions.Count,
                 PositionUpdateCount = dataset.Positions.Count,
-                ExecutionsInScope = true,
+                ExecutionsInScope = ExecutionsInScope(dataset),
                 AuditSurfaceObservable = dataset.Orders.Count > 0 || dataset.Executions.Count > 0 || dataset.Positions.Count > 0
             };
 
@@ -629,6 +629,31 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             return state == OrderLifecycleState.Filled
                 || state == OrderLifecycleState.Cancelled
                 || state == OrderLifecycleState.Rejected;
+        }
+
+        /// <summary>
+        /// Determines whether execution reads were actually in scope for this run. The host
+        /// reads only <c>Account.Orders</c> and reports <c>AccountRecord.ExecutionsInScope=false</c>,
+        /// so the audit must not claim execution coverage it never had. It is true only when the
+        /// host explicitly reported executions in scope for an account, or the ingest pipeline
+        /// actually recorded execution events.
+        /// </summary>
+        private static bool ExecutionsInScope(EvidenceDataset dataset)
+        {
+            if (dataset.Executions.Count > 0)
+            {
+                return true;
+            }
+
+            foreach (var account in dataset.Accounts)
+            {
+                if (account != null && account.ExecutionsInScope)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
