@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{B982E183-18D0-4A03-B1AF-60F240B68B8D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RiskPilot.Diagnostics.Nt8", "src\RiskPilot.Diagnostics.Nt8\RiskPilot.Diagnostics.Nt8.csproj", "{F07083BC-E77D-45D0-8544-E64A06359FEA}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{7D969739-D635-4FEA-893C-DC89DD0EF154}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RiskPilot.Diagnostics.Nt8.Tests", "tests\RiskPilot.Diagnostics.Nt8.Tests\RiskPilot.Diagnostics.Nt8.Tests.csproj", "{C2152DD1-365A-4DD2-874A-824087059EF5}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F07083BC-E77D-45D0-8544-E64A06359FEA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F07083BC-E77D-45D0-8544-E64A06359FEA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F07083BC-E77D-45D0-8544-E64A06359FEA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F07083BC-E77D-45D0-8544-E64A06359FEA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C2152DD1-365A-4DD2-874A-824087059EF5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C2152DD1-365A-4DD2-874A-824087059EF5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C2152DD1-365A-4DD2-874A-824087059EF5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C2152DD1-365A-4DD2-874A-824087059EF5}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{F07083BC-E77D-45D0-8544-E64A06359FEA} = {B982E183-18D0-4A03-B1AF-60F240B68B8D}
+		{C2152DD1-365A-4DD2-874A-824087059EF5} = {7D969739-D635-4FEA-893C-DC89DD0EF154}
+	EndGlobalSection
+EndGlobal

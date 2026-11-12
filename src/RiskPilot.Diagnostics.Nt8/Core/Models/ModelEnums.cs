@@ -1,0 +1,248 @@
+namespace RiskPilot.Diagnostics.Nt8.Core.Models
+{
+    /// <summary>
+    /// Trust level of a record's source timestamp. The recorded baseline evidence was
+    /// captured with an unverified server clock, so that is the default and the only
+    /// value the tool asserts without independent proof.
+    /// </summary>
+    public enum SourceTimeBasis
+    {
+        Unknown = 0,
+        ServerTimeUnverified = 1,
+        LocalHostClock = 2,
+        ExchangeTimeVerified = 3
+    }
+
+    /// <summary>Logical role a connection plays. NT8 separates price and order feeds.</summary>
+    public enum ConnectionRole
+    {
+        Unknown = 0,
+        Price = 1,
+        Order = 2,
+        Broker = 3
+    }
+
+    public enum ConnectionState
+    {
+        Unknown = 0,
+        Disconnected = 1,
+        Connecting = 2,
+        Connected = 3,
+        ConnectionLost = 4
+    }
+
+    /// <summary>Environment class observed at runtime (not the historical baseline).</summary>
+    public enum EnvironmentClass
+    {
+        Unknown = 0,
+        Simulation = 1,
+        Live = 2
+    }
+
+    public enum MarketDataKind
+    {
+        Unknown = 0,
+        Quote = 1,
+        Trade = 2,
+        Bar = 3
+    }
+
+    public enum DomOperation
+    {
+        Unknown = 0,
+        Insert = 1,
+        Update = 2,
+        Remove = 3,
+        Reset = 4
+    }
+
+    public enum PositionSide
+    {
+        Flat = 0,
+        Long = 1,
+        Short = 2
+    }
+
+    /// <summary>Normalized order lifecycle state (read-only mirror of NT8 OrderState).</summary>
+    public enum OrderLifecycleState
+    {
+        Unknown = 0,
+        Initialized = 1,
+        Submitted = 2,
+        Accepted = 3,
+        Working = 4,
+        PartFilled = 5,
+        Filled = 6,
+        Cancelled = 7,
+        Rejected = 8,
+        ChangeSubmitted = 9
+    }
+
+    public enum StrategyActivity
+    {
+        Unknown = 0,
+        Inactive = 1,
+        Active = 2,
+        Stopped = 3
+    }
+
+    /// <summary>Classification of an error surfaced by the diagnostic pipeline.</summary>
+    public enum ErrorClass
+    {
+        None = 0,
+        HostUnavailable = 1,
+        DataUnavailable = 2,
+        SequenceGap = 3,
+        DuplicateEvent = 4,
+        QueueOverflow = 5,
+        TimestampInvalid = 6,
+        SerializationFailure = 7,
+        ConfigurationInvalid = 8,
+        Unexpected = 9
+    }
+
+    public static class ModelEnums
+    {
+        public static string ToWire(this SourceTimeBasis basis)
+        {
+            switch (basis)
+            {
+                case SourceTimeBasis.ServerTimeUnverified:
+                    return "SERVER_TIME_UNVERIFIED";
+                case SourceTimeBasis.LocalHostClock:
+                    return "LOCAL_HOST_CLOCK";
+                case SourceTimeBasis.ExchangeTimeVerified:
+                    return "EXCHANGE_TIME_VERIFIED";
+                default:
+                    return "UNKNOWN";
+            }
+        }
+
+        public static string ToWire(this ConnectionRole role)
+        {
+            switch (role)
+            {
+                case ConnectionRole.Price:
+                    return "PRICE";
+                case ConnectionRole.Order:
+                    return "ORDER";
+                case ConnectionRole.Broker:
+                    return "BROKER";
+                default:
+                    return "UNKNOWN";
+            }
+        }
+
+        public static string ToWire(this ConnectionState state)
+        {
+            switch (state)
+            {
+                case ConnectionState.Disconnected:
+                    return "DISCONNECTED";
+                case ConnectionState.Connecting:
+                    return "CONNECTING";
+                case ConnectionState.Connected:
+                    return "CONNECTED";
+                case ConnectionState.ConnectionLost:
+                    return "CONNECTION_LOST";
+                default:
+                    return "UNKNOWN";
+            }
+        }
+
+        public static string ToWire(this EnvironmentClass environment)
+        {
+            switch (environment)
+            {
+                case EnvironmentClass.Simulation:
+                    return "SIMULATION";
+                case EnvironmentClass.Live:
+                    return "LIVE";
+                default:
+                    return "UNKNOWN";
+            }
+        }
+
+        public static string ToWire(this MarketDataKind kind)
+        {
+            switch (kind)
+            {
+                case MarketDataKind.Quote:
+                    return "QUOTE";
+                case MarketDataKind.Trade:
+                    return "TRADE";
+                case MarketDataKind.Bar:
+                    return "BAR";
+                default:
+                    return "UNKNOWN";
+            }
+        }
+
+        public static string ToWire(this DomOperation operation)
+        {
+            switch (operation)
+            {
+                case DomOperation.Insert:
+                    return "INSERT";
+                case DomOperation.Update:
+                    return "UPDATE";
+                case DomOperation.Remove:
+                    return "REMOVE";
+                case DomOperation.Reset:
+                    return "RESET";
+                default:
+                    return "UNKNOWN";
+            }
+        }
+
+        public static string ToWire(this PositionSide side)
+        {
+            switch (side)
+            {
+                case PositionSide.Long:
+                    return "LONG";
+                case PositionSide.Short:
+                    return "SHORT";
+                default:
+                    return "FLAT";
+            }
+        }
+
+        public static string ToWire(this OrderLifecycleState state)
+        {
+            return state.ToString().ToUpperInvariant();
+        }
+
+        public static string ToWire(this StrategyActivity activity)
+        {
+            return activity.ToString().ToUpperInvariant();
+        }
+
+        public static string ToWire(this ErrorClass errorClass)
+        {
+            switch (errorClass)
+            {
+                case ErrorClass.HostUnavailable:
+                    return "HOST_UNAVAILABLE";
+                case ErrorClass.DataUnavailable:
+                    return "DATA_UNAVAILABLE";
+                case ErrorClass.SequenceGap:
+                    return "SEQUENCE_GAP";
+                case ErrorClass.DuplicateEvent:
+                    return "DUPLICATE_EVENT";
+                case ErrorClass.QueueOverflow:
+                    return "QUEUE_OVERFLOW";
+                case ErrorClass.TimestampInvalid:
+                    return "TIMESTAMP_INVALID";
+                case ErrorClass.SerializationFailure:
+                    return "SERIALIZATION_FAILURE";
+                case ErrorClass.ConfigurationInvalid:
+                    return "CONFIGURATION_INVALID";
+                case ErrorClass.Unexpected:
+                    return "UNEXPECTED_ERROR";
+                default:
+                    return "NONE";
+            }
+        }
+    }
+}
