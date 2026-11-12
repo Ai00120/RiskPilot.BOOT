@@ -21,6 +21,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
 
         public PositionSide PositionSide { get; set; }
 
+        public override string StreamKey { get { return "Execution|" + InstrumentId + "|" + ExecutionRef; } }
+
+        protected override string ContentFingerprint()
+        {
+            return Invariant(Price) + ":" + Quantity + ":" + PositionSide + ":" + (OrderRef ?? string.Empty);
+        }
+
         public ExecutionRecord()
         {
             ExecutionRef = string.Empty;

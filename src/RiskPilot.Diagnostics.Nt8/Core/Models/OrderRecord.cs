@@ -22,6 +22,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
 
         public bool OcoLinked { get; set; }
 
+        public override string StreamKey { get { return "Order|" + InstrumentId + "|" + OrderRef; } }
+
+        protected override string ContentFingerprint()
+        {
+            return State + ":" + Quantity + ":" + FilledQuantity + (IsProtectiveStop ? ":S" : "") + (OcoLinked ? ":O" : "");
+        }
+
         public OrderRecord()
         {
             OrderRef = string.Empty;

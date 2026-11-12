@@ -24,8 +24,9 @@ dependency on `Ai00120/RiskPilot.BOT`:
 | Real NinjaTrader references (no fake build passed off as real) | `Host/` layer + `UseStubs=false` reference mode |
 | AddOn lifecycle (Initialize/Start/Stop/Dispose) | `Host/DiagnosticAddOn.cs`, `Host/DiagnosticRuntime.cs` |
 | Thread-safe bounded event queue | `Core/Queue/EventQueue.cs`, `Core/Queue/EventIngestPipeline.cs` |
-| No blocking of NT callbacks | `EventIngestPipeline.Ingest` is lock-free on the hot path; heavy work runs on the drain thread |
+| No blocking of NT callbacks | `Ingest` is non-blocking (no user-level lock, no wait on the drain thread); heavy work runs on the drain thread |
 | Backpressure / overflow / dropped-event counting | `EventQueue.TryEnqueue` returns false when full; `SessionContext.RecordDropped` |
+| Event-consumer contract (extension point for M3–M8) | `Core/Engine/INormalizedEventConsumer.cs`, `Core/Engine/NormalizedEventDispatcher.cs` |
 | Session id + standard timestamp | `Core/Session/SessionId.cs`, `SessionContext`, `NormalizedRecord` |
 | Normalized models (Environment, Connection, Provider, Account, Instrument, Order, Execution, Position, MarketData, DOM, Strategy, Finding) | `Core/Models/` |
 | Status PASS/FAIL/INCONCLUSIVE/NOT_APPLICABLE | `Core/Status/DiagnosticStatus.cs` |
@@ -48,8 +49,10 @@ dependency on `Ai00120/RiskPilot.BOT`:
   `stackalloc` or `DllImport` in production source (AssemblyInfo attribute usage excepted).
 - **No mutation.** The `Host` layer reads only; it never writes account/connection/position
   or RiskPilot settings.
-- **Callbacks never block.** `Ingest` stamps and enqueues; all processing is deferred to the
-  drain worker (`DiagnosticRuntime.DrainLoop`).
+- **Callbacks never block.** `Ingest` stamps and enqueues using only `Interlocked` operations
+  and concurrent collections; all processing is deferred to the drain worker
+  (`DiagnosticRuntime.DrainLoop`). No user-level lock is taken on the callback path and the
+  callback never waits on the drain thread.
 - **Trading stays disabled.** `DiagnosticAddOn.TradingDisabled = true`; there is no enable
   path anywhere in the codebase.
 - **Secret-free output.** Every string that reaches a report passes through `SecretRedactor`;
@@ -76,6 +79,9 @@ host layer compile against the documented public surface.
 | A8 | Environment class derivable from a dedicated API | No such API; derived from account name convention (`Sim*` ⇒ Simulation) and fails closed to `Unknown` when no account is present. | `Nt8HostDataProvider.DetectEnvironment` |
 | A9 | "Sequence gaps" implied to be checked automatically | The detector existed but was not wired. Phase 2 wires per-stream gap detection (`NormalizedRecord.SourceSequence` + `StreamKey`) into `EventIngestPipeline`, and any gap surfaces as `M0.EVENT_INTEGRITY = FAIL`. | `EventIngestPipeline`, `SequenceGapDetector` |
 | A10 | Timestamp handling limited to stamping | Implausible future source timestamps (beyond 5 min clock skew) are counted as `TIMESTAMP_INVALID` and surface as `M0.EVENT_INTEGRITY = FAIL`. | `EventIngestPipeline`, `DiagnosticEngine` |
+| A11 | Duplicate identity was (record type + timestamp) | A collision-safe identity now combines stream key, source sequence, source timestamp, and a content fingerprint, so distinct simultaneous events are never discarded. | `NormalizedRecord.DuplicateIdentity`, `EventIngestPipeline` |
+| A12 | "Lock-free" was claimed without basis | The duplicate and gap detectors were lock-based. They are now genuinely non-blocking (lock-free CAS / try-acquire), and the documentation states a *non-blocking* guarantee — not a formal wait-free one — verified by contention tests. | `DuplicateEventDetector`, `SequenceGapDetector`, `DiagnosticRuntime.Ingest` |
+| A13 | Processed events were counted but not delivered | `DiagnosticRuntime.Process` now dispatches payloads to registered `INormalizedEventConsumer` instances; Phase 2 registers none (M3–M8 deferral), but the contract is defined and tested. | `INormalizedEventConsumer`, `NormalizedEventDispatcher` |
 
 **Unobservable items are recorded as such** and never reported as `PASS`:
 `NINJATRADER_RUNTIME_VERSION`, `PROVIDER_BUILD`, `TRADE_AGGRESSOR_SIDE`.
@@ -115,25 +121,63 @@ documented baseline only. It appears nowhere in the tool's runtime output.
 NT8 callback thread                 drain thread (DiagnosticRuntime.DrainLoop)
 ─────────────────────               ────────────────────────────────────────────
 Ingest(record)  ──▶ EventIngestPipeline.Ingest
-   stamp session/time/sequence
-   duplicate check (bounded window)
+   stamp session/time/sequence (Interlocked)
+   duplicate check (bounded, non-blocking)
+   sequence-gap check (non-blocking CAS)
    queue.TryEnqueue (non-blocking) ──▶ EventQueue (bounded ring)
-   update session counters               │
-   return immediately                    ▼
+   update session counters (Interlocked)  │
+   return immediately                     ▼
                                      Drain(buffer) → Process(record)
+                                        → dispatcher.Dispatch(record)
                                      (heavy work, off the callback path)
 ```
 
+**Concurrency guarantees (measured/verified, no stronger claim).** The callback path
+(`Ingest`) performs only `Interlocked` operations, `ConcurrentQueue`/`ConcurrentDictionary`
+calls, and a bounded lock-free retry loop. It **does not take a user-level lock** and does
+**not** wait on the drain thread. The internal collections (`ConcurrentQueue`,
+`ConcurrentDictionary`) use fine-grained internal synchronisation; they are lock-free from
+the caller's perspective — no caller-supplied monitor is held and no caller blocks on another
+thread's progress. Where two threads contend on the same key, the loser retries rather than
+waiting. This is a *non-blocking* guarantee, not a formal wait-free guarantee, and it is
+verified by the contention tests in `ThreadSafetyTests.cs`, not by benchmark measurements.
+
 - The queue is bounded; when full, `TryEnqueue` returns `false`, the session records a drop,
   and the drop surfaces as `M0.EVENT_INTEGRITY = FAIL` (fail-closed — never a silent PASS).
+- Duplicate identity is collision-safe: it combines the stream key, the source sequence (when
+  present), the source timestamp, and a content fingerprint of the record's distinguishing
+  fields. Two different instruments, two different streams (quote/trade/DOM), or two different
+  payloads at the same timestamp are never collapsed into one another. See §3 (A11).
 - Source-reported per-stream sequence numbers (`NormalizedRecord.SourceSequence`, keyed by
   `StreamKey`) are checked on ingest; a gap increments the session gap counter and surfaces
   as `M0.EVENT_INTEGRITY = FAIL`. Streams are isolated, so a gap in one never masks another.
 - Implausible future source timestamps (> 5 min clock skew) are counted as `TIMESTAMP_INVALID`
   and also surface as `M0.EVENT_INTEGRITY = FAIL`.
+- Processed payloads are handed to registered `INormalizedEventConsumer` instances on the
+  drain thread (see §5.1). Phase 2 registers none, so this is a no-op extension point.
 - `DiagnosticRuntime.Stop` and `Dispose` both perform a **final drain** so shutdown does not
   silently abandon queued records.
 - `Stop`/`Dispose` join the worker with a 5-second bound so a stuck worker cannot hang the host.
+
+### 5.1 Event-consumer contract (Phase 2 extension point)
+
+`DiagnosticRuntime.Process` no longer only increments a counter: after counting the record it
+dispatches the payload to every registered `INormalizedEventConsumer` via
+`NormalizedEventDispatcher`. Phase 2 intentionally ships **no** consumers — the M3–M8 modules
+are future work — so the delivered behaviour is unchanged, but the contract they will use is
+defined and tested now.
+
+| Aspect | Contract |
+|---|---|
+| Where it runs | The single drain thread — never a NinjaTrader callback thread |
+| Thread safety | A consumer must be safe against concurrent reads of shared session state |
+| Blocking | A consumer must not block indefinitely; heavy work belongs here, off the callback path |
+| Errors | A consumer must not throw to signal a normal condition; the dispatcher contains any exception, counts it (`ConsumerErrorCount`), and continues delivering to other consumers |
+| Safety | Strictly read-only: no order submit/change/cancel/close, no account/connection/position mutation |
+| Registration | `DiagnosticRuntime.RegisterEventConsumer(...)`; safe before or after `Start` (copy-on-write) |
+
+`NormalizedEventDispatcher` is copy-on-write for registration and contains per-consumer
+exceptions, so one faulty module can never abort the drain loop or starve the others.
 
 ---
 
@@ -143,23 +187,26 @@ Ingest(record)  ──▶ EventIngestPipeline.Ingest
 
 ```
 dotnet build src/RiskPilot.Diagnostics.Nt8/RiskPilot.Diagnostics.Nt8.csproj -p:UseStubs=true
-→ Build succeeded. (1 warning: unused stub event)
+→ Build succeeded. 0 Warning(s), 0 Error(s)
 ```
 
-The single warning is in the offline stub file and does not affect the product assembly.
+A clean build produces no warnings. The stub-only event in `Stubs/NinjaTraderStubs.cs` carries a
+`#pragma warning disable 67` so the offline stub surface stays warning-free. (An earlier
+revision of this document claimed one warning; that count did not match the actual build
+output and has been reconciled to 0.)
 
 ### 6.2 Unit tests (executed)
 
 ```
 dotnet test tests/RiskPilot.Diagnostics.Nt8.Tests/RiskPilot.Diagnostics.Nt8.Tests.csproj
-→ Passed! Failed: 0, Passed: 99, Skipped: 0, Total: 99
+→ Passed! Failed: 0, Passed: 115, Skipped: 0, Total: 115
 ```
 
 | Required test area | Test file |
 |---|---|
-| Thread safety | `ThreadSafetyTests.cs` |
+| Thread safety (incl. lock-free detectors under contention) | `ThreadSafetyTests.cs` |
 | Queue overflow | `EventQueueTests.cs` |
-| Duplicate event | `DuplicateEventTests.cs` |
+| Duplicate event (incl. cross-instrument/stream collision safety) | `DuplicateEventTests.cs` |
 | Sequence gap (unit + end-to-end, per-stream isolation) | `SequenceGapTests.cs` |
 | Timestamp handling (skew flagging + M0 propagation) | `TimestampTests.cs` |
 | Session isolation | `SessionIsolationTests.cs` |
@@ -170,6 +217,7 @@ dotnet test tests/RiskPilot.Diagnostics.Nt8.Tests/RiskPilot.Diagnostics.Nt8.Test
 | Error classification | `ErrorClassificationTests.cs` |
 | Status propagation | `StatusPropagationTests.cs` |
 | Probe behaviour (M1/M2) | `ProbeTests.cs` |
+| Event-consumer contract + error containment | `EventConsumerTests.cs` |
 
 The only test double is a deterministic clock and an in-memory data provider that replaces
 the NinjaTrader host boundary. All diagnostic logic, the queue, the serializer, the manifest
@@ -220,6 +268,36 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 
 - Branch: `phase2/foundation-diagnostic-core` (off `main`).
 - No change was made to `Ai00120/RiskPilot.BOT`.
-- Commit SHA: `8ef688a4ea968a68654a986b9bc94b4b715ab931` (this record is amended into the
-  same commit).
-- The branch is local only; it has **not** been pushed and no PR was opened.
+- Pull request: **`Ai00120/RiskPilot.BOOT#1`** (`main` ← `phase2/foundation-diagnostic-core`).
+- Commit history (preserved as-is; nothing squashed or rewritten):
+  1. `8ef688a4ea968a68654a986b9bc94b4b715ab931` — feat(phase2): standalone read-only NT8 diagnostic core (RP-DIAG-01)
+  2. `75a7d7b3b965d48170da506ab74e3e6a0316add0` — docs(phase2): record commit SHA and branch status
+  3. `0c606efe08674f0c903d3e41565966ca40ac4820` — fix(phase2): wire sequence-gap + timestamp validation into ingest path
+  4. (this review) — fix(phase2): collision-safe duplicate identity, non-blocking ingest path, event-consumer contract
+- The branch is pushed to `origin`; the PR is open. **No merge has been performed.**
+
+---
+
+## 10. Independent-review corrections (2026-11-12)
+
+A focused technical review of PR #1 raised findings that were investigated and resolved on the
+same branch. Each correction has a regression test; none of them change the read-only safety
+posture or the real-host-verification status.
+
+| # | Finding | Root cause | Correction |
+|---|---|---|---|
+| 1 | Duplicate detection could suppress legitimate simultaneous events | `BuildDuplicateKey` used only (record type + source timestamp), so two different instruments, or a quote and a trade, sharing a timestamp collided | `NormalizedRecord.DuplicateIdentity()` now composes stream key + source sequence + source timestamp + content fingerprint; payload records override `ContentFingerprint()` |
+| 2 | Documentation claimed a lock-free ingest path while detectors/runtime used locks | `DuplicateEventDetector`/`SequenceGapDetector` used `lock`; `DiagnosticRuntime.Ingest` took `_gate` | Both detectors rewritten non-blocking (CAS / try-acquire); `Ingest` reads volatile fields without `_gate`; documentation now states a *non-blocking* guarantee and points to contention tests |
+| 3 | `Process` counted events but delivered no payload | No consumer abstraction existed | Added `INormalizedEventConsumer` + `NormalizedEventDispatcher`; `Process` dispatches with per-consumer error containment; Phase 2 registers no consumers (documented deferral) |
+| 4 | Documentation inconsistency | §9 stale; warning/test counts outdated | §9 updated to the real branch/PR/commits; warning count reconciled to 0; test count reconciled to 115 |
+| 5 | Verification | — | Full offline build, all tests, and the static scan re-run; diff reviewed; BOT confirmed untouched |
+
+**Remaining limitations after the corrections (unchanged in substance):**
+
+- Real NinjaTrader 8.1.8.4 host build and runtime remain **unverified**.
+- The lock-free guarantee is *non-blocking*, not formally wait-free, and is evidenced by
+  contention tests rather than benchmark measurements.
+- Duplicate detection remains a bounded-window approximation: an identity evicted from the
+  window may be treated as new again. Genuine duplicates inside the window are always caught.
+- Only M1/M2 probes exist; the event-consumer contract is delivered but no M3–M8 consumer is.
+- No BOT integration; `IReadOnlyDiagnosticSource` is declared but unimplemented on the BOT side.

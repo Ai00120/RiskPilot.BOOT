@@ -1,4 +1,6 @@
 using System;
+using System.Globalization;
+using System.Text;
 
 namespace RiskPilot.Diagnostics.Nt8.Core.Models
 {
@@ -25,6 +27,58 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
         /// are isolated so a gap in one stream never masks or merges with another.
         /// </summary>
         public virtual string StreamKey { get { return GetType().Name; } }
+
+        /// <summary>
+        /// Collision-safe duplicate identity. It combines the stream key, the source
+        /// sequence (when present), the source timestamp, and a content fingerprint of the
+        /// record's distinguishing fields. Two genuinely different events can never share
+        /// an identity, so a valid event is never discarded as a "duplicate" of another
+        /// event that merely happened to share a timestamp.
+        /// <para>
+        /// The only unavoidable ambiguity is two events that are byte-for-byte identical in
+        /// stream, sequence, timestamp and content. When the source provides no sequence,
+        /// such events are indistinguishable and are intentionally treated as duplicates.
+        /// </para>
+        /// </summary>
+        public virtual string DuplicateIdentity()
+        {
+            var builder = new StringBuilder(96);
+            builder.Append(StreamKey ?? GetType().Name);
+            builder.Append('|');
+            builder.Append(SourceSequence.HasValue
+                ? "seq:" + SourceSequence.Value.ToString(CultureInfo.InvariantCulture)
+                : "noseq");
+            builder.Append('|');
+            builder.Append(SourceTimestampUtc.HasValue
+                ? "ts:" + SourceTimestampUtc.Value.Ticks.ToString(CultureInfo.InvariantCulture)
+                : "nots");
+            builder.Append('|');
+            builder.Append(ContentFingerprint());
+            return builder.ToString();
+        }
+
+        /// <summary>
+        /// Content-specific fingerprint of the fields that distinguish one record from
+        /// another on the same stream. The base implementation returns an empty string;
+        /// payload-bearing records override it so simultaneous distinct events do not
+        /// collide. Implementations must be deterministic and culture-invariant.
+        /// </summary>
+        protected virtual string ContentFingerprint()
+        {
+            return string.Empty;
+        }
+
+        /// <summary>Culture-invariant formatting helper for fingerprints.</summary>
+        protected static string Invariant(double value)
+        {
+            return value.ToString("R", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>Culture-invariant formatting helper for fingerprints.</summary>
+        protected static string Invariant(long value)
+        {
+            return value.ToString(CultureInfo.InvariantCulture);
+        }
 
         /// <summary>Timestamp reported by the data source, in UTC. Null when not provided.</summary>
         public DateTime? SourceTimestampUtc { get; set; }

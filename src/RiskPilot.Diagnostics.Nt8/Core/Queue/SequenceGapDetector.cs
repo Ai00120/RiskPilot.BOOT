@@ -1,20 +1,25 @@
-using System.Collections.Generic;
+using System.Collections.Concurrent;
+using System.Threading;
 
 namespace RiskPilot.Diagnostics.Nt8.Core.Queue
 {
     /// <summary>
-    /// Tracks per-stream sequence numbers and reports missing ranges. Gaps are recorded
-    /// as an <see cref="ErrorClass.SequenceGap"/>-worthy condition so that a run with
-    /// lost events can never be reported as a clean pass.
+    /// Tracks per-stream sequence numbers and reports missing ranges using a lock-free
+    /// compare-and-swap loop. A gap means the source skipped events, so a run with lost
+    /// events can never be reported as a clean pass. The observe path never blocks: it
+    /// either succeeds or retries on contention without waiting on another thread.
     /// </summary>
     public sealed class SequenceGapDetector
     {
-        private readonly Dictionary<string, long> _lastSeen = new Dictionary<string, long>();
-        private readonly object _gate = new object();
+        private readonly ConcurrentDictionary<string, long> _lastSeen = new ConcurrentDictionary<string, long>();
+        private long _totalGaps;
+        private long _totalMissing;
 
-        public long TotalGaps { get; private set; }
+        public long TotalGaps { get { return Interlocked.Read(ref _totalGaps); } }
 
-        public long TotalMissing { get; private set; }
+        public long TotalMissing { get { return Interlocked.Read(ref _totalMissing); } }
+
+        public bool HasGaps { get { return Interlocked.Read(ref _totalGaps) > 0; } }
 
         /// <summary>
         /// Observes a sequence number for a named stream. Returns the number of missing
@@ -29,42 +34,47 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Queue
             }
 
             var key = streamKey ?? "default";
-            lock (_gate)
+
+            while (true)
             {
                 if (!_lastSeen.TryGetValue(key, out var previous))
                 {
-                    _lastSeen[key] = sequence;
-                    return 0;
+                    if (_lastSeen.TryAdd(key, sequence))
+                    {
+                        return 0;
+                    }
+
+                    continue;
                 }
 
                 if (sequence <= previous)
                 {
-                    // Replay or duplicate; not a forward gap.
+                    // Replay, duplicate, or out-of-order; not a forward gap.
                     return 0;
                 }
 
                 var missing = sequence - previous - 1;
-                _lastSeen[key] = sequence;
-                if (missing > 0)
+                if (_lastSeen.TryUpdate(key, sequence, previous))
                 {
-                    TotalGaps++;
-                    TotalMissing += missing;
+                    // Exactly one thread wins this transition, so a gap is counted once.
+                    if (missing > 0)
+                    {
+                        Interlocked.Increment(ref _totalGaps);
+                        Interlocked.Add(ref _totalMissing, missing);
+                    }
+
+                    return missing;
                 }
 
-                return missing;
+                // Lost the race; retry against the new previous value.
             }
         }
 
-        public bool HasGaps { get { return TotalGaps > 0; } }
-
         public void Reset()
         {
-            lock (_gate)
-            {
-                _lastSeen.Clear();
-                TotalGaps = 0;
-                TotalMissing = 0;
-            }
+            _lastSeen.Clear();
+            Interlocked.Exchange(ref _totalGaps, 0);
+            Interlocked.Exchange(ref _totalMissing, 0);
         }
     }
 }

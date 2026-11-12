@@ -20,6 +20,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
 
         public override string StreamKey { get { return "MarketData|" + Kind + "|" + InstrumentId; } }
 
+        protected override string ContentFingerprint()
+        {
+            return Invariant(Bid) + "," + Invariant(Ask) + "," + Invariant(Last) + "," + Invariant(Volume) + (IsReset ? ",R" : "");
+        }
+
         public MarketDataRecord()
         {
             InstrumentId = string.Empty;

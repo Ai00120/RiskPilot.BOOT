@@ -7,8 +7,9 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Session
     /// <summary>
     /// Mutable, thread-safe counters for one diagnostic session. Session isolation is
     /// enforced by construction: a new context is created for every Start and all
-    /// counters are scoped to it. Counter updates use <see cref="Interlocked"/> so the
-    /// ingest path never takes a lock.
+    /// counters are scoped to it. Counter updates use <see cref="Interlocked"/>, so the
+    /// ingest path updates counters atomically without acquiring a user-level lock and
+    /// never blocks the host callback thread on another thread's progress.
     /// </summary>
     public sealed class SessionContext
     {

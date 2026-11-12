@@ -18,6 +18,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
 
         public override string StreamKey { get { return "Dom|" + InstrumentId; } }
 
+        protected override string ContentFingerprint()
+        {
+            return Operation + ":" + Position + ":" + Invariant(Price) + ":" + Invariant(Volume) + (IsReset ? ":R" : "");
+        }
+
         public DomRecord()
         {
             InstrumentId = string.Empty;

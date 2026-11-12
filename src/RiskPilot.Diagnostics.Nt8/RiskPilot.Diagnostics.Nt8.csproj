@@ -82,6 +82,8 @@
     <Compile Include="Core\Report\ReportSerializer.cs" />
     <Compile Include="Core\Engine\IDiagnosticDataProvider.cs" />
     <Compile Include="Core\Engine\IDiagnosticProbe.cs" />
+    <Compile Include="Core\Engine\INormalizedEventConsumer.cs" />
+    <Compile Include="Core\Engine\NormalizedEventDispatcher.cs" />
     <Compile Include="Core\Engine\ProbeContext.cs" />
     <Compile Include="Core\Engine\DiagnosticEngine.cs" />
     <Compile Include="Core\Engine\Probes\M1EnvironmentProbe.cs" />

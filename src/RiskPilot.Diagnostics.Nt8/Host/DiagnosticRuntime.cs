@@ -28,10 +28,11 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         private readonly int _duplicateWindow;
 
         private readonly object _gate = new object();
-        private SessionContext _session;
+        private volatile SessionContext _session;
         private DiagnosticLog _log;
-        private EventIngestPipeline _pipeline;
+        private volatile EventIngestPipeline _pipeline;
         private DiagnosticEngine _engine;
+        private volatile NormalizedEventDispatcher _dispatcher;
         private Thread _worker;
         private volatile bool _running;
         private bool _disposed;
@@ -56,6 +57,43 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         public bool IsInitialized { get { lock (_gate) { return _session != null; } } }
 
         /// <summary>
+        /// Registers a normalized-event consumer. This is the extension point for future
+        /// diagnostic modules (M3–M8). Registration is expected before Start; it is also
+        /// safe after Start because the dispatcher is copy-on-write. A consumer runs on the
+        /// drain thread and never on a host callback thread.
+        /// </summary>
+        public void RegisterEventConsumer(INormalizedEventConsumer consumer)
+        {
+            var dispatcher = _dispatcher;
+            if (dispatcher == null)
+            {
+                throw new InvalidOperationException("Initialize must be called before registering a consumer.");
+            }
+
+            dispatcher.Register(consumer);
+        }
+
+        /// <summary>Count of records delivered to at least one registered consumer.</summary>
+        public long ConsumedEventCount
+        {
+            get
+            {
+                var dispatcher = _dispatcher;
+                return dispatcher == null ? 0 : dispatcher.ConsumedCount;
+            }
+        }
+
+        /// <summary>Count of consumer invocations that threw and were contained.</summary>
+        public long ConsumerErrorCount
+        {
+            get
+            {
+                var dispatcher = _dispatcher;
+                return dispatcher == null ? 0 : dispatcher.ConsumerErrorCount;
+            }
+        }
+
+        /// <summary>
         /// Creates the session, log, ingest pipeline and engine, and registers the
         /// probes. Safe to call more than once; only the first call has an effect.
         /// </summary>
@@ -78,6 +116,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 _log = new DiagnosticLog(_queueCapacity);
                 _pipeline = new EventIngestPipeline(_queueCapacity, _duplicateWindow, _clock);
                 _engine = new DiagnosticEngine(_dataProvider, _log, _clock);
+                _dispatcher = new NormalizedEventDispatcher();
                 _engine.Register(new Core.Engine.Probes.M1EnvironmentProbe());
                 _engine.Register(new Core.Engine.Probes.M2ConnectionProbe());
 
@@ -154,19 +193,16 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
         /// <summary>
         /// Enqueues a normalized record for asynchronous processing. Called from host
-        /// callback threads; never blocks. Returns false when the record was dropped or
-        /// suppressed as a duplicate.
+        /// callback threads; never blocks and never takes a lock. The pipeline and session
+        /// references are published before Start and only replaced under Dispose, so a
+        /// volatile read is sufficient and the callback path never contends on the runtime
+        /// gate. Returns false when the record was dropped or suppressed as a duplicate,
+        /// or when the runtime is not initialized.
         /// </summary>
         public bool Ingest(Core.Models.NormalizedRecord record)
         {
-            EventIngestPipeline pipeline;
-            SessionContext session;
-            lock (_gate)
-            {
-                pipeline = _pipeline;
-                session = _session;
-            }
-
+            var pipeline = _pipeline;
+            var session = _session;
             if (pipeline == null || session == null)
             {
                 return false;
@@ -291,6 +327,14 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             }
 
             _session.RecordProcessed();
+
+            // Hand the payload to registered consumers (future M3–M8 modules). Phase 2
+            // ships no consumers, so this is a no-op that establishes the extension point.
+            var dispatcher = _dispatcher;
+            if (dispatcher != null)
+            {
+                dispatcher.Dispatch(record);
+            }
         }
 
         public void Dispose()

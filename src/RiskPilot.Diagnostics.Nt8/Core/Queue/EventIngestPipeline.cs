@@ -66,7 +66,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Queue
                 session.RecordTimestampInvalid();
             }
 
-            var duplicateKey = BuildDuplicateKey(record);
+            var duplicateKey = record.DuplicateIdentity();
             if (_duplicates.Observe(duplicateKey))
             {
                 session.RecordDuplicate();
@@ -92,19 +92,6 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Queue
             }
 
             return true;
-        }
-
-        private static string BuildDuplicateKey(NormalizedRecord record)
-        {
-            // Duplicate identity is (session, kind, source timestamp, sequence). A record
-            // without a source timestamp is keyed by its assigned sequence instead.
-            var kind = record.GetType().Name;
-            if (record.SourceTimestampUtc.HasValue)
-            {
-                return kind + "|" + record.SourceTimestampUtc.Value.Ticks;
-            }
-
-            return kind + "|seq:" + record.Sequence;
         }
     }
 }

@@ -29,6 +29,7 @@
     <Compile Include="ThreadSafetyTests.cs" />
     <Compile Include="EventQueueTests.cs" />
     <Compile Include="DuplicateEventTests.cs" />
+    <Compile Include="EventConsumerTests.cs" />
     <Compile Include="SequenceGapTests.cs" />
     <Compile Include="TimestampTests.cs" />
     <Compile Include="SessionIsolationTests.cs" />
