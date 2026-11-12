@@ -74,6 +74,8 @@ host layer compile against the documented public surface.
 | A6 | Provider build/version observable | No public API exposes the provider build. Recorded as unobservable. | `ProviderRecord` |
 | A7 | "OrderState" naming for the connection's order channel | Renamed to `OrderChannelState` to avoid collision with the NT8 order-lifecycle enum and to keep the static safety scan unambiguous. | `ConnectionRecord` |
 | A8 | Environment class derivable from a dedicated API | No such API; derived from account name convention (`Sim*` ⇒ Simulation) and fails closed to `Unknown` when no account is present. | `Nt8HostDataProvider.DetectEnvironment` |
+| A9 | "Sequence gaps" implied to be checked automatically | The detector existed but was not wired. Phase 2 wires per-stream gap detection (`NormalizedRecord.SourceSequence` + `StreamKey`) into `EventIngestPipeline`, and any gap surfaces as `M0.EVENT_INTEGRITY = FAIL`. | `EventIngestPipeline`, `SequenceGapDetector` |
+| A10 | Timestamp handling limited to stamping | Implausible future source timestamps (beyond 5 min clock skew) are counted as `TIMESTAMP_INVALID` and surface as `M0.EVENT_INTEGRITY = FAIL`. | `EventIngestPipeline`, `DiagnosticEngine` |
 
 **Unobservable items are recorded as such** and never reported as `PASS`:
 `NINJATRADER_RUNTIME_VERSION`, `PROVIDER_BUILD`, `TRADE_AGGRESSOR_SIDE`.
@@ -124,6 +126,11 @@ Ingest(record)  ──▶ EventIngestPipeline.Ingest
 
 - The queue is bounded; when full, `TryEnqueue` returns `false`, the session records a drop,
   and the drop surfaces as `M0.EVENT_INTEGRITY = FAIL` (fail-closed — never a silent PASS).
+- Source-reported per-stream sequence numbers (`NormalizedRecord.SourceSequence`, keyed by
+  `StreamKey`) are checked on ingest; a gap increments the session gap counter and surfaces
+  as `M0.EVENT_INTEGRITY = FAIL`. Streams are isolated, so a gap in one never masks another.
+- Implausible future source timestamps (> 5 min clock skew) are counted as `TIMESTAMP_INVALID`
+  and also surface as `M0.EVENT_INTEGRITY = FAIL`.
 - `DiagnosticRuntime.Stop` and `Dispose` both perform a **final drain** so shutdown does not
   silently abandon queued records.
 - `Stop`/`Dispose` join the worker with a 5-second bound so a stuck worker cannot hang the host.
@@ -145,7 +152,7 @@ The single warning is in the offline stub file and does not affect the product a
 
 ```
 dotnet test tests/RiskPilot.Diagnostics.Nt8.Tests/RiskPilot.Diagnostics.Nt8.Tests.csproj
-→ Passed! Failed: 0, Passed: 94, Skipped: 0, Total: 94
+→ Passed! Failed: 0, Passed: 99, Skipped: 0, Total: 99
 ```
 
 | Required test area | Test file |
@@ -153,8 +160,8 @@ dotnet test tests/RiskPilot.Diagnostics.Nt8.Tests/RiskPilot.Diagnostics.Nt8.Test
 | Thread safety | `ThreadSafetyTests.cs` |
 | Queue overflow | `EventQueueTests.cs` |
 | Duplicate event | `DuplicateEventTests.cs` |
-| Sequence gap | `SequenceGapTests.cs` |
-| Timestamp handling | `TimestampTests.cs` |
+| Sequence gap (unit + end-to-end, per-stream isolation) | `SequenceGapTests.cs` |
+| Timestamp handling (skew flagging + M0 propagation) | `TimestampTests.cs` |
 | Session isolation | `SessionIsolationTests.cs` |
 | Serialization | `SerializationTests.cs` |
 | SHA-256 manifest | `ManifestTests.cs` |

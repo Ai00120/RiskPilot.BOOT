@@ -1,4 +1,7 @@
+using System;
+using RiskPilot.Diagnostics.Nt8.Core.Models;
 using RiskPilot.Diagnostics.Nt8.Core.Queue;
+using RiskPilot.Diagnostics.Nt8.Core.Session;
 using Xunit;
 
 namespace RiskPilot.Diagnostics.Nt8.Tests
@@ -53,6 +56,35 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             detector.Observe("quotes", 10);
             Assert.Equal(0, detector.Observe("quotes", 9));
             Assert.False(detector.HasGaps);
+        }
+
+        [Fact]
+        public void Pipeline_DetectsGapPerStreamAndFlagsDataLoss()
+        {
+            var clock = new Core.Clock.SystemClock();
+            var pipeline = new Core.Queue.EventIngestPipeline(100, 100, clock);
+            var session = new SessionContext(SessionId.New(System.DateTime.UtcNow), System.DateTime.UtcNow);
+
+            pipeline.Ingest(session, new MarketDataRecord { InstrumentId = "ES 12-26", Kind = MarketDataKind.Trade, SourceSequence = 100 });
+            pipeline.Ingest(session, new MarketDataRecord { InstrumentId = "ES 12-26", Kind = MarketDataKind.Trade, SourceSequence = 105 });
+
+            Assert.Equal(4, session.SequenceGapCount);
+            Assert.True(session.HasDataLoss);
+        }
+
+        [Fact]
+        public void Pipeline_GapsAreIsolatedBetweenStreams()
+        {
+            var clock = new Core.Clock.SystemClock();
+            var pipeline = new Core.Queue.EventIngestPipeline(100, 100, clock);
+            var session = new SessionContext(SessionId.New(System.DateTime.UtcNow), System.DateTime.UtcNow);
+
+            pipeline.Ingest(session, new MarketDataRecord { InstrumentId = "ES 12-26", Kind = MarketDataKind.Trade, SourceSequence = 1 });
+            pipeline.Ingest(session, new MarketDataRecord { InstrumentId = "ES 12-26", Kind = MarketDataKind.Quote, SourceSequence = 900 });
+            pipeline.Ingest(session, new MarketDataRecord { InstrumentId = "ES 12-26", Kind = MarketDataKind.Trade, SourceSequence = 2 });
+
+            Assert.Equal(0, session.SequenceGapCount);
+            Assert.False(session.HasDataLoss);
         }
     }
 }

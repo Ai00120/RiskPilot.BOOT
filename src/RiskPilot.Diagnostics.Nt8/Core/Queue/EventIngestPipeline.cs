@@ -15,6 +15,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Queue
     {
         private readonly EventQueue<NormalizedRecord> _queue;
         private readonly DuplicateEventDetector _duplicates;
+        private readonly SequenceGapDetector _gaps = new SequenceGapDetector();
         private readonly IClock _clock;
         private long _sequence;
 
@@ -28,6 +29,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Queue
         public EventQueue<NormalizedRecord> Queue { get { return _queue; } }
 
         public long DuplicateCount { get { return _duplicates.DuplicateCount; } }
+
+        public SequenceGapDetector GapDetector { get { return _gaps; } }
 
         /// <summary>
         /// Stamps and enqueues a record for the given session. Returns false when the
@@ -55,11 +58,30 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Queue
                 record.SourceTimeBasis = session.SourceTimeBasis;
             }
 
+            // An implausible future source timestamp (beyond a small clock-skew tolerance)
+            // is counted rather than trusted; it never silently counts as clean data.
+            if (record.SourceTimestampUtc.HasValue
+                && record.SourceTimestampUtc.Value.ToUniversalTime() > now.AddMinutes(5))
+            {
+                session.RecordTimestampInvalid();
+            }
+
             var duplicateKey = BuildDuplicateKey(record);
             if (_duplicates.Observe(duplicateKey))
             {
                 session.RecordDuplicate();
                 return false;
+            }
+
+            // Sequence gaps are detected per stream, independently of the internal
+            // sequence, so lost source events can never be reported as a clean pass.
+            if (record.SourceSequence.HasValue)
+            {
+                var missing = _gaps.Observe(record.StreamKey, record.SourceSequence.Value);
+                if (missing > 0)
+                {
+                    session.RecordSequenceGap(missing);
+                }
             }
 
             session.RecordEnqueued();

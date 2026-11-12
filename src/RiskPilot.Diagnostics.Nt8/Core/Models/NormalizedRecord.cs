@@ -14,6 +14,18 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
         /// <summary>Monotonic per-session sequence number assigned by the ingest queue.</summary>
         public long Sequence { get; set; }
 
+        /// <summary>
+        /// Source-reported per-stream sequence number, when the source exposes one. A gap in
+        /// this value is detected independently of the internal <see cref="Sequence"/>.
+        /// </summary>
+        public long? SourceSequence { get; set; }
+
+        /// <summary>
+        /// Logical stream this record belongs to, used for sequence-gap detection. Streams
+        /// are isolated so a gap in one stream never masks or merges with another.
+        /// </summary>
+        public virtual string StreamKey { get { return GetType().Name; } }
+
         /// <summary>Timestamp reported by the data source, in UTC. Null when not provided.</summary>
         public DateTime? SourceTimestampUtc { get; set; }
 

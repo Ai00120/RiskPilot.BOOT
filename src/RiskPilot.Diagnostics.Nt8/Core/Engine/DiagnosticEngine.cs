@@ -97,16 +97,22 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
 
             report.Counters = SessionCounters.From(session);
 
-            // Loss of events or a gap must never be hidden: surface it as a FAIL.
-            if (session.HasDataLoss)
+            // Loss of events, a gap, or an implausible timestamp must never be hidden:
+            // surface it as a FAIL rather than letting the run look clean.
+            if (session.HasDataLoss || session.TimestampInvalidCount > 0)
             {
+                var codes = new List<string>();
+                if (session.DroppedCount > 0) codes.Add("QUEUE_OVERFLOW");
+                if (session.SequenceGapCount > 0) codes.Add("SEQUENCE_GAP");
+                if (session.TimestampInvalidCount > 0) codes.Add("TIMESTAMP_INVALID");
+                codes.Add("DROPPED=" + session.DroppedCount);
+                codes.Add("SEQUENCE_GAPS=" + session.SequenceGapCount);
+                codes.Add("TIMESTAMP_INVALID=" + session.TimestampInvalidCount);
+
                 var lossResult = DiagnosticResult
                     .Fail("M0", "M0.EVENT_INTEGRITY", ErrorClass.QueueOverflow, correlationId, _clock.UtcNow)
-                    .WithReasonCode(
-                        session.DroppedCount > 0 ? "QUEUE_OVERFLOW" : "SEQUENCE_GAP",
-                        "DROPPED=" + session.DroppedCount,
-                        "SEQUENCE_GAPS=" + session.SequenceGapCount)
-                    .WithRemediation("Increase queue capacity or reduce ingest rate; results are not clean while events are lost.");
+                    .WithReasonCode(codes.ToArray())
+                    .WithRemediation("Increase queue capacity or reduce ingest rate; results are not clean while events are lost or timestamps are implausible.");
                 report.Add(lossResult);
                 report.AddFinding(ToFinding(lossResult, session.SessionId));
             }

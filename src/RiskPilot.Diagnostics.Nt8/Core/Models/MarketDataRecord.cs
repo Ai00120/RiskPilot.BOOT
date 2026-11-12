@@ -18,6 +18,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
         /// <summary>True when this event signals a stream reset (e.g. session roll).</summary>
         public bool IsReset { get; set; }
 
+        public override string StreamKey { get { return "MarketData|" + Kind + "|" + InstrumentId; } }
+
         public MarketDataRecord()
         {
             InstrumentId = string.Empty;

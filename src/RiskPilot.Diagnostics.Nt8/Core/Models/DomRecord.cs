@@ -16,6 +16,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
         /// <summary>True when the host signaled a full book reset.</summary>
         public bool IsReset { get; set; }
 
+        public override string StreamKey { get { return "Dom|" + InstrumentId; } }
+
         public DomRecord()
         {
             InstrumentId = string.Empty;
