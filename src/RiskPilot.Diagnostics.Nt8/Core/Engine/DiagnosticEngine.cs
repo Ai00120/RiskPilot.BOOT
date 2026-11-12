@@ -47,6 +47,40 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
         /// <summary>Runs every probe for the session and returns a complete report.</summary>
         public DiagnosticReport Run(SessionContext session)
         {
+            return Run(session, null);
+        }
+
+        /// <summary>
+        /// Runs the probes whose <see cref="IDiagnosticProbe.ModuleId"/> is in
+        /// <paramref name="moduleIds"/>. A null or empty filter runs every registered probe.
+        /// The filter is applied before execution, so a mode that excludes a module never
+        /// runs it and never touches its data source.
+        /// </summary>
+        public DiagnosticReport Run(SessionContext session, IReadOnlyCollection<string> moduleIds)
+        {
+            return Run(session, moduleIds, null, null, null);
+        }
+
+        /// <summary>
+        /// Runs the selected probes and reports progress through the optional callbacks:
+        /// <paramref name="onModuleStarted"/> is invoked just before a probe runs and
+        /// <paramref name="onModuleCompleted"/> just after, with the probe's results. The
+        /// callbacks run on the caller's thread (the run worker), never on a host callback
+        /// thread, so they may do work but must not touch a UI directly.
+        /// <para>
+        /// <paramref name="shouldStop"/> is polled between modules. When it returns true the
+        /// remaining modules are skipped and the report holds the results produced so far —
+        /// this is how a cancel stops diagnostic processing without interrupting a module
+        /// that is already running.
+        /// </para>
+        /// </summary>
+        public DiagnosticReport Run(
+            SessionContext session,
+            IReadOnlyCollection<string> moduleIds,
+            Action<string> onModuleStarted,
+            Action<string, IReadOnlyList<DiagnosticResult>> onModuleCompleted,
+            Func<bool> shouldStop)
+        {
             if (session == null)
             {
                 throw new ArgumentNullException(nameof(session));
@@ -68,6 +102,21 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
 
             foreach (var probe in _probes)
             {
+                if (!IsSelected(probe, moduleIds))
+                {
+                    continue;
+                }
+
+                if (shouldStop != null && shouldStop())
+                {
+                    break;
+                }
+
+                if (onModuleStarted != null)
+                {
+                    onModuleStarted(probe.ModuleId);
+                }
+
                 IReadOnlyList<DiagnosticResult> results;
                 try
                 {
@@ -92,6 +141,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
                 {
                     report.Add(result);
                     report.AddFinding(ToFinding(result, session.SessionId));
+                }
+
+                if (onModuleCompleted != null)
+                {
+                    onModuleCompleted(probe.ModuleId, results ?? new List<DiagnosticResult>());
                 }
             }
 
@@ -125,6 +179,24 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
                 "Diagnostic pass complete. aggregate=" + report.AggregateStatus().ToWire());
 
             return report;
+        }
+
+        private static bool IsSelected(IDiagnosticProbe probe, IReadOnlyCollection<string> moduleIds)
+        {
+            if (moduleIds == null || moduleIds.Count == 0)
+            {
+                return true;
+            }
+
+            foreach (var id in moduleIds)
+            {
+                if (string.Equals(id, probe.ModuleId, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private EnvironmentRecord SafeGetEnvironment()

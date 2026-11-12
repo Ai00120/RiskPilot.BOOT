@@ -24,11 +24,13 @@ any source change.
 ## Layout
 
 - `src/RiskPilot.Diagnostics.Nt8/Core/` — pure domain, **no NinjaTrader types**.
+- `src/RiskPilot.Diagnostics.Nt8/Core/Run/` — modes, run coordinator, view state (host-free).
+- `src/RiskPilot.Diagnostics.Nt8/Core/Evidence/` — 17-artifact evidence package builder.
 - `src/RiskPilot.Diagnostics.Nt8/Host/` — the **only** layer that touches NinjaTrader types.
 - `src/RiskPilot.Diagnostics.Nt8/Stubs/` — offline compile-time stubs (`#if USE_STUBS` only).
 - `tests/RiskPilot.Diagnostics.Nt8.Tests/` — xUnit tests.
 - `verification/addon-smoke/` — static safety scan (no NT8 needed).
-- `docs/` — Phase 1 audit + Phase 2 implementation record.
+- `docs/` — Phase 1–4 records.
 
 ## Build & test (offline CI)
 
@@ -62,6 +64,38 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - Connection exposes separate `PriceStatus` and `Status` (order channel).
 - `Instrument.MasterInstrument.*` must be read only after `DataLoaded`/`Realtime`.
 - No public API exposes the exact NT8 host version or the provider build — mark unobservable.
+- `Dispatcher` exposes both `HasShutdownStarted` and `HasShutdownFinished`; check both (the
+  stub file declares the latter too).
+
+## Phase 4 notes (UI + evidence)
+
+- The WPF UI files (`DiagnosticCenterWindow`, `MenuIntegration`, `DiagnosticCenterWindowManager`,
+  `DiagnosticAddOn.Ui.cs`) are in the `UseStubs != true` ItemGroup — they are **not compiled** in
+  the offline stub build. All UI-adjacent logic that must be testable lives in `Core/Run`.
+- `DiagnosticRunCoordinator` owns the single-run guarantee; `Start` returns false when a run is
+  active. It marshals notifications through `IUiDispatcher` (async post only).
+- The AddOn wires `ProgressChanged`/`RunCompleted` to `DiagnosticViewState` in
+  `SafeInitialize` (`WireViewState`); the window renders from that state. `SwitchableUiDispatcher`
+  runs notifications inline until a window attaches (then `InvokeAsync`), so a run before the
+  window opens is still reflected.
+- Cancel is polled by the engine between modules via `Func<bool> shouldStop`; a cancelled run
+  never writes an evidence package.
+- `EvidencePackageBuilder.Build` is pure (no host/FS/clock). `VerifyIntegrity` checks all 17
+  artifacts + SHA-256 before `WriteEvidencePackage` writes anything.
+- In the manifest, `MaskedRef` is **always** a synthetic `account#<hash>` token, never a raw ref.
+- `EvidencePackage.IsSecretFree` skips `manifest.json` (dates/hashes trip the digit-run rule);
+  use `ManifestIsIdentitySafe` for the manifest.
+- M9's `PostTradeAudit` observation is built from BOTH the ingest collector AND the host's
+  already-read `Account.Orders` snapshot (`Snapshot.OrderLifecycle`), deduped by order ref, so
+  the audit has a real surface even though the tool subscribes to no host event feed.
+- The audit observation must reach BOTH paths: the live probe (via the `EnrichWithPostTradeAudit`
+  enricher on `EnrichedDataProvider`) and the exported package (`BuildEvidenceDataset`). Setting
+  it only in `BuildEvidenceDataset` leaves the live M9 probe UNOBSERVABLE.
+- `PostTradeAuditObservation.ExecutionsInScope` must be derived, never hardcoded true: the host
+  reads only `Account.Orders` (`AccountRecord.ExecutionsInScope=false`), so claiming execution
+  coverage would let `M9.CORRELATION_TIMING` PASS without an observed execution (fail-closed).
+- Never hardcode an observation in an artifact: `market-data-summary.sourceTimeBasis` is derived
+  from the observed records (weakest basis) and is `UNOBSERVABLE` with no records.
 
 ## Reference repo
 

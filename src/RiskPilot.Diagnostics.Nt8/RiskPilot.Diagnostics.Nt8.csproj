@@ -66,6 +66,7 @@
     <Compile Include="Core\Models\DiagnosticFinding.cs" />
     <Compile Include="Core\Models\Observations\RuntimeObservation.cs" />
     <Compile Include="Core\Models\Observations\OrderLifecycleObservation.cs" />
+    <Compile Include="Core\Models\Observations\PostTradeAuditObservation.cs" />
     <Compile Include="Core\Models\Observations\InstrumentAttestationObservation.cs" />
     <Compile Include="Core\Models\Observations\DomMarketDataObservation.cs" />
     <Compile Include="Core\Models\Observations\TradeDeltaObservation.cs" />
@@ -90,6 +91,27 @@
     <Compile Include="Core\Report\ManifestSerializer.cs" />
     <Compile Include="Core\Report\DiagnosticReport.cs" />
     <Compile Include="Core\Report\ReportSerializer.cs" />
+
+    <!-- Core: evidence package + run/UI coordination (host-free) -->
+    <Compile Include="Core\Run\DiagnosticMode.cs" />
+    <Compile Include="Core\Run\RunStateMachine.cs" />
+    <Compile Include="Core\Run\DiagnosticRunProgress.cs" />
+    <Compile Include="Core\Run\DiagnosticRunResult.cs" />
+    <Compile Include="Core\Run\IUiDispatcher.cs" />
+    <Compile Include="Core\Run\SwitchableUiDispatcher.cs" />
+    <Compile Include="Core\Run\IDiagnosticRunner.cs" />
+    <Compile Include="Core\Run\DiagnosticRunCoordinator.cs" />
+    <Compile Include="Core\Run\AcceptanceSummary.cs" />
+    <Compile Include="Core\Run\DiagnosticModuleCatalog.cs" />
+    <Compile Include="Core\Run\DiagnosticViewState.cs" />
+    <Compile Include="Core\Evidence\CsvWriter.cs" />
+    <Compile Include="Core\Evidence\HtmlWriter.cs" />
+    <Compile Include="Core\Evidence\EvidenceDataset.cs" />
+    <Compile Include="Core\Evidence\EvidencePackageCatalog.cs" />
+    <Compile Include="Core\Evidence\EvidenceManifest.cs" />
+    <Compile Include="Core\Evidence\EvidencePackage.cs" />
+    <Compile Include="Core\Evidence\EvidencePackageBuilder.cs" />
+    <Compile Include="Core\Evidence\EvidenceCollector.cs" />
     <Compile Include="Core\Engine\IDiagnosticDataProvider.cs" />
     <Compile Include="Core\Engine\IDiagnosticProbe.cs" />
     <Compile Include="Core\Engine\INormalizedEventConsumer.cs" />
@@ -108,6 +130,7 @@
     <Compile Include="Core\Engine\Probes\M6TradeDeltaProbe.cs" />
     <Compile Include="Core\Engine\Probes\M7StrategyRiskGateProbe.cs" />
     <Compile Include="Core\Engine\Probes\M8SafetyAcceptanceProbe.cs" />
+    <Compile Include="Core\Engine\Probes\M9PostTradeAuditProbe.cs" />
     <Compile Include="Core\Engine\Consumers\M3OrderLifecycleConsumer.cs" />
     <Compile Include="Core\Engine\Consumers\M5DomMarketDataConsumer.cs" />
     <Compile Include="Core\Engine\Consumers\M6TradeDeltaConsumer.cs" />
@@ -117,9 +140,24 @@
     <!-- Host: the only layer that touches NinjaTrader types -->
     <Compile Include="Host\DispatcherBridge.cs" />
     <Compile Include="Host\FileReportSink.cs" />
+    <Compile Include="Host\EvidenceDirectorySink.cs" />
     <Compile Include="Host\Nt8HostDataProvider.cs" />
     <Compile Include="Host\DiagnosticRuntime.cs" />
+    <Compile Include="Host\RuntimeDiagnosticRunner.cs" />
+    <Compile Include="Host\WpfUiDispatcher.cs" />
     <Compile Include="Host\DiagnosticAddOn.cs" />
+  </ItemGroup>
+
+  <!--
+    The window UI (NTWindow + WPF) is compiled ONLY for the real host build. The offline
+    stub build has no WPF or NinjaTrader.Gui surface, and Phase 1 §6.2 scopes the Ui layer
+    to the real host. All UI-adjacent logic that must be testable offline lives in Core/Run.
+  -->
+  <ItemGroup Condition="'$(UseStubs)' != 'true'">
+    <Compile Include="Host\DiagnosticCenterWindow.cs" />
+    <Compile Include="Host\DiagnosticCenterWindowManager.cs" />
+    <Compile Include="Host\MenuIntegration.cs" />
+    <Compile Include="Host\DiagnosticAddOn.Ui.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseStubs)' == 'true'">

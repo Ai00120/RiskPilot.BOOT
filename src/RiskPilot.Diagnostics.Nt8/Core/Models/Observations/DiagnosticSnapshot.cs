@@ -88,6 +88,9 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
 
         public OrderLifecycleObservation OrderLifecycle { get; set; }
 
+        /// <summary>M9 post-trade audit observation (already-recorded events only).</summary>
+        public PostTradeAuditObservation PostTradeAudit { get; set; }
+
         public InstrumentAttestationObservation Attestation { get; set; }
 
         public DomMarketDataObservation DomMarketData { get; set; }

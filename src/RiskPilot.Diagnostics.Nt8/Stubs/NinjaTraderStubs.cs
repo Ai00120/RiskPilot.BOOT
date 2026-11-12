@@ -242,6 +242,7 @@ namespace System.Windows.Threading
     {
         public bool CheckAccess() { return true; }
         public bool HasShutdownStarted { get { return false; } }
+        public bool HasShutdownFinished { get { return false; } }
 
         public void InvokeAsync(Action action)
         {

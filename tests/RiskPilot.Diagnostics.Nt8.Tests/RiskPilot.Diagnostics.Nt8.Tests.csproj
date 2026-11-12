@@ -26,6 +26,8 @@
   <ItemGroup>
     <Compile Include="Fakes\FakeClock.cs" />
     <Compile Include="Fakes\FakeDataProvider.cs" />
+    <Compile Include="Fakes\FakeUiDispatcher.cs" />
+    <Compile Include="Fakes\FakeDiagnosticRunner.cs" />
     <Compile Include="ThreadSafetyTests.cs" />
     <Compile Include="EventQueueTests.cs" />
     <Compile Include="DuplicateEventTests.cs" />
@@ -41,6 +43,10 @@
     <Compile Include="StatusPropagationTests.cs" />
     <Compile Include="ProbeTests.cs" />
     <Compile Include="Phase3ModuleTests.cs" />
+    <Compile Include="Phase4RunCoordinatorTests.cs" />
+    <Compile Include="Phase4EvidencePackageTests.cs" />
+    <Compile Include="Phase4PostTradeAuditTests.cs" />
+    <Compile Include="Phase4RuntimeIntegrationTests.cs" />
   </ItemGroup>
 
 </Project>
