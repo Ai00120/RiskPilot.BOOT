@@ -213,4 +213,6 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 
 - Branch: `phase2/foundation-diagnostic-core` (off `main`).
 - No change was made to `Ai00120/RiskPilot.BOT`.
-- Commit SHA: see the final task report.
+- Commit SHA: `8ef688a4ea968a68654a986b9bc94b4b715ab931` (this record is amended into the
+  same commit).
+- The branch is local only; it has **not** been pushed and no PR was opened.
