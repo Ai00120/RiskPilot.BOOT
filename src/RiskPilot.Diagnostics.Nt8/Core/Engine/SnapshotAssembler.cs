@@ -120,6 +120,12 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
             }
 
             observation.MalformedCount += counters.Get(RuntimeCounterKeys.DomHostMalformed);
+
+            // Per-domain ingest integrity for the market-data/DOM domain. The counter is
+            // attributed by stream on the ingest path, so it is the DOM/market-data share of
+            // the gaps and drops, not a merged total.
+            observation.SequenceGapCount += counters.Get(RuntimeCounterKeys.MarketDataSequenceGaps);
+            observation.DroppedEventCount += counters.Get(RuntimeCounterKeys.MarketDataDroppedEvents);
         }
 
         private static void MergeTradeDelta(DiagnosticSnapshot snapshot, RuntimeCounters counters)
@@ -155,6 +161,9 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
                 observation.ResetObserved = true;
                 observation.ResetCount += resets;
             }
+
+            // Per-domain ingest integrity for the order-flow trade stream.
+            observation.SequenceGapCount += counters.Get(RuntimeCounterKeys.TradeDeltaSequenceGaps);
         }
 
         private static void MergeStrategyRiskGate(DiagnosticSnapshot snapshot, RuntimeCounters counters)

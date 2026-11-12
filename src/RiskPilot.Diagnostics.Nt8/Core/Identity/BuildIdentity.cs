@@ -9,7 +9,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
     {
         public const string ProductName = "RiskPilot NT8 Diagnostic Center";
         public const string Namespace = "RiskPilot.Diagnostics.Nt8";
-        public const string ToolVersion = "1.0.0-phase2";
+        public const string ToolVersion = "1.0.0";
         public const string AssemblyVersionString = "1.0.0.0";
         public const string SchemaVersion = "rpdiag-1.0";
 

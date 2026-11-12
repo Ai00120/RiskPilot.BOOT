@@ -177,7 +177,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             {
                 FullName = instrument.FullName,
                 InstrumentId = instrumentId,
-                Expiry = SafeString(() => instrument.Expiry.ToString("yyyy-MM-dd")),
+                Expiry = SafeString(() => instrument.Expiry.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)),
                 Exchange = SafeString(() => instrument.Exchange.ToString()),
                 MasterMetadataAvailable = false,
                 IngestedAtUtc = DateTime.UtcNow
@@ -430,7 +430,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             var metadata = new InstrumentMetadataObservation
             {
                 FullName = SafeString(() => instrument.FullName),
-                ExpiryRaw = SafeString(() => instrument.Expiry.ToString("yyyy-MM-dd")),
+                ExpiryRaw = SafeString(() => instrument.Expiry.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)),
                 ExpiryKind = SafeString(() => instrument.Expiry.Kind.ToString()),
                 ExchangeRaw = SafeString(() => instrument.Exchange.ToString()),
                 MasterMetadataAvailable = _masterMetadataReady

@@ -216,7 +216,9 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
 
             var result = mismatched > 0
                 ? DiagnosticResult.Fail(ModuleId, "M2.ACCOUNT_CONNECTION_ASSOCIATION", ErrorClass.DataUnavailable, correlation, now)
-                : DiagnosticResult.Pass(ModuleId, "M2.ACCOUNT_CONNECTION_ASSOCIATION", correlation, now);
+                : (withConnection == 0
+                    ? DiagnosticResult.Inconclusive(ModuleId, "M2.ACCOUNT_CONNECTION_ASSOCIATION", correlation, now)
+                    : DiagnosticResult.Pass(ModuleId, "M2.ACCOUNT_CONNECTION_ASSOCIATION", correlation, now));
 
             return result
                 .WithFindingId("M2.ACCOUNT_CONNECTION_ASSOCIATION")

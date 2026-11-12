@@ -97,6 +97,26 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - Never hardcode an observation in an artifact: `market-data-summary.sourceTimeBasis` is derived
   from the observed records (weakest basis) and is `UNOBSERVABLE` with no records.
 
+## Phase 5 notes (final audit)
+
+- `SecretRedactor` must not blanket-mask every 6+ digit run: a run that is the value of a
+  structured `key=value` / `"key":value` field is legitimate evidence (counters like
+  `ALL_CANDIDATES_INVALID=311179`) and is preserved; a free-text run and any run whose key looks
+  like an account field are masked. See `MaskAccountDigitRuns` and `SecretRedactionTests`.
+- A zero gap/drop count only means "clean" once the relevant stream was **observed**. Both
+  `M5.DATA_INTEGRITY` and `M6.SEQUENCE_CONTINUITY` must stay `INCONCLUSIVE` with no observed
+  stream, while a positive count fails regardless (it is itself evidence). The same rule applies to
+  `M9.MISSING_OR_DUPLICATE` (needs `AuditSurfaceObservable`), `M8.EVIDENCE_INTEGRITY` (needs
+  `EnqueuedCount > 0`) and `M2.ACCOUNT_CONNECTION_ASSOCIATION` (needs `withConnection > 0`).
+- `WriteEvidencePackage` enforces four invariants before writing: `VerifyIntegrity`,
+  `HasCompleteArtifactSet`, `IsSecretFree`, `ManifestIsIdentitySafe`. A package that fails any is
+  never written.
+- Every package carries `evidenceProvenance` (`RUNTIME`/`SAMPLE`); a `SAMPLE` package also shows a
+  banner in `summary.html`. Never present a `SAMPLE` package as a runtime result.
+- All `DateTime`/numeric `ToString` on evidence must use `CultureInfo.InvariantCulture`.
+- The `UseStubs=false` configuration references five NT8 assemblies (Core, Cbi, Data,
+  NinjaScript, Gui). The real-host build is not verifiable offline; never claim it is.
+
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live

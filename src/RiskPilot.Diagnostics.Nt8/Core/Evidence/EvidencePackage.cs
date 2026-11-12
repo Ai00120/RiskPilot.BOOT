@@ -170,6 +170,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             writer.WriteProperty("droppedCount", manifest.DroppedCount);
             writer.WriteProperty("truncated", manifest.Truncated);
             writer.WriteProperty("truncationReason", SecretRedactor.Redact(manifest.TruncationReason));
+            writer.WriteProperty("evidenceProvenance", manifest.Provenance);
             writer.WriteProperty("aggregateStatus", manifest.AggregateStatus);
 
             writer.BeginArray("files");

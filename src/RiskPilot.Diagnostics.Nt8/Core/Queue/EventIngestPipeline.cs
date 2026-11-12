@@ -81,6 +81,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Queue
                 if (missing > 0)
                 {
                     session.RecordSequenceGap(missing);
+                    AttributeGap(session, record.StreamKey, missing);
                 }
             }
 
@@ -88,10 +89,52 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Queue
             if (!_queue.TryEnqueue(record))
             {
                 session.RecordDropped(1);
+                AttributeDrop(session, record.StreamKey);
                 return false;
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Attributes a per-stream gap to the data domain it belongs to, so M5 (DOM/market
+        /// data) and M6 (order-flow trade stream) each report the gaps that affect them
+        /// instead of a single merged number. The streams themselves are never merged.
+        /// </summary>
+        private static void AttributeGap(SessionContext session, string streamKey, long missing)
+        {
+            var counters = session.Counters;
+            if (IsMarketDataStream(streamKey))
+            {
+                counters.Increment(RuntimeCounterKeys.MarketDataSequenceGaps, missing);
+            }
+
+            if (IsTradeStream(streamKey))
+            {
+                counters.Increment(RuntimeCounterKeys.TradeDeltaSequenceGaps, missing);
+            }
+        }
+
+        /// <summary>Attributes a queue-overflow drop to its data domain.</summary>
+        private static void AttributeDrop(SessionContext session, string streamKey)
+        {
+            if (IsMarketDataStream(streamKey))
+            {
+                session.Counters.Increment(RuntimeCounterKeys.MarketDataDroppedEvents);
+            }
+        }
+
+        private static bool IsMarketDataStream(string streamKey)
+        {
+            return streamKey != null
+                && (streamKey.StartsWith("MarketData", System.StringComparison.Ordinal)
+                    || streamKey.StartsWith("Dom", System.StringComparison.Ordinal));
+        }
+
+        private static bool IsTradeStream(string streamKey)
+        {
+            return streamKey != null
+                && streamKey.StartsWith("MarketData|Trade", System.StringComparison.Ordinal);
         }
     }
 }

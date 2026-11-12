@@ -84,6 +84,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
 
         public string TruncationReason { get; set; }
 
+        /// <summary>
+        /// Provenance of the packaged evidence: <c>RUNTIME</c> for a real in-host run,
+        /// <c>SAMPLE</c> for synthetic documentation data. Lets a reader separate real runtime
+        /// evidence from a mock/test artifact at a glance.
+        /// </summary>
+        public string Provenance { get; set; }
+
         public IList<EvidenceFileEntry> Files { get; set; }
 
         public string AggregateStatus { get; set; }
@@ -106,6 +113,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             AccountsObserved = new List<MaskedAccountRef>();
             Files = new List<EvidenceFileEntry>();
             TruncationReason = string.Empty;
+            Provenance = Core.Evidence.EvidenceProvenance.Runtime;
             AggregateStatus = DiagnosticStatus.NOT_APPLICABLE.ToWire();
             ManifestSha256 = string.Empty;
         }
@@ -141,6 +149,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             writer.WriteProperty("recordCount", RecordCount);
             writer.WriteProperty("droppedCount", DroppedCount);
             writer.WriteProperty("truncated", Truncated);
+            writer.WriteProperty("evidenceProvenance", Provenance);
             writer.WriteProperty("aggregateStatus", AggregateStatus);
             writer.BeginArray("files");
             foreach (var file in Files)

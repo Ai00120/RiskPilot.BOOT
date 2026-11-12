@@ -169,6 +169,17 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             var invalidTs = session.TimestampInvalidCount;
             var clean = dropped == 0 && gaps == 0 && invalidTs == 0;
 
+            // A positive counter is itself evidence of a problem and fails regardless. Zero
+            // counters only mean "clean" once the session actually ingested records; a session
+            // that captured nothing has nothing to have been continuous, so the check stays
+            // INCONCLUSIVE rather than reporting a clean PASS on absent data.
+            if (clean && session.EnqueuedCount == 0)
+            {
+                return FindingFactory.Unobservable(ModuleId, "M8.EVIDENCE_INTEGRITY", correlation, now,
+                    "No event was ingested during this session, so evidence integrity could not be evaluated.",
+                    "Run the pass while the host is delivering events.");
+            }
+
             return (clean
                     ? DiagnosticResult.Pass(ModuleId, "M8.EVIDENCE_INTEGRITY", correlation, now)
                     : DiagnosticResult.Fail(ModuleId, "M8.EVIDENCE_INTEGRITY", ErrorClass.SequenceGap, correlation, now))

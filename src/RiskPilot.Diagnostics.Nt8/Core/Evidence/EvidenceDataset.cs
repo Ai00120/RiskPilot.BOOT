@@ -52,6 +52,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
         /// <summary>Reason the run stopped early, when it was truncated rather than completed.</summary>
         public string TruncationReason { get; set; }
 
+        /// <summary>
+        /// Provenance of this dataset. <see cref="EvidenceProvenance.Runtime"/> for a real
+        /// in-host run (the default), <see cref="EvidenceProvenance.Sample"/> for synthetic
+        /// documentation data. It is carried into the manifest so a sample package can never be
+        /// mistaken for a live runtime result.
+        /// </summary>
+        public string Provenance { get; set; }
+
         public EvidenceDataset()
         {
             Connections = new List<ConnectionRecord>();
@@ -65,6 +73,17 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             Strategies = new List<StrategyRecord>();
             OrderLifecycleEvents = new List<OrderLifecycleEvent>();
             TruncationReason = string.Empty;
+            Provenance = EvidenceProvenance.Runtime;
         }
+    }
+
+    /// <summary>Canonical provenance values for an evidence dataset.</summary>
+    public static class EvidenceProvenance
+    {
+        /// <summary>A real diagnostic run inside the NinjaTrader host.</summary>
+        public const string Runtime = "RUNTIME";
+
+        /// <summary>Synthetic data produced for documentation; never a runtime observation.</summary>
+        public const string Sample = "SAMPLE";
     }
 }

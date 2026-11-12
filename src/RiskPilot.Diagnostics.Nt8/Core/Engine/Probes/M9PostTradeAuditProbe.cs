@@ -254,8 +254,19 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             var duplicates = observation.DuplicateEventCount;
             var invalidTimestamps = observation.InvalidTimestampCount;
             var missing = observation.UnmatchedTerminalOrderCount + observation.UnmatchedExecutionCount;
-            var clean = duplicates == 0 && invalidTimestamps == 0 && missing == 0;
 
+            // A positive count is itself evidence of a problem and fails regardless. Zero counts
+            // only mean "clean" once the recorded order/execution surface was actually
+            // observable; with nothing recorded there is nothing to have been complete, so the
+            // check stays INCONCLUSIVE rather than reporting a clean PASS on absent data.
+            if (duplicates == 0 && invalidTimestamps == 0 && missing == 0 && !observation.AuditSurfaceObservable)
+            {
+                return FindingFactory.Unobservable(ModuleId, "M9.MISSING_OR_DUPLICATE", correlation, now,
+                    "No recorded order/execution surface was observed, so missing or duplicate events could not be evaluated.",
+                    "Audit a session that recorded at least one order or execution event.");
+            }
+
+            var clean = duplicates == 0 && invalidTimestamps == 0 && missing == 0;
             return (clean
                     ? DiagnosticResult.Pass(ModuleId, "M9.MISSING_OR_DUPLICATE", correlation, now)
                     : DiagnosticResult.Fail(ModuleId, "M9.MISSING_OR_DUPLICATE", ErrorClass.DataUnavailable, correlation, now))

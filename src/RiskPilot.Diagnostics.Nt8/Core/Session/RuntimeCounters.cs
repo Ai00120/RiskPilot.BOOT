@@ -88,6 +88,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Session
         public const string DomHostMalformed = "dom.host.malformed";
         public const string DomHostLastSnapshotSyncTrigger = "dom.host.lastSnapshotSyncTrigger";
 
+        /// <summary>Per-domain sequence gaps detected on the ingest path (stream-attributed).</summary>
+        public const string MarketDataSequenceGaps = "md.sequenceGaps";
+        public const string TradeDeltaSequenceGaps = "td.sequenceGaps";
+
+        /// <summary>Market-data/DOM events dropped because the bounded queue was full.</summary>
+        public const string MarketDataDroppedEvents = "md.droppedEvents";
+
         public const string RecorderInsert = "dom.recorder.insert";
         public const string RecorderUpdate = "dom.recorder.update";
         public const string RecorderRemove = "dom.recorder.remove";

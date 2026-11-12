@@ -37,7 +37,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         {
             var sessionId = runResult != null && !string.IsNullOrEmpty(runResult.SessionId)
                 ? runResult.SessionId
-                : DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+                : DateTime.UtcNow.ToString("yyyyMMdd_HHmmss", System.Globalization.CultureInfo.InvariantCulture);
 
             var leaf = SanitizeSegment(sessionId);
             var directory = Path.Combine(_root, leaf);

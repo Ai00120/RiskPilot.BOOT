@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/><title>RiskPilot NT8 Diagnostic Center — Summary</title><style>body{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#1a1a1a}table{border-collapse:collapse;margin:8px 0 20px}th,td{border:1px solid #ccc;padding:4px 8px;text-align:left;font-size:13px}th{background:#f0f0f0}.PASS{color:#0a7a0a}.FAIL{color:#b00020}.INCONCLUSIVE{color:#a06000}.NOT_APPLICABLE{color:#555}h1{font-size:20px}h2{font-size:16px;border-bottom:1px solid #ddd;padding-bottom:4px}.note{background:#fff8e1;padding:8px;border:1px solid #e0c060}</style></head><body>
+<h1>RiskPilot NT8 Diagnostic Center — Summary</h1>
+<div class="note">Trading: DISABLED — read-only diagnostics. No order, execution, account or connection mutation.</div>
+<div class="note">SAMPLE DATA — this package was produced from synthetic documentation data, not a live NinjaTrader run. It must not be read as a runtime diagnostic result.</div>
+<table>
+  <tr>
+    <th>Evidence provenance</th>
+    <td>SAMPLE</td>
+  </tr>
+  <tr>
+    <th>Session ID</th>
+    <td>diag_20261112_080000_334838e9c1be49d9a2e46e34bc086446</td>
+  </tr>
+  <tr>
+    <th>Mode</th>
+    <td>full</td>
+  </tr>
+  <tr>
+    <th>Aggregate status</th>
+    <td>FAIL</td>
+  </tr>
+  <tr>
+    <th>Started (UTC)</th>
+    <td>2026-11-12T08:00:00.000Z</td>
+  </tr>
+  <tr>
+    <th>Finished (UTC)</th>
+    <td>2026-11-12T08:00:04.000Z</td>
+  </tr>
+  <tr>
+    <th>Duration (s)</th>
+    <td>4</td>
+  </tr>
+  <tr>
+    <th>Provider</th>
+    <td>Rithmic</td>
+  </tr>
+  <tr>
+    <th>Instrument</th>
+    <td>ES 12-26</td>
+  </tr>
+  <tr>
+    <th>NT runtime version</th>
+    <td>UNOBSERVABLE (no public API)</td>
+  </tr>
+</table>
+<h2>Module status</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Module</th>
+      <th>Title</th>
+      <th>Status</th>
+      <th>Executed</th>
+      <th>Checks</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>M1</td>
+      <td>Environment &amp; API Compatibility</td>
+      <td>INCONCLUSIVE</td>
+      <td>yes</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <td>M2</td>
+      <td>Connection &amp; Provider Identity</td>
+      <td>PASS</td>
+      <td>yes</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <td>M3</td>
+      <td>Account &amp; Order Lifecycle (F-05)</td>
+      <td>INCONCLUSIVE</td>
+      <td>yes</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <td>M4</td>
+      <td>Instrument Attestation / D-078</td>
+      <td>FAIL</td>
+      <td>yes</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td>M5</td>
+      <td>DOM &amp; Market Data</td>
+      <td>FAIL</td>
+      <td>yes</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td>M6</td>
+      <td>TradeDelta / OrderFlow</td>
+      <td>INCONCLUSIVE</td>
+      <td>yes</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td>M7</td>
+      <td>Strategies / Risk Gate</td>
+      <td>INCONCLUSIVE</td>
+      <td>yes</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td>M8</td>
+      <td>Safety / Acceptance</td>
+      <td>PASS</td>
+      <td>yes</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td>M9</td>
+      <td>Post-Trade Audit</td>
+      <td>PASS</td>
+      <td>yes</td>
+      <td>1</td>
+    </tr>
+  </tbody>
+</table>
+<h2>Acceptance (three independent subjects)</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Subject</th>
+      <th>Status</th>
+      <th>Summary</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>AddOn implementation / build</td>
+      <td>INCONCLUSIVE</td>
+      <td>Compiled against offline stubs. This proves the source compiles, NOT that the AddOn builds or runs against a real NinjaTrader 8 host.</td>
+    </tr>
+    <tr>
+      <td>Runtime diagnostic coverage / evidence quality</td>
+      <td>FAIL</td>
+      <td>Modules executed=9, aggregate=FAIL. Missing or unobservable data is reported as INCONCLUSIVE, never PASS.</td>
+    </tr>
+    <tr>
+      <td>RiskPilot.BOT acceptance</td>
+      <td>NOT_APPLICABLE</td>
+      <td>Out of scope. This tool is independent of RiskPilot.BOT and cannot certify it. A successful AddOn build or diagnostic run is NOT a RiskPilot.BOT acceptance.</td>
+    </tr>
+  </tbody>
+</table>
+<h2>Top findings</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Finding</th>
+      <th>Module</th>
+      <th>Severity</th>
+      <th>Status</th>
+      <th>Observation</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>M1.HOST_VERSION</td>
+      <td>M1</td>
+      <td>INFO</td>
+      <td>INCONCLUSIVE</td>
+      <td>NOT OBSERVED: no public API</td>
+    </tr>
+    <tr>
+      <td>M3.F05_ORDER_FILL_CONTINUITY</td>
+      <td>M3</td>
+      <td>INFO</td>
+      <td>INCONCLUSIVE</td>
+      <td>unmatchedTerminalOrders=0 unmatchedExecutions=0</td>
+    </tr>
+    <tr>
+      <td>M4.D078_APPROVAL</td>
+      <td>M4</td>
+      <td>HIGH</td>
+      <td>FAIL</td>
+      <td>No D-078 operator field approval is recorded.</td>
+    </tr>
+    <tr>
+      <td>M5.SNAPSHOT_SYNC</td>
+      <td>M5</td>
+      <td>HIGH</td>
+      <td>FAIL</td>
+      <td>sync=42 failure=1 outOfBounds=41</td>
+    </tr>
+    <tr>
+      <td>M6.DIRECTION_SOURCE</td>
+      <td>M6</td>
+      <td>INFO</td>
+      <td>INCONCLUSIVE</td>
+      <td>provenance=ALL_QUOTE_DERIVED</td>
+    </tr>
+    <tr>
+      <td>M7.CANDIDATE_REJECTION</td>
+      <td>M7</td>
+      <td>INFO</td>
+      <td>INCONCLUSIVE</td>
+      <td>allCandidatesInvalid=1234</td>
+    </tr>
+  </tbody>
+</table>
+<p>Evidence only. Missing or unobservable data is reported as INCONCLUSIVE, never PASS. See full-report.html for every check and finding.</p>
+</body></html>
