@@ -86,6 +86,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
 
         public IList<AccountConnectionAssociation> AccountAssociations { get; set; }
 
+        /// <summary>
+        /// Exact account identity observation for M2. It carries only booleans, counts and a
+        /// synthetic account reference; a null member means the identity surface could not be
+        /// observed, which M2 reports as INCONCLUSIVE.
+        /// </summary>
+        public AccountIdentityObservation AccountIdentity { get; set; }
+
         public OrderLifecycleObservation OrderLifecycle { get; set; }
 
         /// <summary>M9 post-trade audit observation (already-recorded events only).</summary>

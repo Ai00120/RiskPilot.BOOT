@@ -47,6 +47,7 @@
     <Compile Include="Core\Clock\IClock.cs" />
     <Compile Include="Core\Identity\CorrelationId.cs" />
     <Compile Include="Core\Identity\BuildIdentity.cs" />
+    <Compile Include="Core\Identity\AccountIdentityVerifier.cs" />
     <Compile Include="Core\Status\DiagnosticStatus.cs" />
     <Compile Include="Core\Security\SecretRedactor.cs" />
     <Compile Include="Core\Security\SyntheticRef.cs" />
@@ -72,6 +73,7 @@
     <Compile Include="Core\Models\Observations\TradeDeltaObservation.cs" />
     <Compile Include="Core\Models\Observations\StrategyRiskGateObservation.cs" />
     <Compile Include="Core\Models\Observations\SafetyObservation.cs" />
+    <Compile Include="Core\Models\Observations\AccountIdentityObservation.cs" />
     <Compile Include="Core\Models\Observations\DiagnosticSnapshot.cs" />
     <Compile Include="Core\Instruments\CanonicalInstrumentId.cs" />
     <Compile Include="Core\Session\SessionId.cs" />

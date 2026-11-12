@@ -42,6 +42,8 @@
     <Compile Include="ErrorClassificationTests.cs" />
     <Compile Include="StatusPropagationTests.cs" />
     <Compile Include="ProbeTests.cs" />
+    <Compile Include="AccountIdentityTests.cs" />
+    <Compile Include="HostAccountIdentityTests.cs" />
     <Compile Include="Phase3ModuleTests.cs" />
     <Compile Include="Phase4RunCoordinatorTests.cs" />
     <Compile Include="Phase4EvidencePackageTests.cs" />

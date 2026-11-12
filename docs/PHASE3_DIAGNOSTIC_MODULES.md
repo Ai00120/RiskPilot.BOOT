@@ -116,6 +116,7 @@ NormalizedRecord ─────────────────────
 | `M2.PROVIDER_IDENTITY` | Provider واقعی با `ConnectOptions.Provider.ToString()` |
 | `M2.RECONNECT` | شناسایی Reconnect از توالی وضعیت |
 | `M2.ACCOUNT_CONNECTION_ASSOCIATION` | تطابق provider حساب و Connection |
+| `M2.ACCOUNT_IDENTITY` | تطابق **دقیق** هویت حساب با هویت دائم RiskPilot.BOT (D-095/D-096) |
 
 **بررسی PR #275 (BOT):** در BOT تشخیص Provider با `provider.ToString()` انجام شده چون عضو enum
 `Provider.Rithmic` تضمین‌شده نیست. این ابزار همان روش را mirror می‌کند و **علاوه بر آن**:
@@ -124,6 +125,21 @@ NormalizedRecord ─────────────────────
 - `ProviderEvidence.IsStubOrMockValue` — اگر مقدار از stub/mock بیاید، `M2.PROVIDER_IDENTITY`
   **`INCONCLUSIVE`** می‌شود (reason: `PROVIDER_VALUE_FROM_STUB_OR_MOCK`). صرف نتیجهٔ Mock/Stub
   برای PASS کافی نیست.
+
+### ۴.۱ هویت دقیق حساب (`M2.ACCOUNT_IDENTITY`)
+
+هویت دائم مورد نیاز BOT: حساب `SimRP.BOT`، Connection `My Rithmic`، provider `Rithmic`،
+mode `Simulation`، currency `USD`.
+
+- لایهٔ Host (`Nt8HostDataProvider.BuildAccountIdentityObservation()`) نام واقعی حساب را
+  **فقط به‌صورت داخلی** با تطابق ordinal دقیق مقایسه می‌کند و خروجی را به یک
+  `AccountIdentityObservation` بدون هویت خام (فقط boolean/count + `SyntheticRef`) تبدیل می‌کند.
+- `AccountIdentityVerifier` (Core، host-free) حکم را می‌دهد: `PASS` فقط وقتی همهٔ فیلدها
+  مشاهده شده و منطبق باشند؛ یک نام مشابه/حروف بزرگ‌وکوچک متفاوت هرگز تطابق نیست؛ فیلد
+  مشاهده‌نشده ⇒ `INCONCLUSIVE`؛ تعارض قطعی (provider/mode/currency/connection اشتباه) ⇒ `FAIL`.
+- نام خام حساب/Connection هرگز در finding، log، report یا artifact نوشته نمی‌شود؛ در
+  `accounts.json` فقط `identityVerification` با status/reasonCodes/masked ref می‌آید.
+- تست‌ها: `AccountIdentityTests.M2_*` و `HostAccountIdentityTests.Host_*`.
 
 **مرجع API:** `NinjaTrader.Cbi.Connection` (`PriceStatus`, `Status`), `ConnectOptions.Provider`, `Account.Provider`.
 **تست‌ها:** `Phase3ModuleTests.M2_*` (۳ تست) + `ProbeTests.M2_*`.

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using NinjaTrader.Cbi;
 using RiskPilot.Diagnostics.Nt8.Core.Engine;
+using RiskPilot.Diagnostics.Nt8.Core.Identity;
 using RiskPilot.Diagnostics.Nt8.Core.Instruments;
 using RiskPilot.Diagnostics.Nt8.Core.Models;
 using RiskPilot.Diagnostics.Nt8.Core.Models.Observations;
@@ -229,6 +230,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 Runtime = BuildRuntimeObservation(),
                 Provider = BuildProviderEvidence(),
                 AccountAssociations = BuildAccountAssociations(),
+                AccountIdentity = BuildAccountIdentityObservation(),
                 OrderLifecycle = BuildOrderLifecycleObservation(),
                 Attestation = BuildAttestationObservation(),
                 DomMarketData = new DomMarketDataObservation(),
@@ -294,6 +296,91 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             }
 
             return null;
+        }
+
+        private AccountIdentityObservation BuildAccountIdentityObservation()
+        {
+            var observation = new AccountIdentityObservation();
+            var accounts = Account.All;
+            if (accounts == null)
+            {
+                // The account surface itself could not be enumerated.
+                observation.AccountSurfaceObservable = false;
+                return observation;
+            }
+
+            observation.AccountSurfaceObservable = true;
+
+            Account matched = null;
+            var matchingCount = 0;
+            lock (accounts)
+            {
+                foreach (var account in accounts)
+                {
+                    if (account == null || string.IsNullOrWhiteSpace(account.Name))
+                    {
+                        continue;
+                    }
+
+                    observation.ObservedAccountCount++;
+
+                    // Exact ordinal comparison; a similar or differently-cased name is not a match.
+                    if (ExpectedAccountIdentity.AccountNameMatches(account.Name))
+                    {
+                        matchingCount++;
+                        matched = account;
+                    }
+                }
+            }
+
+            observation.MatchingAccountCount = matchingCount;
+
+            // Only a unique exact match can be compared further; zero or many matches is
+            // decided by the verifier, and no raw name is read here.
+            if (matchingCount != 1 || matched == null)
+            {
+                return observation;
+            }
+
+            observation.AccountRef = SyntheticRef.For("account", matched.Name);
+
+            var accountProvider = SafeString(() => matched.Provider.ToString());
+            observation.AccountProviderObservable = !string.IsNullOrEmpty(accountProvider);
+            observation.AccountProviderMatches = ExpectedAccountIdentity.ProviderMatches(accountProvider);
+
+            var denomination = MapDenominationToIsoCode(matched.Denomination);
+            observation.DenominationObservable = !string.IsNullOrEmpty(denomination);
+            observation.DenominationIsUsd = ExpectedAccountIdentity.CurrencyIsUsd(denomination);
+
+            var connection = matched.Connection;
+            if (connection == null)
+            {
+                return observation;
+            }
+
+            observation.ConnectionObserved = true;
+
+            var options = connection.Options;
+            if (options != null)
+            {
+                var connectionName = SafeString(() => options.Name);
+                observation.ConnectionNameObservable = !string.IsNullOrEmpty(connectionName);
+                observation.ConnectionNameMatches = ExpectedAccountIdentity.ConnectionNameMatches(connectionName);
+
+                var connectionProvider = SafeString(() => options.Provider.ToString());
+                observation.ConnectionProviderObservable = !string.IsNullOrEmpty(connectionProvider);
+                observation.ConnectionProviderMatches = ExpectedAccountIdentity.ProviderMatches(connectionProvider);
+
+                var mode = SafeString(() => options.Mode.ToString());
+                observation.ModeObservable = !string.IsNullOrEmpty(mode);
+                observation.ModeIsSimulation = ExpectedAccountIdentity.ModeIsSimulation(mode);
+            }
+
+            var status = SafeString(() => connection.Status.ToString());
+            observation.ConnectionStatusObservable = !string.IsNullOrEmpty(status);
+            observation.ConnectionConnected = string.Equals(status, ConnectionStatus.Connected.ToString(), StringComparison.Ordinal);
+
+            return observation;
         }
 
         private IList<AccountConnectionAssociation> BuildAccountAssociations()
@@ -638,6 +725,28 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     return ConnectionState.Disconnected;
                 default:
                     return ConnectionState.Unknown;
+            }
+        }
+
+        /// <summary>
+        /// Maps the host currency enum to its ISO-4217 code so the required currency can be
+        /// compared as an exact code. An unmapped member yields an empty string, which is treated
+        /// as unobservable (fail closed) rather than guessed from the member name.
+        /// </summary>
+        private static string MapDenominationToIsoCode(Currency currency)
+        {
+            switch (currency)
+            {
+                case Currency.UsDollar:
+                    return "USD";
+                case Currency.Euro:
+                    return "EUR";
+                case Currency.Yen:
+                    return "JPY";
+                case Currency.BritishPound:
+                    return "GBP";
+                default:
+                    return string.Empty;
             }
         }
 
