@@ -659,6 +659,74 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void Scenario_AuditMissingOrDuplicate_IsInconclusiveWithoutObservedSurface()
+        {
+            var provider = new FakeDataProvider
+            {
+                Snapshot = new DiagnosticSnapshot { PostTradeAudit = new PostTradeAuditObservation() }
+            };
+
+            var results = new M9PostTradeAuditProbe().Evaluate(Context(provider));
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M9.MISSING_OR_DUPLICATE").Status);
+        }
+
+        [Fact]
+        public void Scenario_AuditMissingOrDuplicate_PassesOnlyWithObservedCleanSurface()
+        {
+            var provider = new FakeDataProvider
+            {
+                Snapshot = new DiagnosticSnapshot
+                {
+                    PostTradeAudit = new PostTradeAuditObservation { AuditSurfaceObservable = true }
+                }
+            };
+
+            var results = new M9PostTradeAuditProbe().Evaluate(Context(provider));
+            Assert.Equal(DiagnosticStatus.PASS, Find(results, "M9.MISSING_OR_DUPLICATE").Status);
+        }
+
+        [Fact]
+        public void Scenario_AuditMissingOrDuplicate_FailsOnMissingEvenWithoutObservedSurface()
+        {
+            var provider = new FakeDataProvider
+            {
+                Snapshot = new DiagnosticSnapshot
+                {
+                    PostTradeAudit = new PostTradeAuditObservation { UnmatchedTerminalOrderCount = 1 }
+                }
+            };
+
+            var results = new M9PostTradeAuditProbe().Evaluate(Context(provider));
+            Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M9.MISSING_OR_DUPLICATE").Status);
+        }
+
+        [Fact]
+        public void Scenario_EvidenceIntegrity_IsInconclusiveWithoutIngestedRecords()
+        {
+            var provider = new FakeDataProvider
+            {
+                Snapshot = new DiagnosticSnapshot { Safety = new SafetyObservation() }
+            };
+            var results = new M8SafetyAcceptanceProbe().Evaluate(Context(provider));
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M8.EVIDENCE_INTEGRITY").Status);
+        }
+
+        [Fact]
+        public void Scenario_EvidenceIntegrity_PassesOnlyAfterIngestingCleanRecords()
+        {
+            var provider = new FakeDataProvider
+            {
+                Snapshot = new DiagnosticSnapshot { Safety = new SafetyObservation() }
+            };
+            var session = new SessionContext(SessionId.New(DateTime.UtcNow), DateTime.UtcNow);
+            session.RecordEnqueued();
+            var context = new ProbeContext(provider, session, new FakeClock(DateTime.UtcNow), "corr00000000");
+
+            var results = new M8SafetyAcceptanceProbe().Evaluate(context);
+            Assert.Equal(DiagnosticStatus.PASS, Find(results, "M8.EVIDENCE_INTEGRITY").Status);
+        }
+
+        [Fact]
         public void Scenario_EvidencePackage_VerifiesIntegrityEndToEnd()
         {
             var provider = new FakeDataProvider();

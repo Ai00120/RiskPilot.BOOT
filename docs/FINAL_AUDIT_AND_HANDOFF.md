@@ -17,10 +17,10 @@
 
 The AddOn is a standalone, read-only diagnostic tool. It has **no** execution dependency on
 RiskPilot.BOT. Across Phases 1–5 it comprises ~14,000 lines of production C# in the `Core`
-(host-free) and `Host` (NinjaTrader-only) layers, plus 233 unit/integration tests and a static
+(host-free) and `Host` (NinjaTrader-only) layers, plus 238 unit/integration tests and a static
 safety scan.
 
-The Phase 5 audit found and fixed **four genuine defects** — three of which could have let the
+The Phase 5 audit found and fixed **seven genuine defects** — several of which could have let the
 tool report a misleading result or corrupt its own evidence:
 
 1. **Secret redactor corrupted real evidence.** A blanket 6+ digit mask rewrote legitimate
@@ -28,12 +28,15 @@ tool report a misleading result or corrupt its own evidence:
 2. **Two integrity checks were fail-open.** `M5.DATA_INTEGRITY` and `M6.SEQUENCE_CONTINUITY`
    read a field that was never populated, so they always returned `PASS`; and even after wiring
    the field, an *unobserved* stream still produced a `PASS` on zero data.
-3. **The evidence write path did not enforce the documented secret-free / complete-set
+3. **A second fail-open pair.** `M9.MISSING_OR_DUPLICATE` returned `PASS` on a completely
+   unobserved audit surface, and `M8.EVIDENCE_INTEGRITY` returned `PASS` on a session that
+   ingested nothing.
+4. **The evidence write path did not enforce the documented secret-free / complete-set
    invariants** — only the hash manifest was checked.
-4. **Culture-sensitive formatting** in correlation evidence, instrument expiry and the sink
+5. **Culture-sensitive formatting** in correlation evidence, instrument expiry and the sink
    timestamp could emit non-ISO or non-Gregorian values under some locales.
 
-All 233 tests pass, the static safety scan passes over 103 production files and 34 forbidden
+All 238 tests pass, the static safety scan passes over 103 production files and 34 forbidden
 patterns, and the stub build succeeds. **A real NinjaTrader-host build was NOT verified** because
 the NinjaTrader assemblies are not present in this environment (see §5).
 
@@ -41,7 +44,7 @@ the NinjaTrader assemblies are not present in this environment (see §5).
 
 | # | Subject | Result |
 | --- | --- | --- |
-| 1 | **AddOn implementation / build quality** | Source compiles against stubs; 233 tests green; static scan green. Real-host build **NOT verified** (no NT8 DLLs). Overall: **INCONCLUSIVE** pending a real-host build. |
+| 1 | **AddOn implementation / build quality** | Source compiles against stubs; 238 tests green; static scan green. Real-host build **NOT verified** (no NT8 DLLs). Overall: **INCONCLUSIVE** pending a real-host build. |
 | 2 | **Runtime diagnostic coverage / evidence quality** | Strong, and improved by this audit (real per-domain gap/drop evidence; fail-closed integrity; provenance labelling). No real host run was possible here, so no runtime evidence is claimed. Overall: **INCONCLUSIVE** (no host). |
 | 3 | **RiskPilot.BOT acceptance** | **NOT_APPLICABLE.** This tool is independent of RiskPilot.BOT and cannot certify it. A green tool build or diagnostic run is NOT a RiskPilot.BOT acceptance. |
 
@@ -155,7 +158,24 @@ forbids.
 Tests assert all three behaviours for both modules (inconclusive-when-unobserved,
 fail-on-gap-even-when-unobserved, pass-only-when-observed-and-clean).
 
-### 3.3 Evidence write path did not enforce the documented invariants
+### 3.3 A second fail-open pair (M8 and M9)
+
+**Severity: high (fail-closed violation).** The same defect class appeared twice more:
+
+- `M9.MISSING_OR_DUPLICATE` returned `PASS` when the recorded order/execution surface was never
+  observed. With no events, all counts are zero, so the "clean" branch fired — directly
+  contradicting the probe's own documented contract ("missing or unmatched events are reported as
+  INCONCLUSIVE, never as PASS").
+- `M8.EVIDENCE_INTEGRITY` returned `PASS` for a session that ingested nothing at all. With no
+  records, the drop/gap/timestamp counters are all zero, so an empty session looked "clean".
+
+**Fix.** Both checks now require positive evidence that the relevant surface was observed before
+they may `PASS`: `M9.MISSING_OR_DUPLICATE` requires `AuditSurfaceObservable`, and
+`M8.EVIDENCE_INTEGRITY` requires `EnqueuedCount > 0`. A positive count still fails regardless, so
+a genuine problem detected on a partially-observed surface is never suppressed. Regression tests
+cover all three behaviours for both checks.
+
+### 3.4 Evidence write path did not enforce the documented invariants
 
 **Severity: medium (defense in depth).** `WriteEvidencePackage` verified the hash manifest but did
 not check the two other invariants the class documents: that the package is secret-free and that
@@ -166,7 +186,7 @@ could still be written.
 `HasCompleteArtifactSet`, `IsSecretFree` and `ManifestIsIdentitySafe`. Failures are logged and no
 partial package is written. The sample generator runs the same four guards.
 
-### 3.4 Culture-sensitive formatting
+### 3.5 Culture-sensitive formatting
 
 **Severity: low (correctness under non-default locales).** `DateTime.ToString("O")` in the M3
 correlation evidence, `DateTime.ToString("yyyy-MM-dd")` for instrument expiry, and the sink's
@@ -174,7 +194,7 @@ correlation evidence, `DateTime.ToString("yyyy-MM-dd")` for instrument expiry, a
 could differ; under a non-ISO culture the separator could change. All three now use
 `CultureInfo.InvariantCulture`.
 
-### 3.5 Flaky test (not a product defect)
+### 3.6 Flaky test (not a product defect)
 
 Three runtime-integration tests used a fixed `Thread.Sleep(50)` to wait for the drain thread and
 could race under load. They now wait deterministically on the session's processed count.
@@ -252,7 +272,7 @@ is complete; the stub build is unaffected.
 | --- | --- | --- |
 | Stub build | `dotnet build ... -p:UseStubs=true -c Release` | **succeeded** |
 | Solution build (incl. tool) | `dotnet build RiskPilot.Diagnostics.Nt8.sln -c Release` | **succeeded** |
-| Unit + integration tests | `dotnet test ... -c Release` | **233 passed / 0 failed** |
+| Unit + integration tests | `dotnet test ... -c Release` | **238 passed / 0 failed** |
 | Static safety scan | `python3 verification/addon-smoke/test_diagnostic_safety.py` | **PASS** (103 files, 34 patterns) |
 | Real-host build | `dotnet build ... -p:UseStubs=false -c Release` | **FAILED** — NT8 DLLs absent (see §5) |
 

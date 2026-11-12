@@ -27,10 +27,24 @@ sample evidence package, and produced the release documentation.
   returned `PASS` even when the ingest path had detected a gap. Per-domain sequence-gap and drop
   counters are now attributed by stream on the ingest path
   (`md.sequenceGaps`, `td.sequenceGaps`, `md.droppedEvents`) and merged into the DOM and TradeDelta
-  observations, so a real gap fails the affected domain and the streams are never merged.
+  observations, so a real gap fails the affected domain and the streams are never merged. In
+  addition, an *unobserved* stream no longer yields a `PASS`: with no observed stream the check
+  stays `INCONCLUSIVE`, while a positive count still fails regardless.
+- **`M9.MISSING_OR_DUPLICATE` passed on an unobserved audit surface (fail-open).** With no recorded
+  order/execution events all counts are zero and the check returned `PASS`, contradicting its own
+  contract ("missing or unmatched events are reported as INCONCLUSIVE, never as PASS"). It now
+  stays `INCONCLUSIVE` until the audit surface is observable; a positive count still fails.
+- **`M8.EVIDENCE_INTEGRITY` passed on an empty session (fail-open).** A session that ingested no
+  records at all has all-zero drop/gap counters and returned `PASS`. It now stays `INCONCLUSIVE`
+  until at least one record has been ingested; a positive counter still fails.
+- **The evidence write path did not enforce the documented invariants.** `WriteEvidencePackage`
+  verified the hash manifest only; it now also refuses to write unless `HasCompleteArtifactSet`,
+  `IsSecretFree` and `ManifestIsIdentitySafe` all pass, so a package that leaks a credential-like
+  token, carries a raw identity, or is missing an artifact is never written.
 - **`M3.CORRELATION` evidence timestamps used the ambient culture.** `DateTime.ToString("O")`
   without `CultureInfo.InvariantCulture` can emit a non-ISO form under some locales; it is now
-  invariant, matching every other timestamp in the package.
+  invariant, matching every other timestamp in the package. Instrument expiry and the
+  evidence-directory timestamp are now invariant too.
 - **Flaky runtime integration tests.** Three tests used a fixed `Thread.Sleep(50)` to wait for the
   drain thread; they now wait deterministically on the session's processed count.
 

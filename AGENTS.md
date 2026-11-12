@@ -105,7 +105,9 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   like an account field are masked. See `MaskAccountDigitRuns` and `SecretRedactionTests`.
 - A zero gap/drop count only means "clean" once the relevant stream was **observed**. Both
   `M5.DATA_INTEGRITY` and `M6.SEQUENCE_CONTINUITY` must stay `INCONCLUSIVE` with no observed
-  stream, while a positive count fails regardless (it is itself evidence).
+  stream, while a positive count fails regardless (it is itself evidence). The same rule applies to
+  `M9.MISSING_OR_DUPLICATE` (needs `AuditSurfaceObservable`) and `M8.EVIDENCE_INTEGRITY` (needs
+  `EnqueuedCount > 0`).
 - `WriteEvidencePackage` enforces four invariants before writing: `VerifyIntegrity`,
   `HasCompleteArtifactSet`, `IsSecretFree`, `ManifestIsIdentitySafe`. A package that fails any is
   never written.
