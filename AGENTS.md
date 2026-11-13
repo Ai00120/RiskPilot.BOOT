@@ -202,6 +202,34 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - Tests: `InstrumentIdentityTests` (verifier + probe) and `HostInstrumentIdentityTests` (host
   adapter over the offline stub surface); a green stub run is **not** real-host proof.
 
+## M3 active-order counting
+
+- `M3.ACTIVE_ORDERS` reports the **exact** number of live orders, derived from each account's real
+  `Account.Orders` collection. `Core/Engine/OrderStateClassifier.cs` is the host-free single source
+  of truth: `Initialized`/`Submitted`/`Accepted`/`Working`/`PartFilled`/`ChangeSubmitted` are
+  **active**; `Filled` = **completed**; `Cancelled` = **cancelled**; `Rejected` = **rejected**;
+  anything else is **unclassified**. A terminal order is **never** counted as active.
+- The previous bug: `Nt8HostDataProvider.GetAccounts()` hardcoded `WorkingOrderCount = 0` and
+  `BuildOrderLifecycleObservation()` never distinguished a live from a finished order, so
+  `accounts.json` always showed `workingOrderCount: 0`. Both now use the classifier, so the host
+  snapshot's active count and the `accounts.json` `workingOrderCount` agree.
+- Two paths, one source: the host adapter's point-in-time counts (`ActiveOrderCount`, terminal
+  counts, `OrderReadFailureCount`, `UnclassifiedOrderCount`) are folded into the snapshot by
+  `SnapshotAssembler` together with the `M3OrderLifecycleConsumer`'s counters from the event drain
+  stream (`RuntimeCounterKeys.OrderActive` / `OrderCompleted` / `OrderCancelled` / `OrderRejected`
+  / `OrderUnclassified`). Setting it only on one path would leave the other blind.
+- Fail-closed: no readable `Account.Orders` collection ⇒ `INCONCLUSIVE`
+  (`ORDER_COLLECTION_UNOBSERVABLE`); a positive read-failure count or an unclassified state ⇒
+  `INCONCLUSIVE` (`ACTIVE_ORDER_COUNT_UNRELIABLE`). Only a fully observed, fully classified
+  collection yields a trustworthy count — and a readable-but-empty collection is a genuine `PASS`
+  with `ACTIVE=0`, not `INCONCLUSIVE`. A terminal count is reported as corroborating evidence but
+  never folded into the active total.
+- Read-only: the adapter only enumerates `Account.Orders`; it never submits, changes or cancels an
+  order. Tests: `M3ActiveOrderTests` (classifier, probe over the in-memory provider, consumer +
+  assembler, and the host adapter over the offline stub surface — no orders / one / multiple /
+  completed / cancelled / rejected / mixed / unreadable). A green stub run is **not** real-host
+  proof.
+
 ## M5 DOM & market data (P4 — data reliability)
 
 - M5 now ingests **real** host data: `Host/MarketDataCapture.cs` subscribes (read-only) to the

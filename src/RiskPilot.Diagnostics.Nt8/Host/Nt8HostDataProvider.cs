@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using NinjaTrader.Cbi;
 using RiskPilot.Diagnostics.Nt8.Core.Contract;
 using RiskPilot.Diagnostics.Nt8.Core.Engine;
@@ -210,7 +211,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                         Denomination = SafeString(() => account.Denomination.ToString()),
                         ProviderName = SafeString(() => account.Provider.ToString()),
                         PositionCount = account.Positions == null ? 0 : account.Positions.Count,
-                        WorkingOrderCount = 0,
+                        WorkingOrderCount = CountActiveOrders(account),
                         ExecutionsInScope = false,
                         IngestedAtUtc = DateTime.UtcNow
                     });
@@ -683,50 +684,188 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     }
 
                     observation.AccountCount++;
-                    var orders = account.Orders;
-                    if (orders == null)
+
+                    // Read the account's own order collection, never a global one. A collection
+                    // that could not be read is recorded as a failure rather than silently
+                    // treated as empty: an unreadable collection could hide an active order, so
+                    // the active-order total must stay untrustworthy (fail closed).
+                    Collection<Order> orders;
+                    try
                     {
+                        orders = account.Orders;
+                    }
+                    catch (Exception)
+                    {
+                        observation.OrderReadFailureCount++;
                         continue;
                     }
 
-                    foreach (var order in orders)
+                    if (orders == null)
                     {
-                        if (order == null)
+                        observation.OrderReadFailureCount++;
+                        continue;
+                    }
+
+                    // The collection was readable this pass, even when it is empty. An empty
+                    // readable collection is a real observation ("no active orders"), not an
+                    // unobservable surface.
+                    observation.OrderCollectionObservable = true;
+
+                    try
+                    {
+                        foreach (var order in orders)
                         {
-                            continue;
+                            if (order == null)
+                            {
+                                observation.OrderReadFailureCount++;
+                                continue;
+                            }
+
+                            try
+                            {
+                                CountOrder(observation, order);
+                            }
+                            catch (Exception)
+                            {
+                                observation.OrderReadFailureCount++;
+                            }
                         }
-
-                        observation.OrderSurfaceObservable = true;
-                        observation.OrderSnapshotCount++;
-
-                        var rawOrderId = SafeString(() => order.OrderId);
-                        var orderIdClass = ClassifyOrderId(rawOrderId);
-                        IncrementClass(observation.OrderIdClassCounts, orderIdClass);
-
-                        var state = MapOrderState(order.OrderState);
-                        if (state == OrderLifecycleState.Filled
-                            || state == OrderLifecycleState.Cancelled
-                            || state == OrderLifecycleState.Rejected)
-                        {
-                            observation.TerminalStateRetainedCount++;
-                        }
-
-                        var instrumentId = order.Instrument != null ? order.Instrument.FullName : string.Empty;
-                        observation.Events.Add(new OrderLifecycleEvent
-                        {
-                            OrderRef = SyntheticRef.For("order", rawOrderId),
-                            OrderIdClass = orderIdClass,
-                            State = state,
-                            InstrumentId = instrumentId,
-                            Source = "Account.Orders",
-                            CorrelationId = string.Empty,
-                            IngestedAtUtc = DateTime.UtcNow
-                        });
+                    }
+                    catch (Exception)
+                    {
+                        // The host collection changed while it was being enumerated (a live
+                        // Account.Orders is updated off this thread). An order could have been
+                        // skipped, so the active-order total must stay untrustworthy.
+                        observation.OrderReadFailureCount++;
                     }
                 }
             }
 
             return observation;
+        }
+
+        /// <summary>
+        /// Reduces one read-only host order into the observation: it classifies the order id and
+        /// the order's activity class (active / completed / cancelled / rejected / unclassified)
+        /// from the real <c>Order.OrderState</c>, and appends a correlated lifecycle event. It
+        /// never mutates the order and never guesses a state it could not read.
+        /// </summary>
+        private static void CountOrder(OrderLifecycleObservation observation, Order order)
+        {
+            observation.OrderSurfaceObservable = true;
+            observation.OrderSnapshotCount++;
+
+            var rawOrderId = SafeString(() => order.OrderId);
+            var orderIdClass = ClassifyOrderId(rawOrderId);
+            IncrementClass(observation.OrderIdClassCounts, orderIdClass);
+
+            var state = MapOrderState(order.OrderState);
+            CountActivity(observation, state);
+
+            if (OrderStateClassifier.IsTerminal(state))
+            {
+                observation.TerminalStateRetainedCount++;
+            }
+
+            var instrumentId = order.Instrument != null ? order.Instrument.FullName : string.Empty;
+            observation.Events.Add(new OrderLifecycleEvent
+            {
+                OrderRef = SyntheticRef.For("order", rawOrderId),
+                OrderIdClass = orderIdClass,
+                State = state,
+                InstrumentId = instrumentId,
+                Source = "Account.Orders",
+                CorrelationId = string.Empty,
+                IngestedAtUtc = DateTime.UtcNow
+            });
+        }
+
+        /// <summary>
+        /// Increments the activity-class bucket for an observed order state. The classification
+        /// is delegated to the shared host-free <see cref="OrderStateClassifier"/> so the host
+        /// adapter, the ingest consumer and the M3 probe all agree on what "active" means.
+        /// </summary>
+        private static void CountActivity(OrderLifecycleObservation observation, OrderLifecycleState state)
+        {
+            switch (OrderStateClassifier.Classify(state))
+            {
+                case OrderActivityClass.Active:
+                    observation.ActiveOrderCount++;
+                    break;
+                case OrderActivityClass.Completed:
+                    observation.CompletedOrderCount++;
+                    break;
+                case OrderActivityClass.Cancelled:
+                    observation.CancelledOrderCount++;
+                    break;
+                case OrderActivityClass.Rejected:
+                    observation.RejectedOrderCount++;
+                    break;
+                default:
+                    observation.UnclassifiedOrderCount++;
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Counts the account's active (still live) orders from its own read-only
+        /// <c>Account.Orders</c> collection. A completed, cancelled or rejected order is never
+        /// counted, so a historical order can never inflate the working-order total. An
+        /// unreadable or absent collection returns zero for this account; the M3 active-order
+        /// check independently records the read failure and stays fail-closed.
+        /// </summary>
+        private static int CountActiveOrders(Account account)
+        {
+            Collection<Order> orders;
+            try
+            {
+                orders = account.Orders;
+            }
+            catch (Exception)
+            {
+                return 0;
+            }
+
+            if (orders == null)
+            {
+                return 0;
+            }
+
+            var active = 0;
+            try
+            {
+                foreach (var order in orders)
+                {
+                    if (order == null)
+                    {
+                        continue;
+                    }
+
+                    OrderLifecycleState state;
+                    try
+                    {
+                        state = MapOrderState(order.OrderState);
+                    }
+                    catch (Exception)
+                    {
+                        continue;
+                    }
+
+                    if (OrderStateClassifier.IsActive(state))
+                    {
+                        active++;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // The collection changed while it was enumerated; the count for this account is
+                // untrustworthy, so report no active orders rather than a wrong positive. The M3
+                // active-order check independently records the read failure and fails closed.
+                return 0;
+            }
+
+            return active;
         }
 
         private InstrumentAttestationObservation BuildAttestationObservation()

@@ -108,6 +108,30 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
         ChangeSubmitted = 9
     }
 
+    /// <summary>
+    /// Activity class of an order, derived from its lifecycle state. It answers the question
+    /// "is this order still live at the host, or is it finished?" so that a historical or
+    /// completed order is never counted as active. <see cref="Unknown"/> is fail-closed: an
+    /// order whose state could not be classified makes an active-order count unreliable.
+    /// </summary>
+    public enum OrderActivityClass
+    {
+        /// <summary>The lifecycle state was not classifiable; the count cannot be trusted.</summary>
+        Unknown = 0,
+
+        /// <summary>Still live at the host: working, accepted, pending submit or partially filled.</summary>
+        Active = 1,
+
+        /// <summary>Reached the Filled state; no longer active.</summary>
+        Completed = 2,
+
+        /// <summary>Reached the Cancelled state; no longer active.</summary>
+        Cancelled = 3,
+
+        /// <summary>Reached the Rejected state; never became active.</summary>
+        Rejected = 4
+    }
+
     public enum StrategyActivity
     {
         Unknown = 0,
@@ -273,6 +297,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
         public static string ToWire(this StrategyActivity activity)
         {
             return activity.ToString().ToUpperInvariant();
+        }
+
+        public static string ToWire(this OrderActivityClass activityClass)
+        {
+            return activityClass.ToString().ToUpperInvariant();
         }
 
         public static string ToWire(this OrderIdClass orderIdClass)

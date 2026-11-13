@@ -93,6 +93,16 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
             observation.PositionUpdateCount += (int)counters.Get(RuntimeCounterKeys.PositionUpdate);
             observation.TerminalStateRetainedCount += (int)counters.Get(RuntimeCounterKeys.OrderTerminalRetained);
 
+            // Activity-class counts: the host snapshot carries the point-in-time classification
+            // of Account.Orders, the counters carry the classification of the ingested stream.
+            // They are added (never overwritten), exactly like the snapshot counts above, so an
+            // active order observed either way is reflected in the exported evidence.
+            observation.ActiveOrderCount += (int)counters.Get(RuntimeCounterKeys.OrderActive);
+            observation.CompletedOrderCount += (int)counters.Get(RuntimeCounterKeys.OrderCompleted);
+            observation.CancelledOrderCount += (int)counters.Get(RuntimeCounterKeys.OrderCancelled);
+            observation.RejectedOrderCount += (int)counters.Get(RuntimeCounterKeys.OrderRejected);
+            observation.UnclassifiedOrderCount += (int)counters.Get(RuntimeCounterKeys.OrderUnclassified);
+
             if (observation.OrderIdClassCounts == null)
             {
                 observation.OrderIdClassCounts = new Dictionary<OrderIdClass, int>();
