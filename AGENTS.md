@@ -164,6 +164,44 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - The host adapter is exercised over the offline stub surface by
   `tests/.../HostTargetAccountConnectionTests.cs`; a green stub run is **not** real-host proof.
 
+## Canonical ES/CME instrument identity (M4)
+
+- `M4.INSTRUMENT_IDENTITY` **proves** the instrument NinjaTrader actually has selected/loaded is
+  the permanent ES/CME identity. The host reads the loaded discovery surface `Instrument.All`
+  (never `Instrument.GetInstrument(<configured string>)`) and reduces every field to
+  booleans/counts + a `SyntheticRef` `instrument#<hash>` in `InstrumentIdentityObservation`; the
+  decision is `Core/Identity/InstrumentIdentityVerifier` (fail-closed). The raw symbol never enters
+  the observation, a finding or an artifact.
+- The venue is confirmed only by the D-096 configured-route metadata: selected route `Globex`,
+  configured exchange set exactly `{Globex}` and the sole **connected** provider path `Rithmic`.
+  CME is **never** inferred from the `ES` symbol text. An unconfirmed exchange ⇒
+  `INCONCLUSIVE` (`EXCHANGE_METADATA_UNOBSERVABLE`), never PASS; an observed route that contradicts
+  ⇒ `FAIL` (`EXCHANGE_MISMATCH`).
+- Fail-closed mapping: no surface ⇒ `INCONCLUSIVE` (`INSTRUMENT_IDENTITY_UNOBSERVABLE`); no loaded
+  instrument ⇒ `INCONCLUSIVE` (`..._NO_INSTRUMENT_OBSERVED`); no readable root at all ⇒
+  `INCONCLUSIVE` (`INSTRUMENT_ROOT_UNOBSERVABLE`, never a false FAIL); a root that was read and does
+  not match exactly ⇒ `FAIL` (`INSTRUMENT_ROOT_MISMATCH`); more than one matching root ⇒
+  `INCONCLUSIVE` (`..._AMBIGUOUS`); a stub/mock value ⇒ `INCONCLUSIVE`. A mismatch outranks an
+  unobservable field. The expiry is **not** pinned: only the canonical root/venue form
+  (`ES_FUTURES_CME_*`) is required, so a manual contract roll keeps the identity valid.
+- `MasterInstrument.*` is only read when the provider's **live** readiness probe returns true. The
+  probe is a `Func<bool>` evaluated on every read, not a value captured at construction: an AddOn is
+  constructed at `State.Active`, before `MasterInstrument.*` is safe to read, so a captured flag would
+  stay false for the whole session and leave M4 permanently `INCONCLUSIVE`. The AddOn supplies
+  `() => HostIsLive` (true once the state reaches `DataLoaded`/`Historical`/`Transition`/`Realtime`);
+  a throwing probe fails closed to not-ready. Before readiness the identity is `INCONCLUSIVE`, not FAIL.
+- The D-078/D-096 attestation target is the **actual** loaded instrument: with no configured id the
+  host consults `Instrument.All` and attests the instrument whose `MasterInstrument.Name` matches the
+  permanent ES root (`ExpectedInstrumentIdentity.RootMatches`), reading that real object's metadata
+  (never one built from a configured string). Zero matching roots or more than one (ambiguous) ⇒
+  `HOST_UNAVAILABLE` (fail closed); a configured id, when present, still wins.
+- The check is emitted **even when the D-078/D-096 attestation observation is null**, so M4 always
+  reports the instrument identity.
+- `instruments.json` carries an `instrumentIdentity` block (status, counts, reason codes, masked
+  ref); `EvidencePackageBuilder` re-evaluates the verifier from `dataset.Snapshot.InstrumentIdentity`.
+- Tests: `InstrumentIdentityTests` (verifier + probe) and `HostInstrumentIdentityTests` (host
+  adapter over the offline stub surface); a green stub run is **not** real-host proof.
+
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live

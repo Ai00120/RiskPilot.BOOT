@@ -30,13 +30,43 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             "NinjaTrader.Data.MarketDepth"
         };
 
-        private readonly bool _masterMetadataReady;
+        private readonly Func<bool> _masterMetadataReady;
         private readonly string _requestedInstrumentId;
 
         public Nt8HostDataProvider(bool masterMetadataReady, string requestedInstrumentId = null)
+            : this(() => masterMetadataReady, requestedInstrumentId)
         {
-            _masterMetadataReady = masterMetadataReady;
+        }
+
+        /// <summary>
+        /// Creates the provider with a live readiness probe. <c>MasterInstrument.*</c> may only be
+        /// read once the host has reached a data-processing state, so readiness is evaluated on each
+        /// read rather than captured when the AddOn is constructed — an AddOn is constructed at
+        /// <c>State.Active</c>, before that point, so a captured value would stay false forever.
+        /// </summary>
+        public Nt8HostDataProvider(Func<bool> masterMetadataReady, string requestedInstrumentId = null)
+        {
+            _masterMetadataReady = masterMetadataReady ?? (() => false);
             _requestedInstrumentId = requestedInstrumentId;
+        }
+
+        /// <summary>
+        /// True when the host has reached a state in which <c>MasterInstrument.*</c> is safe to read.
+        /// A throwing readiness probe fails closed to false.
+        /// </summary>
+        private bool MasterMetadataReady
+        {
+            get
+            {
+                try
+                {
+                    return _masterMetadataReady();
+                }
+                catch (Exception)
+                {
+                    return false;
+                }
+            }
         }
 
         public EnvironmentRecord GetEnvironment()
@@ -211,7 +241,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             };
 
             // Master-instrument metadata must not be read before DataLoaded; guard it.
-            if (_masterMetadataReady && instrument.MasterInstrument != null)
+            if (MasterMetadataReady && instrument.MasterInstrument != null)
             {
                 try
                 {
@@ -260,6 +290,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 TargetAccountConnection = BuildTargetAccountConnectionObservation(),
                 OrderLifecycle = BuildOrderLifecycleObservation(),
                 Attestation = BuildAttestationObservation(),
+                InstrumentIdentity = BuildInstrumentIdentityObservation(),
                 DomMarketData = new DomMarketDataObservation(),
                 TradeDelta = new TradeDeltaObservation(),
                 StrategyRiskGate = new StrategyRiskGateObservation { StrategySurfaceObservable = false },
@@ -690,19 +721,14 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
         private InstrumentAttestationObservation BuildAttestationObservation()
         {
+            var instrument = ResolveAttestationInstrument();
             var observation = new InstrumentAttestationObservation
             {
-                RequestedInstrumentId = _requestedInstrumentId ?? string.Empty
+                RequestedInstrumentId = instrument != null
+                    ? SafeString(() => instrument.FullName) ?? string.Empty
+                    : string.Empty
             };
 
-            if (string.IsNullOrEmpty(_requestedInstrumentId))
-            {
-                observation.HostAvailable = false;
-                observation.FailureReasons.Add(Core.Engine.AttestationReasonCodes.HostUnavailable);
-                return observation;
-            }
-
-            var instrument = Instrument.GetInstrument(_requestedInstrumentId);
             if (instrument == null)
             {
                 observation.HostAvailable = false;
@@ -716,10 +742,10 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 ExpiryRaw = SafeString(() => instrument.Expiry.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)),
                 ExpiryKind = SafeString(() => instrument.Expiry.Kind.ToString()),
                 ExchangeRaw = SafeString(() => instrument.Exchange.ToString()),
-                MasterMetadataAvailable = _masterMetadataReady
+                MasterMetadataAvailable = MasterMetadataReady
             };
 
-            if (_masterMetadataReady && instrument.MasterInstrument != null)
+            if (MasterMetadataReady && instrument.MasterInstrument != null)
             {
                 metadata.RootName = SafeString(() => instrument.MasterInstrument.Name);
                 metadata.InstrumentTypeRaw = SafeString(() => instrument.MasterInstrument.InstrumentType.ToString());
@@ -759,6 +785,248 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
             observation.FailureReasons.Add(Core.Engine.AttestationReasonCodes.D078FieldApprovalNotApproved);
             return observation;
+        }
+
+        /// <summary>
+        /// Resolves the instrument the attestation should target. An explicitly configured id wins;
+        /// otherwise the actual loaded discovery surface (<c>Instrument.All</c>) is consulted and the
+        /// instrument is used only when its root symbol matches the permanent ES root. The instrument
+        /// returned is the host's own object, so the metadata that is read is the real selected
+        /// instrument's, never one constructed from a configured string. Ambiguous (more than one ES
+        /// root) or absent roots resolve to null so the attestation fails closed. Never throws.
+        /// </summary>
+        private Instrument ResolveAttestationInstrument()
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(_requestedInstrumentId))
+                {
+                    return Instrument.GetInstrument(_requestedInstrumentId);
+                }
+
+                var loaded = Instrument.All;
+                if (loaded == null)
+                {
+                    return null;
+                }
+
+                Instrument resolved = null;
+                var matches = 0;
+                lock (loaded)
+                {
+                    foreach (var candidate in loaded)
+                    {
+                        if (candidate == null || !MasterMetadataReady)
+                        {
+                            continue;
+                        }
+
+                        var rootName = SafeString(() => candidate.MasterInstrument != null
+                            ? candidate.MasterInstrument.Name
+                            : string.Empty);
+                        if (!ExpectedInstrumentIdentity.RootMatches(rootName))
+                        {
+                            continue;
+                        }
+
+                        matches++;
+                        resolved = candidate;
+                    }
+                }
+
+                // Ambiguity is not accepted: more than one loaded instrument carrying the ES root
+                // leaves the target unresolved so the attestation cannot silently pick one.
+                return matches == 1 ? resolved : null;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Builds the privacy-preserving observation that proves the instrument NinjaTrader
+        /// actually has selected/loaded is the permanent ES/CME identity. It reads the loaded
+        /// instrument discovery surface (never a name constructed from a configured string) and
+        /// reduces every field to booleans/counts plus a synthetic instrument reference. The
+        /// exchange is only confirmed when the D-096 configured-route metadata holds; it is never
+        /// inferred from the symbol text. The raw symbol never enters the observation.
+        /// </summary>
+        private InstrumentIdentityObservation BuildInstrumentIdentityObservation()
+        {
+            var observation = new InstrumentIdentityObservation();
+
+            try
+            {
+                // `var` keeps the code independent of the concrete collection type the installed NT
+                // build exposes for Instrument.All; only enumeration is required.
+                var loaded = Instrument.All;
+                if (loaded == null)
+                {
+                    observation.InstrumentSurfaceObservable = false;
+                    return observation;
+                }
+
+                observation.InstrumentSurfaceObservable = true;
+
+                Instrument matched = null;
+                var matchingCount = 0;
+                lock (loaded)
+                {
+                    foreach (var candidate in loaded)
+                    {
+                        if (candidate == null)
+                        {
+                            continue;
+                        }
+
+                        observation.ObservedInstrumentCount++;
+
+                        // MasterInstrument.* (and therefore the root symbol) must only be read after
+                        // DataLoaded/Realtime. Before that it is unobservable by design, so the
+                        // identity stays INCONCLUSIVE rather than being reported as a wrong instrument.
+                        if (!MasterMetadataReady)
+                        {
+                            continue;
+                        }
+
+                        // A single unreadable member must not abort the whole scan; the read failure
+                        // simply leaves that field unobservable (fail closed).
+                        var rootName = SafeString(() => candidate.MasterInstrument != null ? candidate.MasterInstrument.Name : string.Empty);
+                        if (string.IsNullOrEmpty(rootName))
+                        {
+                            continue;
+                        }
+
+                        observation.RootMetadataObservable = true;
+
+                        // Exact ordinal root comparison; a similar or differently-cased root is not a match.
+                        if (ExpectedInstrumentIdentity.RootMatches(rootName))
+                        {
+                            matchingCount++;
+                            matched = candidate;
+                        }
+                    }
+                }
+
+                observation.MatchingInstrumentCount = matchingCount;
+
+                // Only a unique exact root match can be compared further; zero matches is decided by
+                // the verifier (wrong or missing instrument) and no raw name is read here.
+                if (matchingCount != 1 || matched == null)
+                {
+                    return observation;
+                }
+
+                var fullName = SafeString(() => matched.FullName);
+                observation.InstrumentRef = SyntheticRef.For("instrument", fullName);
+
+                var rootSymbol = SafeString(() => matched.MasterInstrument != null ? matched.MasterInstrument.Name : string.Empty);
+                observation.RootSymbolObservable = !string.IsNullOrEmpty(rootSymbol);
+                observation.RootSymbolMatches = observation.RootSymbolObservable && ExpectedInstrumentIdentity.RootMatches(rootSymbol);
+
+                var instrumentType = SafeString(() => matched.MasterInstrument != null ? matched.MasterInstrument.InstrumentType.ToString() : string.Empty);
+                observation.InstrumentTypeObservable = !string.IsNullOrEmpty(instrumentType);
+                observation.InstrumentTypeMatches = observation.InstrumentTypeObservable && ExpectedInstrumentIdentity.InstrumentTypeMatches(instrumentType);
+
+                var currency = MapCurrencyToIsoCode(SafeString(() => matched.MasterInstrument != null ? matched.MasterInstrument.Currency.ToString() : string.Empty));
+                observation.CurrencyObservable = !string.IsNullOrEmpty(currency);
+                observation.CurrencyMatches = observation.CurrencyObservable && ExpectedInstrumentIdentity.CurrencyMatches(currency);
+
+                // The configured-route metadata is read first: the venue is only confirmed when the
+                // selected route is Globex, the configured set is exactly {Globex} and the sole
+                // connected provider path is Rithmic (D-096). It is never inferred from "ES".
+                var exchangeMetadata = ReadExchangeRouteMetadata(matched);
+                observation.ExchangeMetadataObservable = exchangeMetadata.Observable;
+                observation.SelectedRouteIsGlobex = exchangeMetadata.SelectedGlobex;
+                observation.ConfiguredExchangesAreGlobexOnly = exchangeMetadata.ConfiguredOnlyGlobex;
+                observation.ProviderRouteIsRithmicOnly = exchangeMetadata.RithmicOnly;
+                observation.ExchangeConfirmedCme = exchangeMetadata.Observable && exchangeMetadata.ConfirmedCme;
+
+                // The canonical id is derived from the host symbol and the mapped exchange. It is only
+                // computed when the venue was actually confirmed, so it can never be manufactured from
+                // the symbol text alone.
+                var canonicalId = observation.ExchangeConfirmedCme
+                    ? CanonicalInstrumentId.Build(fullName, ExpectedInstrumentIdentity.Exchange)
+                    : null;
+                observation.SymbolParsed = CanonicalInstrumentId.TryParse(fullName, out _, out _, out _);
+                observation.CanonicalInstrumentId = canonicalId ?? string.Empty;
+                observation.CanonicalIdObservable = !string.IsNullOrEmpty(canonicalId);
+                observation.CanonicalIdMatches = observation.CanonicalIdObservable
+                    && ExpectedInstrumentIdentity.CanonicalRootVenueMatches(canonicalId);
+
+                return observation;
+            }
+            catch (Exception)
+            {
+                observation.InstrumentSurfaceObservable = false;
+                return observation;
+            }
+        }
+
+        private readonly struct ExchangeRouteMetadata
+        {
+            public readonly bool Observable;
+            public readonly bool SelectedGlobex;
+            public readonly bool ConfiguredOnlyGlobex;
+            public readonly bool RithmicOnly;
+
+            public ExchangeRouteMetadata(bool observable, bool selectedGlobex, bool configuredOnlyGlobex, bool rithmicOnly)
+            {
+                Observable = observable;
+                SelectedGlobex = selectedGlobex;
+                ConfiguredOnlyGlobex = configuredOnlyGlobex;
+                RithmicOnly = rithmicOnly;
+            }
+
+            public bool ConfirmedCme
+            {
+                get { return SelectedGlobex && ConfiguredOnlyGlobex && RithmicOnly; }
+            }
+        }
+
+        /// <summary>
+        /// Reads the D-096 configured-route metadata for one instrument. Every member read is
+        /// guarded; a read failure marks the whole route metadata unobservable so the identity can
+        /// never PASS on unconfirmed route data.
+        /// </summary>
+        private static ExchangeRouteMetadata ReadExchangeRouteMetadata(Instrument instrument)
+        {
+            try
+            {
+                var master = instrument.MasterInstrument;
+                if (master == null || master.Exchanges == null)
+                {
+                    return new ExchangeRouteMetadata(false, false, false, false);
+                }
+
+                var selectedGlobex = instrument.Exchange == Exchange.Globex;
+                var configuredOnlyGlobex = master.Exchanges.Count == 1 && master.Exchanges[0] == Exchange.Globex;
+                var rithmicOnly = HasOnlyConnectedRithmicProvider();
+                return new ExchangeRouteMetadata(true, selectedGlobex, configuredOnlyGlobex, rithmicOnly);
+            }
+            catch (Exception)
+            {
+                return new ExchangeRouteMetadata(false, false, false, false);
+            }
+        }
+
+        /// <summary>Maps an NT8 <c>Currency</c> member to its ISO code; an unmapped member is unobservable.</summary>
+        private static string MapCurrencyToIsoCode(string currencyMember)
+        {
+            switch (currencyMember)
+            {
+                case "UsDollar":
+                    return "USD";
+                case "Euro":
+                    return "EUR";
+                case "Yen":
+                    return "JPY";
+                case "BritishPound":
+                    return "GBP";
+                default:
+                    return string.Empty;
+            }
         }
 
         private static bool IsD096RouteCandidate(Instrument instrument)

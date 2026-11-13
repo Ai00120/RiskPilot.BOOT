@@ -133,6 +133,15 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
 
         public InstrumentAttestationObservation Attestation { get; set; }
 
+        /// <summary>
+        /// Observation of the instrument NinjaTrader actually has selected/loaded for M4. It
+        /// carries only booleans, counts and a synthetic instrument reference; a null member means
+        /// the instrument surface could not be observed, which M4 reports as INCONCLUSIVE. This is
+        /// distinct from <see cref="Attestation"/>: the attestation covers the D-078/D-096
+        /// operator gate, this covers the raw selected-instrument identity.
+        /// </summary>
+        public InstrumentIdentityObservation InstrumentIdentity { get; set; }
+
         public DomMarketDataObservation DomMarketData { get; set; }
 
         public TradeDeltaObservation TradeDelta { get; set; }
