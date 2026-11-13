@@ -372,7 +372,7 @@ is complete; the stub build is unaffected.
 | --- | --- | --- |
 | Stub build | `dotnet build ... -p:UseStubs=true -c Release` | **succeeded** |
 | Solution build (incl. tool) | `dotnet build RiskPilot.Diagnostics.Nt8.sln -c Release` | **succeeded** |
-| Unit + integration tests | `dotnet test ... -c Release` | **570 passed / 0 failed** |
+| Unit + integration tests | `dotnet test ... -c Release` | **571 passed / 0 failed** |
 | Static safety scan | `python3 verification/addon-smoke/test_diagnostic_safety.py` | **PASS** (126 files, 34 patterns) |
 | Real-host build | `dotnet build ... -p:UseStubs=false -c Release` | **FAILED** — NT8 DLLs absent (see §5) |
 

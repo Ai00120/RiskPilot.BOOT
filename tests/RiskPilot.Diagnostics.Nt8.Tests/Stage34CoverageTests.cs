@@ -181,6 +181,50 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void EveryCatalogCheckId_IsActuallyEmittedByTheRealProbes()
+        {
+            // Integration guard against drift: every check id the matrix references must be a real
+            // check the production probes emit. A renamed or mistyped check id would silently make
+            // its requirement NOT_EXECUTED, so this test runs a real full pass and asserts the
+            // catalog's check ids are all present in the report. The provider carries an
+            // attestation observation so the M4 conditional checks (which are only emitted when
+            // the attestation surface is present) are exercised too.
+            var provider = new Fakes.FakeDataProvider
+            {
+                Snapshot = new Core.Models.Observations.DiagnosticSnapshot
+                {
+                    Attestation = new Core.Models.Observations.InstrumentAttestationObservation
+                    {
+                        HostAvailable = true,
+                        Metadata = new Core.Models.Observations.InstrumentMetadataObservation(),
+                        FailureReasons = new System.Collections.Generic.List<string>()
+                    }
+                }
+            };
+            var runtime = new Host.DiagnosticRuntime(
+                provider, new Fakes.FakeClock(DateTime.UtcNow), 256, 64, 64);
+            runtime.Initialize();
+
+            var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var result in runtime.RunDiagnosticPass().Results)
+            {
+                if (!string.IsNullOrEmpty(result.CheckId))
+                {
+                    emitted.Add(result.CheckId);
+                }
+            }
+
+            foreach (var requirement in Stage34CoverageCatalog.All())
+            {
+                foreach (var checkId in requirement.BootChecks)
+                {
+                    Assert.True(emitted.Contains(checkId),
+                        "catalog references a check id the real probes do not emit: " + checkId);
+                }
+            }
+        }
+
+        [Fact]
         public void CoverageJson_IsEmittedAndReflectsTheRun()
         {
             var result = RunResult(DiagnosticResult.Pass("M4", "M4.ES_PRODUCT_SPEC", "c", DateTime.UtcNow));
