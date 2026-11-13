@@ -30,19 +30,16 @@ connection or position, and never changes a RiskPilot setting. Trading stays dis
 
 ## 2. Build against the real host (Windows)
 
-The real build references these NinjaTrader assemblies from
+The real build references the two NinjaTrader assemblies from
 `C:\Program Files\NinjaTrader 8\bin\`:
 
-- `NinjaTrader.Core.dll`
-- `NinjaTrader.Cbi.dll`
+- `NinjaTrader.Core.dll` (contains `NinjaTrader.Cbi`, `NinjaTrader.Data`, and `NinjaTrader.NinjaScript`)
 - `NinjaTrader.Gui.dll`
-- `NinjaTrader.Data.dll`
-- `NinjaTrader.NinjaScript.dll`
 
-(plus the WPF assemblies the GUI project already references). If NinjaTrader is installed
-elsewhere, adjust the `HintPath` entries in
-`src/RiskPilot.Diagnostics.Nt8/RiskPilot.Diagnostics.Nt8.csproj` for the `UseStubs != true`
-configuration.
+(plus the .NET Framework 4.8 WPF assemblies `PresentationCore`, `PresentationFramework`, `System.Xaml`,
+and `WindowsBase` that the project already references). If NinjaTrader is installed elsewhere,
+adjust the `HintPath` entries in `src/RiskPilot.Diagnostics.Nt8/RiskPilot.Diagnostics.Nt8.csproj`
+for the `UseStubs != true` configuration.
 
 ```bat
 dotnet build src\RiskPilot.Diagnostics.Nt8\RiskPilot.Diagnostics.Nt8.csproj -p:UseStubs=false -c Release
@@ -89,8 +86,11 @@ If the editor reports `Duplicate 'AssemblyTitle' / 'AssemblyDescription' / 'Asse
 
 1. Close NinjaTrader.
 2. Search `%USERPROFILE%\Documents\NinjaTrader 8\bin\Custom\` for **extra** `AssemblyInfo.cs`,
-   `*.AssemblyAttributes.cs`, `bin\` and `obj\` folders. Remove only the extra copies from the
-   `AddOns\RiskPilot.Diagnostics.Nt8\` subtree and the VS-generated `bin\`/`obj\` folders.
+   `*.AssemblyAttributes.cs`, `Stubs\`, `*.csproj`, `bin\` and `obj\` folders (because the
+   NinjaScript Editor compiles **every** `.cs` file recursively under `bin\Custom\`, even inside
+   backup subfolders). Remove only the extra BOOT copies (moving any backups **outside**
+   `bin\Custom\`), including any stale `AddOns\RiskPilot.Diagnostics.Nt8\Properties\` or
+   VS-generated `bin\`/`obj\` folders.
 3. **Keep** NinjaTrader's own `%USERPROFILE%\Documents\NinjaTrader 8\bin\Custom\AssemblyInfo.cs`.
 4. Re-run the packager into a clean destination, then compile again in the NinjaScript Editor.
    Do not build the BOOT `.csproj` from inside `bin\Custom`.

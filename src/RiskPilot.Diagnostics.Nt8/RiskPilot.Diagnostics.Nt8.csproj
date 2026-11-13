@@ -202,21 +202,10 @@
   <ItemGroup Condition="'$(UseStubs)' != 'true'">
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
+    <Reference Include="System.Xaml" />
     <Reference Include="WindowsBase" />
     <Reference Include="NinjaTrader.Core">
       <HintPath>C:\Program Files\NinjaTrader 8\bin\NinjaTrader.Core.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="NinjaTrader.Cbi">
-      <HintPath>C:\Program Files\NinjaTrader 8\bin\NinjaTrader.Cbi.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="NinjaTrader.Data">
-      <HintPath>C:\Program Files\NinjaTrader 8\bin\NinjaTrader.Data.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="NinjaTrader.NinjaScript">
-      <HintPath>C:\Program Files\NinjaTrader 8\bin\NinjaTrader.NinjaScript.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="NinjaTrader.Gui">
