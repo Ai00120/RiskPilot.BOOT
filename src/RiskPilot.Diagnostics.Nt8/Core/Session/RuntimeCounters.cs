@@ -174,14 +174,5 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Session
         /// derived order-flow/DOM mirror, so it is tracked separately from a Level I reset.
         /// </summary>
         public const string TradeDeltaResetDepth = "td.reset.depth";
-
-        public const string StrategyCandidate = "strategy.candidate";
-        public const string StrategyValidCandidate = "strategy.candidate.valid";
-        public const string StrategyInvalidCandidate = "strategy.candidate.invalid";
-        public const string StrategyAllCandidatesInvalid = "strategy.allCandidatesInvalid";
-        public const string Stage3ZeroQuantity = "stage3.zeroQuantity";
-        public const string RiskGateVeto = "stage4.veto";
-        public const string CorrelationComplete = "stage.correlation.complete";
-        public const string CorrelationIncomplete = "stage.correlation.incomplete";
     }
 }

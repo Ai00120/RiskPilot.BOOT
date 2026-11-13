@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using RiskPilot.Diagnostics.Nt8.Core.Contract;
 using RiskPilot.Diagnostics.Nt8.Core.Engine;
@@ -8,6 +9,7 @@ using RiskPilot.Diagnostics.Nt8.Core.Engine.Probes;
 using RiskPilot.Diagnostics.Nt8.Core.Models;
 using RiskPilot.Diagnostics.Nt8.Core.Models.Observations;
 using RiskPilot.Diagnostics.Nt8.Core.Result;
+using RiskPilot.Diagnostics.Nt8.Core.Run;
 using RiskPilot.Diagnostics.Nt8.Core.Session;
 using RiskPilot.Diagnostics.Nt8.Core.Status;
 using RiskPilot.Diagnostics.Nt8.Host;
@@ -309,8 +311,53 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.Equal(1, observation.UnattributedCount());
         }
 
-        // ---------------- Test doubles ----------------
+        [Fact]
+        public void RuntimeIntegration_RunnerCaptureHook_IngestsBeforeM7Evaluates()
+        {
+            // The host wires a read-only strategy source into the runner via a capture hook. The
+            // hook enqueues records and the runner must wait (bounded) for the drain thread so M7
+            // evaluates the state those records produced, not an empty/stale surface.
+            var provider = new FakeDataProvider();
+            using var runtime = new DiagnosticRuntime(provider, new FakeClock(Now), 512, 64, 512);
+            runtime.Initialize();
+            runtime.Start();
 
+            var source = new FakeStrategySource(new[]
+            {
+                new StrategyRecord
+                {
+                    StrategyId = "STRAT_SCALPING_CANDIDATE_01",
+                    AvailableObservable = true,
+                    Available = true,
+                    ReasonCodes = new[] { "ALL_CANDIDATES_INVALID" }
+                }
+            });
+
+            var capture = new StrategyDiagnosticCapture(record => runtime.Ingest(record), source);
+            var hookInvocations = 0;
+            var runner = new RuntimeDiagnosticRunner(
+                runtime,
+                new InMemoryEvidenceSink(),
+                () => true,
+                () => { hookInvocations++; return capture.TryCapture(); });
+
+            var context = new DiagnosticRunContext(
+                DiagnosticMode.Full,
+                new[] { "M7" },
+                () => false,
+                _ => { },
+                _ => { },
+                (_, __) => { });
+
+            var result = runner.Run(context);
+
+            Assert.Equal(1, hookInvocations);
+            var surface = result.Report.Results.FirstOrDefault(r => r.CheckId == "M7.STRATEGY_SURFACE");
+            Assert.NotNull(surface);
+            Assert.Equal(DiagnosticStatus.PASS, surface.Status);
+        }
+
+        // ---------------- Test doubles ----------------
         private sealed class FakeStrategySource : IReadOnlyDiagnosticSource
         {
             private readonly IReadOnlyList<StrategyRecord> _strategies;

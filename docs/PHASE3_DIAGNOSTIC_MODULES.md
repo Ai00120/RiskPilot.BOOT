@@ -520,7 +520,7 @@ aggressor side).
 | M4 | `Phase3ModuleTests.M4_*` (4) + `InstrumentIdentityTests` (18) + `HostInstrumentIdentityTests` (10) | 32 | PASS |
 | M5 | `Phase3ModuleTests.M5_*` | 2 | PASS |
 | M6 | `Phase3ModuleTests.M6_*` | 4 | PASS |
-| M7 | `Phase3ModuleTests.M7_*` (10) + `M7StrategyTests` (16) | 26 | PASS |
+| M7 | `Phase3ModuleTests.M7_*` (11) + `M7StrategyTests` (16) | 27 | PASS |
 | M8 | `Phase3ModuleTests.M8_*` | 4 | PASS |
 | Runtime integration | `Phase3ModuleTests.Runtime_*` | 2 | PASS |
 | Counter/assembler | `Phase3ModuleTests.M6Consumer_*`, `SnapshotAssembler_*` | 2 | PASS |

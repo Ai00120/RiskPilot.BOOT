@@ -127,7 +127,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// records can read the observation those records produce. Returns true when the queue was
         /// empty within <paramref name="timeoutMs"/>. It never throws and never blocks a host
         /// callback thread indefinitely: a timeout simply returns false and the caller proceeds
-        /// with whatever was processed (fail-closed, never fabricated).
+        /// with whatever was processed (fail-closed, never fabricated). The bound is measured on
+        /// the wall clock so a deterministic/frozen injected clock cannot make it wait forever.
         /// </summary>
         public bool WaitForIngestDrain(int timeoutMs)
         {
@@ -137,8 +138,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 return false;
             }
 
-            var deadline = _clock.UtcNow.AddMilliseconds(timeoutMs <= 0 ? 0 : timeoutMs);
-            while (pipeline.Queue.Count > 0 && _clock.UtcNow < deadline)
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs <= 0 ? 0 : timeoutMs);
+            while (pipeline.Queue.Count > 0 && DateTime.UtcNow < deadline)
             {
                 Thread.Sleep(2);
             }

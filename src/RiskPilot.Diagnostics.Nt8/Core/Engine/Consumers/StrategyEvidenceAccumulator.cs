@@ -88,20 +88,6 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Consumers
             return "RISK_EVALUATION_ID_MISSING";
         }
 
-        /// <summary>Records an externally supplied correlation observation, when one is available.</summary>
-        public void SetCorrelation(StageCorrelationObservation correlation)
-        {
-            if (correlation == null)
-            {
-                return;
-            }
-
-            lock (_gate)
-            {
-                _correlation = correlation;
-            }
-        }
-
         private StrategyEvaluationObservation Merge(StrategyRecord record)
         {
             if (string.IsNullOrEmpty(record.StrategyId))

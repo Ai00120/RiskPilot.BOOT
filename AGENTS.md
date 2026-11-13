@@ -294,6 +294,10 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   it and a code it cannot place (unknown **or ambiguous across stages**, e.g. `FLAT_DIRECTION`) is
   reported **unattributed**, never guessed into a stage. Both the accumulator and the counters
   fallback use `StrategyReasonCodes.StageOf`, so the two paths agree.
+- Correlation is **derived** from the records' own ids (never injected via a setter), so
+  `M7.STAGE_CORRELATION` can only reflect what a real record reported. `RuntimeDiagnosticRunner`
+  waits on the **wall clock** for the drain, so a deterministic/frozen injected clock can never
+  make the host wait unbounded.
 - Fail-closed contract: `M7.STRATEGY_SURFACE` is derived (`StrategySurfaceObservable` is read-only,
   true only with a real observation); `M7.STRATEGY_EVALUATION` reports each of the five registered
   strategies as observed/available/unavailable/missing-capability/`NOT_OBSERVED` — availability is

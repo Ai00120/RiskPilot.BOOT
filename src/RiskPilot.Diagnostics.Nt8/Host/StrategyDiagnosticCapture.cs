@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using RiskPilot.Diagnostics.Nt8.Core.Contract;
 using RiskPilot.Diagnostics.Nt8.Core.Models;
-using RiskPilot.Diagnostics.Nt8.Core.Models.Observations;
-using RiskPilot.Diagnostics.Nt8.Core.Session;
 
 namespace RiskPilot.Diagnostics.Nt8.Host
 {
@@ -83,20 +81,6 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             }
 
             return count;
-        }
-
-        /// <summary>
-        /// Records an externally supplied correlation observation for the current pass, when one
-        /// is available. A null or non-observable correlation leaves the surface unobservable.
-        /// </summary>
-        public static void SetCorrelation(SessionContext session, StageCorrelationObservation correlation)
-        {
-            if (session == null || correlation == null)
-            {
-                return;
-            }
-
-            session.StrategyEvidence.SetCorrelation(correlation);
         }
     }
 }
