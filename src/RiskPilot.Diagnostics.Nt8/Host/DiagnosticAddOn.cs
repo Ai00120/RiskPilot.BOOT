@@ -72,6 +72,24 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         public string EvidenceOutputRoot { get; set; }
 
         /// <summary>
+        /// Live readiness probe for the host data provider. True once the AddOn has advanced past
+        /// <c>State.Active</c> into a state in which instrument master metadata is readable. It is
+        /// evaluated on each read, so a run started after the host reaches a data state observes the
+        /// metadata; a run started earlier stays INCONCLUSIVE (fail closed) rather than guessing.
+        /// </summary>
+        private bool HostIsLive
+        {
+            get
+            {
+                var state = State;
+                return state == State.DataLoaded
+                    || state == State.Historical
+                    || state == State.Transition
+                    || state == State.Realtime;
+            }
+        }
+
+        /// <summary>
         /// Creates the runtime and registers probes. Guarded so repeated calls are no-ops.
         /// </summary>
         public void SafeInitialize()
@@ -85,7 +103,11 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
                 try
                 {
-                    var provider = new Nt8HostDataProvider(masterMetadataReady: State == State.DataLoaded || State == State.Realtime);
+                    // Readiness is supplied as a live probe, not a captured value: the provider is
+                    // constructed here at State.Active, but MasterInstrument.* is only safe to read
+                    // once the host has advanced to a live/data state. A captured value would stay
+                    // false for the whole session and leave M4 permanently INCONCLUSIVE.
+                    var provider = new Nt8HostDataProvider(() => HostIsLive);
                     _runtime = new DiagnosticRuntime(provider, SystemClock.Instance, 4096, 8192);
                     _runtime.Initialize();
 

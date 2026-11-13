@@ -30,13 +30,43 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             "NinjaTrader.Data.MarketDepth"
         };
 
-        private readonly bool _masterMetadataReady;
+        private readonly Func<bool> _masterMetadataReady;
         private readonly string _requestedInstrumentId;
 
         public Nt8HostDataProvider(bool masterMetadataReady, string requestedInstrumentId = null)
+            : this(() => masterMetadataReady, requestedInstrumentId)
         {
-            _masterMetadataReady = masterMetadataReady;
+        }
+
+        /// <summary>
+        /// Creates the provider with a live readiness probe. <c>MasterInstrument.*</c> may only be
+        /// read once the host has reached a data-processing state, so readiness is evaluated on each
+        /// read rather than captured when the AddOn is constructed — an AddOn is constructed at
+        /// <c>State.Active</c>, before that point, so a captured value would stay false forever.
+        /// </summary>
+        public Nt8HostDataProvider(Func<bool> masterMetadataReady, string requestedInstrumentId = null)
+        {
+            _masterMetadataReady = masterMetadataReady ?? (() => false);
             _requestedInstrumentId = requestedInstrumentId;
+        }
+
+        /// <summary>
+        /// True when the host has reached a state in which <c>MasterInstrument.*</c> is safe to read.
+        /// A throwing readiness probe fails closed to false.
+        /// </summary>
+        private bool MasterMetadataReady
+        {
+            get
+            {
+                try
+                {
+                    return _masterMetadataReady();
+                }
+                catch (Exception)
+                {
+                    return false;
+                }
+            }
         }
 
         public EnvironmentRecord GetEnvironment()
@@ -211,7 +241,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             };
 
             // Master-instrument metadata must not be read before DataLoaded; guard it.
-            if (_masterMetadataReady && instrument.MasterInstrument != null)
+            if (MasterMetadataReady && instrument.MasterInstrument != null)
             {
                 try
                 {
@@ -691,19 +721,14 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
         private InstrumentAttestationObservation BuildAttestationObservation()
         {
+            var instrument = ResolveAttestationInstrument();
             var observation = new InstrumentAttestationObservation
             {
-                RequestedInstrumentId = _requestedInstrumentId ?? string.Empty
+                RequestedInstrumentId = instrument != null
+                    ? SafeString(() => instrument.FullName) ?? string.Empty
+                    : string.Empty
             };
 
-            if (string.IsNullOrEmpty(_requestedInstrumentId))
-            {
-                observation.HostAvailable = false;
-                observation.FailureReasons.Add(Core.Engine.AttestationReasonCodes.HostUnavailable);
-                return observation;
-            }
-
-            var instrument = Instrument.GetInstrument(_requestedInstrumentId);
             if (instrument == null)
             {
                 observation.HostAvailable = false;
@@ -717,10 +742,10 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 ExpiryRaw = SafeString(() => instrument.Expiry.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)),
                 ExpiryKind = SafeString(() => instrument.Expiry.Kind.ToString()),
                 ExchangeRaw = SafeString(() => instrument.Exchange.ToString()),
-                MasterMetadataAvailable = _masterMetadataReady
+                MasterMetadataAvailable = MasterMetadataReady
             };
 
-            if (_masterMetadataReady && instrument.MasterInstrument != null)
+            if (MasterMetadataReady && instrument.MasterInstrument != null)
             {
                 metadata.RootName = SafeString(() => instrument.MasterInstrument.Name);
                 metadata.InstrumentTypeRaw = SafeString(() => instrument.MasterInstrument.InstrumentType.ToString());
@@ -760,6 +785,63 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
             observation.FailureReasons.Add(Core.Engine.AttestationReasonCodes.D078FieldApprovalNotApproved);
             return observation;
+        }
+
+        /// <summary>
+        /// Resolves the instrument the attestation should target. An explicitly configured id wins;
+        /// otherwise the actual loaded discovery surface (<c>Instrument.All</c>) is consulted and the
+        /// instrument is used only when its root symbol matches the permanent ES root. The instrument
+        /// returned is the host's own object, so the metadata that is read is the real selected
+        /// instrument's, never one constructed from a configured string. Ambiguous (more than one ES
+        /// root) or absent roots resolve to null so the attestation fails closed. Never throws.
+        /// </summary>
+        private Instrument ResolveAttestationInstrument()
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(_requestedInstrumentId))
+                {
+                    return Instrument.GetInstrument(_requestedInstrumentId);
+                }
+
+                var loaded = Instrument.All;
+                if (loaded == null)
+                {
+                    return null;
+                }
+
+                Instrument resolved = null;
+                var matches = 0;
+                lock (loaded)
+                {
+                    foreach (var candidate in loaded)
+                    {
+                        if (candidate == null || !MasterMetadataReady)
+                        {
+                            continue;
+                        }
+
+                        var rootName = SafeString(() => candidate.MasterInstrument != null
+                            ? candidate.MasterInstrument.Name
+                            : string.Empty);
+                        if (!ExpectedInstrumentIdentity.RootMatches(rootName))
+                        {
+                            continue;
+                        }
+
+                        matches++;
+                        resolved = candidate;
+                    }
+                }
+
+                // Ambiguity is not accepted: more than one loaded instrument carrying the ES root
+                // leaves the target unresolved so the attestation cannot silently pick one.
+                return matches == 1 ? resolved : null;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         /// <summary>
@@ -803,7 +885,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                         // MasterInstrument.* (and therefore the root symbol) must only be read after
                         // DataLoaded/Realtime. Before that it is unobservable by design, so the
                         // identity stays INCONCLUSIVE rather than being reported as a wrong instrument.
-                        if (!_masterMetadataReady)
+                        if (!MasterMetadataReady)
                         {
                             continue;
                         }

@@ -253,8 +253,13 @@ boolean/count + `instrument#<hash>` کاهش می‌دهد. مقایسهٔ ری�
 - هویت دائمی **ریشهٔ ES** است (D-095 §5) و expiry پین نمی‌شود؛ فقط فرم canonical ریشه/venue لازم است.
 - `D078Approved` در ابزار **همیشه false** است؛ ابزار **هرگز خودکار Approve نمی‌کند**. تأیید
   D-078 یک فرآیند Owner-controlled و خارج از ابزار است.
-- `MasterInstrument.*` فقط بعد از `DataLoaded`/`Realtime` خوانده می‌شود (`_masterMetadataReady`);
-  قبل از آن `INCONCLUSIVE` است، نه FAIL.
+- `MasterInstrument.*` فقط بعد از `DataLoaded`/`Realtime` خوانده می‌شود. آمادگی یک probe زندهٔ
+  `Func<bool>` است که در هر خواندن ارزیابی می‌شود (نه مقدار ضبط‌شده در سازنده)؛ AddOn در
+  `State.Active` ساخته می‌شود، پس مقدار ضبط‌شده همیشه false می‌ماند. AddOn مقدار `() => HostIsLive`
+  را می‌دهد. قبل از آمادگی `INCONCLUSIVE` است، نه FAIL.
+- هدف attestation **همان instrument واقعی بارگذاری‌شده** است: بدون id پیکربندی‌شده، میزبان
+  `Instrument.All` را می‌خواند و instrumentی را attest می‌کند که ریشهٔ `MasterInstrument.Name` آن با
+  ریشهٔ دائمی ES مطابقت دارد؛ صفر یا بیش از یک تطابق ⇒ `HOST_UNAVAILABLE` (fail-closed).
 
 **مرجع API:** `Instrument.All`, `Instrument.FullName`, `Instrument.Expiry`, `Instrument.Exchange`,
 `Instrument.MasterInstrument.{Name,InstrumentType,Currency,TickSize,PointValue,Exchanges}`.

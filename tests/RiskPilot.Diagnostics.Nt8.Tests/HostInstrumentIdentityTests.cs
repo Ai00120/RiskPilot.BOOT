@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using NinjaTrader.Cbi;
+using RiskPilot.Diagnostics.Nt8.Core.Engine;
 using RiskPilot.Diagnostics.Nt8.Core.Identity;
 using RiskPilot.Diagnostics.Nt8.Core.Models.Observations;
 using RiskPilot.Diagnostics.Nt8.Core.Status;
@@ -290,6 +291,154 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
                 Assert.StartsWith("instrument#", observation.InstrumentRef);
                 Assert.DoesNotContain("ES 12-26", observation.InstrumentRef);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Host_ReadinessProbe_IsEvaluatedLive_NotCaptured()
+        {
+            Reset();
+            try
+            {
+                Connection.Connections.Add(ConnectedRithmic());
+                Instrument.All.Add(EsInstrument());
+
+                // A live probe that starts not-ready and flips later, mirroring an AddOn constructed
+                // at State.Active that only reaches a data state afterwards.
+                var ready = false;
+                var provider = new Nt8HostDataProvider(() => ready);
+
+                Assert.False(provider.GetSnapshot().InstrumentIdentity.RootMetadataObservable);
+
+                ready = true;
+                var observation = provider.GetSnapshot().InstrumentIdentity;
+
+                Assert.True(observation.RootMetadataObservable);
+                Assert.Equal(DiagnosticStatus.PASS, InstrumentIdentityVerifier.Evaluate(observation).Status);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Host_ThrowingReadinessProbe_FailsClosed()
+        {
+            Reset();
+            try
+            {
+                Connection.Connections.Add(ConnectedRithmic());
+                Instrument.All.Add(EsInstrument());
+
+                var provider = new Nt8HostDataProvider(() => throw new System.InvalidOperationException("boom"));
+                var observation = provider.GetSnapshot().InstrumentIdentity;
+
+                Assert.False(observation.RootMetadataObservable);
+                Assert.Equal(DiagnosticStatus.INCONCLUSIVE, InstrumentIdentityVerifier.Evaluate(observation).Status);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Attestation_ResolvesActualLoadedEsInstrument_WhenNoIdConfigured()
+        {
+            Reset();
+            try
+            {
+                Connection.Connections.Add(ConnectedRithmic());
+                Instrument.All.Add(EsInstrument());
+
+                // No configured id: the host must attest the instrument it actually has loaded,
+                // resolved by the instrument's own FullName (never a configured string).
+                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var observation = provider.GetSnapshot().Attestation;
+
+                Assert.True(observation.HostAvailable);
+                Assert.Equal("ES 12-26", observation.RequestedInstrumentId);
+                Assert.NotNull(observation.Metadata);
+                Assert.Equal("ES", observation.Metadata.RootName);
+                Assert.True(observation.D096RouteCandidateSatisfied);
+                Assert.Equal("ES_FUTURES_CME_DEC26", observation.CanonicalInstrumentId);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Attestation_NoLoadedEsInstrument_IsHostUnavailable()
+        {
+            Reset();
+            try
+            {
+                Connection.Connections.Add(ConnectedRithmic());
+                var nq = EsInstrument();
+                nq.FullName = "NQ 12-26";
+                nq.MasterInstrument.Name = "NQ";
+                Instrument.All.Add(nq);
+
+                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var observation = provider.GetSnapshot().Attestation;
+
+                Assert.False(observation.HostAvailable);
+                Assert.Contains(AttestationReasonCodes.HostUnavailable, observation.FailureReasons);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Attestation_AmbiguousLoadedEsInstruments_IsHostUnavailable()
+        {
+            Reset();
+            try
+            {
+                Connection.Connections.Add(ConnectedRithmic());
+                var front = EsInstrument();
+                var back = EsInstrument();
+                back.FullName = "ES 03-27";
+                Instrument.All.Add(front);
+                Instrument.All.Add(back);
+
+                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var observation = provider.GetSnapshot().Attestation;
+
+                // Two loaded ES roots cannot be disambiguated, so the target stays unresolved.
+                Assert.False(observation.HostAvailable);
+                Assert.Contains(AttestationReasonCodes.HostUnavailable, observation.FailureReasons);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Attestation_ConfiguredIdWins_OverLoadedSurface()
+        {
+            Reset();
+            try
+            {
+                Connection.Connections.Add(ConnectedRithmic());
+                Instrument.All.Add(EsInstrument());
+
+                var provider = new Nt8HostDataProvider(masterMetadataReady: true, requestedInstrumentId: "ES 12-26");
+                var observation = provider.GetSnapshot().Attestation;
+
+                Assert.True(observation.HostAvailable);
+                Assert.Equal("ES 12-26", observation.RequestedInstrumentId);
+                Assert.Equal("ES", observation.Metadata.RootName);
             }
             finally
             {

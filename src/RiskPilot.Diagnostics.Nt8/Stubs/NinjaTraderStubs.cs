@@ -189,6 +189,19 @@ namespace NinjaTrader.Cbi
 
         public static Instrument GetInstrument(string fullName)
         {
+            if (string.IsNullOrEmpty(fullName))
+            {
+                return null;
+            }
+
+            foreach (var instrument in All)
+            {
+                if (instrument != null && string.Equals(instrument.FullName, fullName, StringComparison.Ordinal))
+                {
+                    return instrument;
+                }
+            }
+
             return null;
         }
     }

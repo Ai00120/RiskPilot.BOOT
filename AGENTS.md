@@ -184,9 +184,17 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   `INCONCLUSIVE` (`..._AMBIGUOUS`); a stub/mock value ⇒ `INCONCLUSIVE`. A mismatch outranks an
   unobservable field. The expiry is **not** pinned: only the canonical root/venue form
   (`ES_FUTURES_CME_*`) is required, so a manual contract roll keeps the identity valid.
-- `MasterInstrument.*` is only read when the provider was constructed with
-  `masterMetadataReady: true` (post `DataLoaded`/`Realtime`); before that the identity is
-  `INCONCLUSIVE`, not FAIL.
+- `MasterInstrument.*` is only read when the provider's **live** readiness probe returns true. The
+  probe is a `Func<bool>` evaluated on every read, not a value captured at construction: an AddOn is
+  constructed at `State.Active`, before `MasterInstrument.*` is safe to read, so a captured flag would
+  stay false for the whole session and leave M4 permanently `INCONCLUSIVE`. The AddOn supplies
+  `() => HostIsLive` (true once the state reaches `DataLoaded`/`Historical`/`Transition`/`Realtime`);
+  a throwing probe fails closed to not-ready. Before readiness the identity is `INCONCLUSIVE`, not FAIL.
+- The D-078/D-096 attestation target is the **actual** loaded instrument: with no configured id the
+  host consults `Instrument.All` and attests the instrument whose `MasterInstrument.Name` matches the
+  permanent ES root (`ExpectedInstrumentIdentity.RootMatches`), reading that real object's metadata
+  (never one built from a configured string). Zero matching roots or more than one (ambiguous) ⇒
+  `HOST_UNAVAILABLE` (fail closed); a configured id, when present, still wins.
 - The check is emitted **even when the D-078/D-096 attestation observation is null**, so M4 always
   reports the instrument identity.
 - `instruments.json` carries an `instrumentIdentity` block (status, counts, reason codes, masked
