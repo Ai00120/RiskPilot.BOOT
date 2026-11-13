@@ -132,8 +132,16 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   any unobserved required field ⇒ `INCONCLUSIVE`; a similar or differently-cased name, wrong
   provider/connection/mode/currency ⇒ `FAIL`. Only a fully observed, fully matching identity is
   `PASS`. A mismatch outranks an unobservable field (proven wrong beats unproven).
-- `Account.Denomination` is mapped to an ISO code (`Currency.UsDollar` → `USD`) in the host; an
-  unmapped member is unobservable, never guessed from the member name.
+- `Account.Denomination` is reduced by the single USD-only helper
+  `Nt8HostDataProvider.CurrencyForUsdIdentity()`: `Currency.UsDollar` → `USD`; any other
+  *observed* NT8 member stays its real member name (a definite `FAIL`, never converted into USD);
+  an unreadable value is `INCONCLUSIVE`. There is no generic USD/EUR/JPY/GBP table in the
+  identity path. The real NT8 `Currency` enum has **no `Yen`** member (JPY is `JapaneseYen`).
+- `Properties/AssemblyInfo.cs` is required by the standalone DLL build
+  (`GenerateAssemblyInfo=false`) and must NEVER be staged into
+  `Documents\NinjaTrader 8\bin\Custom\AddOns\`: NT8 compiles every `.cs` there into one
+  `NinjaTrader.Custom.dll` with its own `bin\Custom\AssemblyInfo.cs` (CS0579). Use
+  `tools/nt8-source-package/package_addon_sources.py`; it fails closed on conflicting files.
 - `accounts.json` carries an `identityVerification` block (status, reason codes, masked ref);
   it never carries the raw identity. `EvidencePackageBuilder` re-evaluates the verifier from
   `dataset.Snapshot.AccountIdentity`.

@@ -41,6 +41,9 @@ jobs:
       - name: Run read-only diagnostic safety scan
         run: python3 verification/addon-smoke/test_diagnostic_safety.py
 
+      - name: Run NT8 compilation regression checks
+        run: python3 verification/addon-smoke/test_nt8_compilation_regression.py
+
       - name: Upload test results
         if: always()
         continue-on-error: true

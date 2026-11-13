@@ -497,7 +497,11 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             observation.AccountProviderObservable = !string.IsNullOrEmpty(accountProvider);
             observation.AccountProviderMatches = ExpectedAccountIdentity.ProviderMatches(accountProvider);
 
-            var denomination = MapDenominationToIsoCode(matched.Denomination);
+            // USD is the only denomination the approved account identity accepts. Reduce the
+            // observed NT8 Currency member directly: no generic ISO table and no conversion of a
+            // foreign denomination into USD. An observed non-USD member stays a definite mismatch
+            // (FAIL); a denomination that cannot be read stays unobservable (INCONCLUSIVE).
+            var denomination = CurrencyForUsdIdentity(SafeString(() => matched.Denomination.ToString()));
             observation.DenominationObservable = !string.IsNullOrEmpty(denomination);
             observation.DenominationIsUsd = ExpectedAccountIdentity.CurrencyIsUsd(denomination);
 
@@ -1149,7 +1153,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 observation.InstrumentTypeObservable = !string.IsNullOrEmpty(instrumentType);
                 observation.InstrumentTypeMatches = observation.InstrumentTypeObservable && ExpectedInstrumentIdentity.InstrumentTypeMatches(instrumentType);
 
-                var currency = MapCurrencyToIsoCode(SafeString(() => matched.MasterInstrument != null ? matched.MasterInstrument.Currency.ToString() : string.Empty));
+                var currency = CurrencyForUsdIdentity(SafeString(() => matched.MasterInstrument != null ? matched.MasterInstrument.Currency.ToString() : string.Empty));
                 observation.CurrencyObservable = !string.IsNullOrEmpty(currency);
                 observation.CurrencyMatches = observation.CurrencyObservable && ExpectedInstrumentIdentity.CurrencyMatches(currency);
 
@@ -1234,7 +1238,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     observation.TickValueObservable = true;
                 }
 
-                var currency = MapCurrencyToIsoCode(SafeString(() => master.Currency.ToString()));
+                var currency = CurrencyForUsdIdentity(SafeString(() => master.Currency.ToString()));
                 observation.CurrencyObservable = !string.IsNullOrEmpty(currency);
                 observation.Currency = currency ?? string.Empty;
 
@@ -1295,22 +1299,28 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             }
         }
 
-        /// <summary>Maps an NT8 <c>Currency</c> member to its ISO code; an unmapped member is unobservable.</summary>
-        private static string MapCurrencyToIsoCode(string currencyMember)
+        /// <summary>
+        /// Reduces an observed NT8 <c>Currency</c> member name for the USD-only identity path.
+        /// <para>
+        /// The approved ES/USD identity accepts exactly one currency: <c>Currency.UsDollar</c>,
+        /// returned here as the ISO code the verifiers compare. Every other <em>observed</em>
+        /// member is returned unchanged (its real host member name), so the verifier records a
+        /// definite mismatch (FAIL) instead of dropping the observation or silently converting a
+        /// foreign currency into USD. An empty/unreadable value stays empty, so an unavailable
+        /// denomination or product currency is INCONCLUSIVE and can never support a PASS. There
+        /// is deliberately no generic currency table in this identity path.
+        /// </para>
+        /// </summary>
+        private static string CurrencyForUsdIdentity(string currencyMember)
         {
-            switch (currencyMember)
+            if (string.IsNullOrEmpty(currencyMember))
             {
-                case "UsDollar":
-                    return "USD";
-                case "Euro":
-                    return "EUR";
-                case "Yen":
-                    return "JPY";
-                case "BritishPound":
-                    return "GBP";
-                default:
-                    return string.Empty;
+                return string.Empty;
             }
+
+            return string.Equals(currencyMember, Currency.UsDollar.ToString(), StringComparison.Ordinal)
+                ? ExpectedAccountIdentity.Currency
+                : currencyMember;
         }
 
         private static bool IsD096RouteCandidate(Instrument instrument)
@@ -1473,28 +1483,6 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     return ConnectionState.Disconnected;
                 default:
                     return ConnectionState.Unknown;
-            }
-        }
-
-        /// <summary>
-        /// Maps the host currency enum to its ISO-4217 code so the required currency can be
-        /// compared as an exact code. An unmapped member yields an empty string, which is treated
-        /// as unobservable (fail closed) rather than guessed from the member name.
-        /// </summary>
-        private static string MapDenominationToIsoCode(Currency currency)
-        {
-            switch (currency)
-            {
-                case Currency.UsDollar:
-                    return "USD";
-                case Currency.Euro:
-                    return "EUR";
-                case Currency.Yen:
-                    return "JPY";
-                case Currency.BritishPound:
-                    return "GBP";
-                default:
-                    return string.Empty;
             }
         }
 
