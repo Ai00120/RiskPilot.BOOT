@@ -56,11 +56,44 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 if (requirement.EvidenceClass == Stage34EvidenceClass.RuntimeHost)
                 {
                     Assert.NotEmpty(requirement.BootChecks);
+
+                    // A runtime requirement must also name the BOOT test(s) that exercise its
+                    // backing check(s); otherwise the evidence is not actually exercised.
+                    Assert.False(string.IsNullOrEmpty(requirement.TestCoverage),
+                        "runtime requirement has no test coverage: " + requirement.Id);
                 }
                 else
                 {
                     Assert.Equal(Stage34VerificationScope.None, requirement.VerificationScope);
+                    Assert.True(string.IsNullOrEmpty(requirement.TestCoverage),
+                        "source-only requirement must not claim host test coverage: " + requirement.Id);
                 }
+            }
+        }
+
+        [Fact]
+        public void Catalog_IncludesTheOverlookedStage34Requirements()
+        {
+            // These are the requirements the audit added after re-inspecting the RiskPilot.BOT
+            // Stage 3/4 contract; a regression that drops one of them must fail here.
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var requirement in Stage34CoverageCatalog.All())
+            {
+                ids.Add(requirement.Id);
+            }
+
+            foreach (var expected in new[]
+            {
+                "S3-D022-VERSION-CORRELATION",
+                "S3-NO-INVENTED-DATA",
+                "S4-ACCOUNT-STATE-UNBYPASSABLE",
+                "S4-DRAWDOWN-CONTINUITY",
+                "S34-THREAD-SAFETY",
+                "ID-CONTRACT-EXPIRY",
+                "ID-PLATFORM"
+            })
+            {
+                Assert.True(ids.Contains(expected), "missing traced requirement: " + expected);
             }
         }
 
@@ -235,6 +268,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.Contains("\"id\":\"ID-ES-ECONOMICS\"", json);
             Assert.Contains("\"status\":\"VERIFIED\"", json);
             Assert.Contains("\"statement\":", json);
+            Assert.Contains("\"testCoverage\":\"EsProductSpecificationTests, HostInstrumentIdentityTests\"", json);
 
             // The artifact never carries a raw identity literal.
             Assert.DoesNotContain("SimRP.BOT", json);

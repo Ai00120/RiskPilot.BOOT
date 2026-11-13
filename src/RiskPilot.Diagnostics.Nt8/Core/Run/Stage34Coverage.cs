@@ -112,6 +112,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
         /// <summary>The current limitation of BOOT's coverage of the requirement.</summary>
         public string CurrentLimitation { get; set; }
 
+        /// <summary>
+        /// The BOOT test(s) that cover the backing check(s) for this requirement, so a reader can
+        /// confirm the evidence is actually exercised. Empty for a requirement with no runtime
+        /// host API (a source-level requirement is not covered by a host test).
+        /// </summary>
+        public string TestCoverage { get; set; }
+
         public Stage34Requirement()
         {
             Id = string.Empty;
@@ -126,6 +133,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
             EvidenceClass = Stage34EvidenceClass.RuntimeHost;
             VerificationScope = Stage34VerificationScope.Partial;
             CurrentLimitation = string.Empty;
+            TestCoverage = string.Empty;
         }
     }
 
@@ -234,39 +242,63 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
             {
                 Req("S3-D022-DUAL-POLICY", "Stage 3", "Dual-policy sizing architecture",
                     "PERCENTAGE_OF_RISK is the default policy; FIXED_QUANTITY is enabled only by explicit configuration; automatic fallback between policies is prohibited.",
-                    "D-022",
+                    "D-022 (conditions 1-4)",
                     new[] { "M7" }, new[] { "M7.STAGE3_SIZING", "M7.REASON_ATTRIBUTION" },
                     "RiskPilot.BOT read-only sizing reason-code distribution (IReadOnlyDiagnosticSource.ReadStrategies / sizing diagnostics).",
                     "Read the reported Stage 3 reason-code distribution and attribute each code to the sizing policy outcome.",
                     Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Partial, false, false,
-                    "BOOT can observe the sizing reason codes only when RiskPilot.BOT exposes its read-only diagnostics; the policy-selection logic itself is BOT-internal and is not re-derived here."),
+                    "BOOT can observe the sizing reason codes only when RiskPilot.BOT exposes its read-only diagnostics; the policy-selection logic itself is BOT-internal and is not re-derived here.",
+                    "M7StrategyTests"),
 
                 Req("S3-D022-FAILCLOSED", "Stage 3", "Fail-closed sizing on missing inputs",
                     "Missing, invalid, stale or unverified required inputs fail closed with RequestedQuantity = 0 and an explicit reason code (never a fabricated or defaulted quantity).",
-                    "D-022",
+                    "D-022 (condition 5)",
                     new[] { "M7" }, new[] { "M7.STAGE3_SIZING" },
                     "Stage 3 sizing reason-code distribution including zero-quantity outcomes.",
                     "Count the Stage 3 outcomes and the zero-quantity outcomes; a zero count is only meaningful once the sizing surface was observed.",
                     Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Partial, true, false,
-                    "A zero-quantity outcome is reported only as a raw distribution; BOOT does not re-evaluate the sizing math, so it cannot prove a specific input caused a specific reason."),
+                    "A zero-quantity outcome is reported only as a raw distribution; BOOT does not re-evaluate the sizing math, so it cannot prove a specific input caused a specific reason.",
+                    "M7StrategyTests"),
 
                 Req("S3-D022-QUANTITY-LATTICE", "Stage 3", "Quantity rounding / min / cap rules",
                     "Quantity is rounded DOWN to a multiple of QuantityStep; a result below QuantityMin fails closed rather than inflating; QuantityMax is enforced.",
-                    "D-022",
+                    "D-022 (condition 7)",
                     new[] { "M7" }, new[] { "M7.STAGE3_SIZING" },
                     "Stage 3 sizing reason codes (for example CALCULATED_QUANTITY_BELOW_MINIMUM / CAPPED_AT_QUANTITY_MAX).",
                     "Read the Stage 3 reason-code distribution and report the lattice-related outcomes.",
                     Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Partial, true, false,
-                    "BOOT reports the lattice reason codes as a distribution; it does not independently recompute the quantity lattice."),
+                    "BOOT reports the lattice reason codes as a distribution; it does not independently recompute the quantity lattice.",
+                    "M7StrategyTests"),
+
+                Req("S3-D022-VERSION-CORRELATION", "Stage 3", "Policy / configuration versioning and snapshot correlation",
+                    "The sizing policy and configuration versioning is traceable and correlated to the snapshot the decision was made against (no untraceable policy application).",
+                    "D-022 (condition 6)",
+                    new[] { "M7" }, new[] { "M7.STAGE_CORRELATION", "M7.STAGE3_SIZING" },
+                    "The correlation ids and any policy/configuration version the read-only source reports.",
+                    "Correlate the decision/proposal/risk ids; PASS only when the read-only source supplies a consistent, versioned correlation.",
+                    Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Partial, true, false,
+                    "No public host API exposes the sizing policy version; BOOT can only report the correlation the source supplies, and stays INCONCLUSIVE without it.",
+                    "M7StrategyTests"),
 
                 Req("S3-ANALYTICAL-NONEXECUTABLE", "Stage 3", "Stage 3 output is analytical and non-executable",
                     "Stage 3 produces an analytical SizedTradeProposal only; it never submits, modifies or cancels an order, and Trading=Disabled is preserved.",
-                    "D-022 / cross-stage invariant 1-2",
+                    "D-022 / cross-stage invariants 1-2",
                     new[] { "M8" }, new[] { "M8.SECURITY_SCAN", "M8.READ_ONLY_POSTURE", "M8.TRADING_DISABLED" },
                     "Read-only scan of production source plus the tool's runtime read-only posture.",
                     "Static safety scan of production source for forbidden order/execution APIs, plus the runtime trading-disabled / read-only posture.",
                     Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Full, true, false,
-                    "The scan proves the absence of forbidden patterns in the scanned source; it is a source-level guarantee, not a proof about RiskPilot.BOT's own source."),
+                    "The scan proves the absence of forbidden patterns in the scanned source; it is a source-level guarantee, not a proof about RiskPilot.BOT's own source.",
+                    "SecurityScanTests, Phase3ModuleTests"),
+
+                Req("S3-NO-INVENTED-DATA", "Stage 3", "No invented data (cross-stage invariant 4)",
+                    "Account equity, portfolio metrics, instrument metadata, stop/invalidation prices, risk limits, timestamps and sequence provenance are never synthesized to make a calculation pass.",
+                    "cross-stage invariant 4",
+                    new string[0], new string[0],
+                    "None: whether a value was fabricated is a RiskPilot.BOT-internal property; no host API exposes it.",
+                    "Not observable from the host; the boundary is documented from the RiskPilot.BOT contract.",
+                    Stage34EvidenceClass.SourceLevel, Stage34VerificationScope.None, false, false,
+                    "BOOT observes the fail-closed outcomes but cannot prove the absence of fabricated data; it reports this as SOURCE_ONLY.",
+                    string.Empty),
 
                 Req("S3-OD1-INVALIDATION", "Stage 3", "Structured InvalidationLevel provenance (OD-1)",
                     "PERCENTAGE_OF_RISK requires a positive numerical InvalidationLevel; prose parsing and fabricated levels are prohibited; a null level fails closed.",
@@ -275,16 +307,18 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                     "None: no public NinjaTrader API exposes RiskPilot.BOT's per-candidate InvalidationLevel provenance.",
                     "Not observable from the host; the boundary is documented from the RiskPilot.BOT contract.",
                     Stage34EvidenceClass.SourceLevel, Stage34VerificationScope.None, false, false,
-                    "No public host API exposes the invalidation producer; BOOT cannot verify it at runtime and reports it as SOURCE_ONLY."),
+                    "No public host API exposes the invalidation producer; BOOT cannot verify it at runtime and reports it as SOURCE_ONLY.",
+                    string.Empty),
 
                 Req("S4-MONOTONIC-QUANTITY", "Stage 4", "Monotonic quantity invariant",
                     "0 <= ApprovedQuantity <= RequestedQuantity; a veto means ApprovedQuantity = 0; Stage 4 never originates or increases quantity.",
-                    "D-022 / G3-c",
+                    "D-022 / cross-stage invariant 6 / G3-c",
                     new[] { "M7" }, new[] { "M7.RISK_GATE" },
                     "Stage 4 risk-gate reason-code distribution (approvals and vetoes).",
                     "Read the Stage 4 risk-gate reason-code distribution and report approvals versus vetoes.",
                     Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Partial, true, false,
-                    "BOOT observes the risk-gate outcome distribution, not the internal quantity arithmetic; the invariant itself is BOT-internal."),
+                    "BOOT observes the risk-gate outcome distribution, not the internal quantity arithmetic; the invariant itself is BOT-internal.",
+                    "M7StrategyTests"),
 
                 Req("S4-FAILCLOSED", "Stage 4", "Fail-closed risk gate on missing inputs",
                     "A missing/invalid risk policy, account state, instrument specification or portfolio evidence vetoes Stage 4 with ApprovedQuantity = 0 and an explicit reason.",
@@ -293,16 +327,28 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                     "Stage 4 veto reason-code distribution.",
                     "Read the Stage 4 veto reason distribution and attribute each code to its cause.",
                     Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Partial, true, false,
-                    "BOOT reports the veto reasons it observes; it does not reproduce the gate's decision logic."),
+                    "BOOT reports the veto reasons it observes; it does not reproduce the gate's decision logic.",
+                    "M7StrategyTests"),
 
-                Req("S4-ACCOUNT-STATE-GATE", "Stage 4", "Non-bypassable verified account state (D-032)",
-                    "Account-state verification is unconditional; a missing, unverified, stale or causally invalid account snapshot vetoes Stage 4; the state-injection setters are non-public.",
+                Req("S4-ACCOUNT-STATE-GATE", "Stage 4", "Verified account state gates Stage 4 (D-032)",
+                    "A missing, unverified, stale or causally invalid account snapshot vetoes Stage 4 with an explicit reason; no live account snapshot may be fabricated from defaults or fixtures.",
                     "D-032 / OD-3",
                     new[] { "M2", "M7" }, new[] { "M2.ACCOUNT_IDENTITY", "M7.RISK_GATE" },
                     "Account identity metadata (Account.All / Connection) and the Stage 4 veto reason distribution.",
                     "Verify the target account identity/connection, and read the Stage 4 veto reasons for account-state causes.",
                     Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Partial, true, true,
-                    "BOOT proves the account identity and observes account-state vetoes; it cannot read RiskPilot.BOT's in-memory AccountStateSnapshot or prove the setter visibility at runtime (that is a source fact)."),
+                    "BOOT proves the account identity and observes account-state vetoes; it cannot read RiskPilot.BOT's in-memory AccountStateSnapshot.",
+                    "M7StrategyTests, AccountIdentityTests, TargetAccountConnectionTests, HostTargetAccountConnectionTests"),
+
+                Req("S4-ACCOUNT-STATE-UNBYPASSABLE", "Stage 4", "Non-bypassable verified-account enforcement (OD-3)",
+                    "Production RequireVerifiedAccountState must be true and the account-state validation must be unconditional; the AddOn state-injection setters must be non-public so a caller cannot inject IsVerified = true.",
+                    "D-032 / OD-3 (contract §6)",
+                    new[] { "M2" }, new[] { "M2.ACCOUNT_IDENTITY", "M2.ACCOUNT_CONNECTION_ASSOCIATION" },
+                    "Account identity metadata only; the RequireVerifiedAccountState flag and setter visibility are BOT-internal.",
+                    "Verify the target account identity/connection; the flag value and setter visibility are not observable from the host.",
+                    Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Partial, true, true,
+                    "BOOT can confirm the account identity but cannot read RiskPilot.BOT's RequireVerifiedAccountState flag or prove setter visibility at runtime; those stay a source-level fact.",
+                    "AccountIdentityTests, TargetAccountConnectionTests, HostTargetAccountConnectionTests"),
 
                 Req("S4-RISK-POLICY", "Stage 4", "Compiled immutable RiskPolicyLimits with verified hash (D-036 / D-073)",
                     "The active SIM risk policy is a compiled, immutable, versioned profile whose content hash is recomputed and compared at resolution; an integrity failure fails closed.",
@@ -311,7 +357,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                     "None: the compiled profile and its hash live inside RiskPilot.BOT; no host API exposes them.",
                     "Not observable from the host; the boundary is documented from the RiskPilot.BOT contract.",
                     Stage34EvidenceClass.SourceLevel, Stage34VerificationScope.None, false, false,
-                    "The compiled policy profile and its SHA-256 are RiskPilot.BOT source facts; BOOT cannot verify them at runtime and reports this as SOURCE_ONLY."),
+                    "The compiled policy profile and its SHA-256 are RiskPilot.BOT source facts; BOOT cannot verify them at runtime and reports this as SOURCE_ONLY.",
+                    string.Empty),
 
                 Req("S4-PORTFOLIO-STATE", "Stage 4", "Dynamic portfolio state is not zero-defaulted (OD-2)",
                     "Unknown dynamic portfolio metrics must never silently default to zero; a missing measurement must be required or represented as unavailable and fail closed.",
@@ -320,7 +367,18 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                     "None: portfolio state is RiskPilot.BOT-internal; no public NinjaTrader API exposes it.",
                     "Not observable from the host; the boundary is documented from the RiskPilot.BOT contract.",
                     Stage34EvidenceClass.SourceLevel, Stage34VerificationScope.None, false, false,
-                    "The zero-default hazard is a RiskPilot.BOT source property; BOOT cannot verify it at runtime and reports this as SOURCE_ONLY."),
+                    "The zero-default hazard is a RiskPilot.BOT source property; BOOT cannot verify it at runtime and reports this as SOURCE_ONLY.",
+                    string.Empty),
+
+                Req("S4-DRAWDOWN-CONTINUITY", "Stage 4", "Drawdown continuity is not falsely reset (D-031-2 / R1)",
+                    "The portfolio high-water mark is never silently reset on reconnect, session change or a temporary missing observation; a false-zero drawdown must never be published, and an unknown continuity state vetoes Stage 4.",
+                    "D-031-2 / Owner-approved R1 remediation 2026-11-11",
+                    new string[0], new string[0],
+                    "None: the high-water mark and its continuity epoch live inside RiskPilot.BOT; no host API exposes them.",
+                    "Not observable from the host; the boundary is documented from the RiskPilot.BOT contract.",
+                    Stage34EvidenceClass.SourceLevel, Stage34VerificationScope.None, false, false,
+                    "Drawdown continuity is a RiskPilot.BOT-internal lifecycle property; BOOT cannot verify it at runtime and reports this as SOURCE_ONLY.",
+                    string.Empty),
 
                 Req("S34-CORRELATION", "Stage 4", "Decision→proposal→risk linkage preserved",
                     "The Stage 2 decision id, Stage 3 proposal id and Stage 4 risk-evaluation id are preserved and correlated end to end.",
@@ -329,7 +387,18 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                     "The three correlation ids supplied by the read-only diagnostic source.",
                     "Correlate the decision id, proposal id and risk-evaluation id; PASS only when all three are present and consistent.",
                     Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Full, true, false,
-                    "The correlation is only PASS when the read-only source actually supplies the three ids; without them it stays INCONCLUSIVE."),
+                    "The correlation is only PASS when the read-only source actually supplies the three ids; without them it stays INCONCLUSIVE.",
+                    "M7StrategyTests"),
+
+                Req("S34-THREAD-SAFETY", "Stage 4", "Thread-safety / subscriber isolation (cross-stage invariant 8)",
+                    "External subscribers, UI callbacks and user-provided code are never invoked while the pipeline lock is held; exception isolation is preserved so a failed subscriber cannot break the analytical pipeline.",
+                    "cross-stage invariant 8",
+                    new string[0], new string[0],
+                    "None: the pipeline lock and subscriber dispatch are RiskPilot.BOT-internal.",
+                    "Not observable from the host; the boundary is documented from the RiskPilot.BOT contract.",
+                    Stage34EvidenceClass.SourceLevel, Stage34VerificationScope.None, false, false,
+                    "Thread-safety and subscriber isolation are RiskPilot.BOT-internal; BOOT cannot verify them at runtime and reports this as SOURCE_ONLY.",
+                    string.Empty),
 
                 Req("ID-ACCOUNT", "Identity", "Exact account identity (D-095 / D-096)",
                     "The operational account is exactly the permanent single-account identity: the exact account name, provider Rithmic, on the existing bound connection, Simulation mode, USD. (The literal account/connection names live only in the reviewed identity definition and are never repeated here.)",
@@ -338,7 +407,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                     "Account.All / Account.Provider / Account.Connection / ConnectOptions / Account.Denomination.",
                     "Enumerate Account.All, match the exact account name ordinally, and compare provider / connection / mode / denomination (fail-closed on any unobservable or mismatching field).",
                     Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Full, true, true,
-                    "Requires the real Rithmic SIM account to be connected; with no account surface the check is INCONCLUSIVE, never PASS."),
+                    "Requires the real Rithmic SIM account to be connected; with no account surface the check is INCONCLUSIVE, never PASS.",
+                    "AccountIdentityTests, TargetAccountConnectionTests, HostTargetAccountConnectionTests"),
 
                 Req("ID-CONNECTION-PROVIDER", "Identity", "Exact connection / provider identity (D-096)",
                     "The account is bound to exactly the permanent connection identity with provider Rithmic, connected, and it is the account's own bound connection (never the first of several).",
@@ -347,7 +417,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                     "Connection.Connections / ConnectOptions.Provider / the account's own Connection.",
                     "Resolve the provider by string comparison on the target account's own connection (never the first of several), and confirm both feed states.",
                     Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Full, true, true,
-                    "Provider identity is resolved by string comparison (no guaranteed Rithmic enum member); the provider build is unobservable and never reported as PASS."),
+                    "Provider identity is resolved by string comparison (no guaranteed Rithmic enum member); the provider build is unobservable and never reported as PASS.",
+                    "TargetAccountConnectionTests, HostTargetAccountConnectionTests"),
 
                 Req("ID-INSTRUMENT", "Identity", "Canonical ES/CME instrument identity (D-078 / D-096)",
                     "The loaded instrument is the ES root on the CME venue, type Future, currency USD; the venue is confirmed by the D-096 configured route, never inferred from the symbol text.",
@@ -356,7 +427,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                     "Instrument.All / MasterInstrument.Name / InstrumentType / Currency / Instrument.Exchange / MasterInstrument.Exchanges.",
                     "Read the loaded instrument discovery surface, match the root exactly, and confirm the configured Globex/Rithmic route (fail-closed on unconfirmed exchange metadata).",
                     Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Full, true, true,
-                    "The venue is a configured-route mapping (Owner-authorized D-096), not an independent exchange-issued listing-venue attestation; the raw symbol is never reported."),
+                    "The venue is a configured-route mapping (Owner-authorized D-096), not an independent exchange-issued listing-venue attestation; the raw symbol is never reported.",
+                    "InstrumentIdentityTests, HostInstrumentIdentityTests"),
 
                 Req("ID-ES-ECONOMICS", "Identity", "Canonical ES economic specification (D-095 §4)",
                     "The ES product economics are point value 50, tick size 0.25, derived tick value 12.50 and USD.",
@@ -365,7 +437,28 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                     "MasterInstrument.PointValue / TickSize / Currency of the loaded ES instrument.",
                     "Compare the loaded instrument's own economics against the canonical CME ES contract facts (fail-closed on any unobservable or mismatching field).",
                     Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Full, true, true,
-                    "The canonical economics are published CME contract facts used as reference expectations, not an independent exchange attestation; the raw symbol is never reported."),
+                    "The canonical economics are published CME contract facts used as reference expectations, not an independent exchange attestation; the raw symbol is never reported.",
+                    "EsProductSpecificationTests, HostInstrumentIdentityTests"),
+
+                Req("ID-CONTRACT-EXPIRY", "Identity", "Contract expiry pin and manual rollover (D-085 / D-095 §5)",
+                    "The selected contract is the pinned ES expiry; the pin changes only through the separately governed manual rollover process (no automatic rollover or calendar-date inference), and the selected contract is consistent across market data, positions and attestation.",
+                    "D-085 / D-095 §5",
+                    new string[0], new string[0],
+                    "None: BOOT deliberately does not pin the expiry (only the canonical root/venue form is required, so a manual roll keeps the identity valid), and it cannot observe the governance of a pin change.",
+                    "Not observable from the host; the boundary is documented from the RiskPilot.BOT contract.",
+                    Stage34EvidenceClass.SourceLevel, Stage34VerificationScope.None, false, false,
+                    "BOOT verifies the canonical ES root/venue form (any expiry) but not the pinned expiry or the governed manual-rollover process; it reports this as SOURCE_ONLY and never claims the pin was changed only through the approved process.",
+                    string.Empty),
+
+                Req("ID-PLATFORM", "Identity", "NinjaTrader 8 platform identity and compatibility",
+                    "The product is hosted by NinjaTrader 8; the installed host build must be within the declared supported range before operational reliance.",
+                    "D-096 / NinjaTraderCompatibility declaration",
+                    new[] { "M1" }, new[] { "M1.HOST_COMPATIBILITY", "M1.HOST_VERSION", "M1.ENVIRONMENT_CLASS" },
+                    "The observed CLR / process environment and the declared target/minimum NinjaTrader versions.",
+                    "Compare the observed environment against the declared target/minimum; no public API exposes the exact installed host build.",
+                    Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Partial, true, false,
+                    "No public NinjaTrader API exposes the exact installed host build, so M1.HOST_COMPATIBILITY is always INCONCLUSIVE (never PASS) until a real-host run is recorded in TestedVersions.",
+                    "NinjaTraderCompatibilityTests, LifecycleDiagnosticsTests"),
 
                 Req("DEP-DOM-MARKETDATA", "Data", "DOM / Level II and Level I market-data surface",
                     "Stage 3/4 sizing and the order-flow inputs depend on a live Level I/Level II market-data surface with observable integrity and freshness.",
@@ -374,7 +467,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                     "Instrument.MarketData (Level I) and Instrument.MarketDepth (Level II) update events.",
                     "Subscribe read-only to the loaded instrument's market data / market depth and derive surface, integrity, freshness and validity evidence.",
                     Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Full, true, true,
-                    "Freshness is always INCONCLUSIVE and only labelled FRESH/STALE; depth is never inferred from a Level I quote."),
+                    "Freshness is always INCONCLUSIVE and only labelled FRESH/STALE; depth is never inferred from a Level I quote.",
+                    "M5DomMarketDataTests"),
 
                 Req("DEP-TRADEDELTA", "Data", "TradeDelta / OrderFlow inputs",
                     "The order-flow readiness inputs depend on a live trade stream with an observable sequence and direction source.",
@@ -383,7 +477,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                     "Level I trade prints plus the best bid/ask carried on the same event.",
                     "Ingest trade prints, derive the direction from the BBO (never provider-confirmed), and measure sequence continuity and completeness.",
                     Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Partial, true, true,
-                    "NT8's public Level I surface exposes no aggressor side, so direction is always derived; sequence continuity stays INCONCLUSIVE without an observed source sequence."),
+                    "NT8's public Level I surface exposes no aggressor side, so direction is always derived; sequence continuity stays INCONCLUSIVE without an observed source sequence.",
+                    "M6TradeDeltaTests"),
 
                 Req("DEP-POSTTRADE-AUDIT", "Data", "Order / execution / position lifecycle audit",
                     "The post-trade audit reconciles already-recorded order, execution and position events with correlation, timing and missing/duplicate detection.",
@@ -392,7 +487,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                     "Account.Orders snapshots plus any ingested order/execution/position events.",
                     "Read the already-recorded order/execution/position surface and reconcile lifecycles, correlation/timing and missing/duplicate events.",
                     Stage34EvidenceClass.RuntimeHost, Stage34VerificationScope.Partial, true, true,
-                    "The audit only covers events recorded while the tool ran; execution coverage is derived (the host reads only Account.Orders), never assumed.")
+                    "The audit only covers events recorded while the tool ran; execution coverage is derived (the host reads only Account.Orders), never assumed.",
+                    "Phase4PostTradeAuditTests, Phase4RuntimeIntegrationTests")
             };
         }
 
@@ -400,7 +496,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
             string id, string stage, string title, string requirement, string botReference,
             string[] modules, string[] checks, string hostData, string method,
             string evidenceClass, string scope, bool requiresRealHost, bool requiresRithmicSim,
-            string limitation)
+            string limitation, string testCoverage)
         {
             return new Stage34Requirement
             {
@@ -417,7 +513,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                 VerificationScope = scope,
                 RequiresRealHost = requiresRealHost,
                 RequiresRithmicSimAccount = requiresRithmicSim,
-                CurrentLimitation = limitation
+                CurrentLimitation = limitation,
+                TestCoverage = testCoverage
             };
         }
     }

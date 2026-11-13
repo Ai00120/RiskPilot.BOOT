@@ -937,6 +937,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
                 writer.WriteProperty("requiresRealHost", requirement.RequiresRealHost);
                 writer.WriteProperty("requiresRithmicSimAccount", requirement.RequiresRithmicSimAccount);
                 writer.WriteProperty("currentLimitation", requirement.CurrentLimitation);
+                writer.WriteProperty("testCoverage", requirement.TestCoverage);
                 writer.WriteProperty("status", coverage.Status);
                 writer.WriteProperty("observedChecks", coverage.ObservedChecks);
                 writer.WriteProperty("verifiedChecks", coverage.VerifiedChecks);
@@ -1196,6 +1197,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
                     item.Requirement.EvidenceClass,
                     item.Requirement.RequiresRealHost ? "yes" : "no",
                     item.Requirement.RequiresRithmicSimAccount ? "yes" : "no",
+                    item.Requirement.TestCoverage,
                     item.Requirement.CurrentLimitation
                 });
             }
@@ -1203,7 +1205,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             html.Table(new[]
             {
                 "Requirement", "Stage", "Title", "BOT ref", "BOOT modules", "BOOT checks", "Status",
-                "Scope", "Evidence class", "Needs real host", "Needs Rithmic SIM", "Current limitation"
+                "Scope", "Evidence class", "Needs real host", "Needs Rithmic SIM", "Test coverage", "Current limitation"
             }, fullCoverageRows);
 
             html.Element("h2", "Counters");

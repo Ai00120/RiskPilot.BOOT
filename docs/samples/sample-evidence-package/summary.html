@@ -10,7 +10,7 @@
   </tr>
   <tr>
     <th>Session ID</th>
-    <td>diag_20261112_080000_5e4671245e43462c97eb7d118cd7c510</td>
+    <td>diag_20261112_080000_17d8f189021f401fb75e6dd35e390449</td>
   </tr>
   <tr>
     <th>Mode</th>
@@ -154,7 +154,7 @@
   </tbody>
 </table>
 <h2>Stage 3 / Stage 4 coverage</h2>
-<div class="note">BOOT does NOT fully validate Stage 3 or Stage 4: of 18 traced requirement(s): 0 verified, 0 failed, 5 inconclusive, 10 not executed, 3 source-level only and 0 not covered. 7 are fully runtime-observable, 8 partially, and 3 not verifiable at runtime. 14 need a real NinjaTrader installation and 8 need an actual connected Rithmic simulation account.</div>
+<div class="note">BOOT does NOT fully validate Stage 3 or Stage 4: of 25 traced requirement(s): 0 verified, 0 failed, 6 inconclusive, 12 not executed, 7 source-level only and 0 not covered. 7 are fully runtime-observable, 11 partially, and 7 not verifiable at runtime. 17 need a real NinjaTrader installation and 9 need an actual connected Rithmic simulation account.</div>
 <table>
   <thead>
     <tr>
@@ -192,12 +192,28 @@
       <td>RUNTIME_HOST</td>
     </tr>
     <tr>
+      <td>S3-D022-VERSION-CORRELATION</td>
+      <td>Stage 3</td>
+      <td>Policy / configuration versioning and snapshot correlation</td>
+      <td>NOT_EXECUTED</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
       <td>S3-ANALYTICAL-NONEXECUTABLE</td>
       <td>Stage 3</td>
       <td>Stage 3 output is analytical and non-executable</td>
       <td>INCONCLUSIVE</td>
       <td>FULL</td>
       <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>S3-NO-INVENTED-DATA</td>
+      <td>Stage 3</td>
+      <td>No invented data (cross-stage invariant 4)</td>
+      <td>SOURCE_ONLY</td>
+      <td>NONE</td>
+      <td>SOURCE_LEVEL</td>
     </tr>
     <tr>
       <td>S3-OD1-INVALIDATION</td>
@@ -226,7 +242,15 @@
     <tr>
       <td>S4-ACCOUNT-STATE-GATE</td>
       <td>Stage 4</td>
-      <td>Non-bypassable verified account state (D-032)</td>
+      <td>Verified account state gates Stage 4 (D-032)</td>
+      <td>NOT_EXECUTED</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>S4-ACCOUNT-STATE-UNBYPASSABLE</td>
+      <td>Stage 4</td>
+      <td>Non-bypassable verified-account enforcement (OD-3)</td>
       <td>NOT_EXECUTED</td>
       <td>PARTIAL</td>
       <td>RUNTIME_HOST</td>
@@ -248,12 +272,28 @@
       <td>SOURCE_LEVEL</td>
     </tr>
     <tr>
+      <td>S4-DRAWDOWN-CONTINUITY</td>
+      <td>Stage 4</td>
+      <td>Drawdown continuity is not falsely reset (D-031-2 / R1)</td>
+      <td>SOURCE_ONLY</td>
+      <td>NONE</td>
+      <td>SOURCE_LEVEL</td>
+    </tr>
+    <tr>
       <td>S34-CORRELATION</td>
       <td>Stage 4</td>
       <td>Decision→proposal→risk linkage preserved</td>
       <td>NOT_EXECUTED</td>
       <td>FULL</td>
       <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>S34-THREAD-SAFETY</td>
+      <td>Stage 4</td>
+      <td>Thread-safety / subscriber isolation (cross-stage invariant 8)</td>
+      <td>SOURCE_ONLY</td>
+      <td>NONE</td>
+      <td>SOURCE_LEVEL</td>
     </tr>
     <tr>
       <td>ID-ACCOUNT</td>
@@ -285,6 +325,22 @@
       <td>Canonical ES economic specification (D-095 §4)</td>
       <td>NOT_EXECUTED</td>
       <td>FULL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>ID-CONTRACT-EXPIRY</td>
+      <td>Identity</td>
+      <td>Contract expiry pin and manual rollover (D-085 / D-095 §5)</td>
+      <td>SOURCE_ONLY</td>
+      <td>NONE</td>
+      <td>SOURCE_LEVEL</td>
+    </tr>
+    <tr>
+      <td>ID-PLATFORM</td>
+      <td>Identity</td>
+      <td>NinjaTrader 8 platform identity and compatibility</td>
+      <td>INCONCLUSIVE</td>
+      <td>PARTIAL</td>
       <td>RUNTIME_HOST</td>
     </tr>
     <tr>

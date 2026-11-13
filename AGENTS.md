@@ -429,9 +429,16 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 
 - The Stage 3/4 traceability matrix lives in `Core/Run/Stage34Coverage.cs`: `Stage34CoverageCatalog.All()`
   is the single source of truth (requirement id, stage, BOT ref, BOOT module(s) + exact check id(s),
-  host data, method, evidence class, scope, `requiresRealHost`/`requiresRithmicSimAccount`, limitation).
-  `Stage34CoverageEvaluator.Evaluate(result)` derives the per-run status from the results the run
-  actually produced; the readable form is `docs/STAGE34_COVERAGE.md`.
+  host data, method, evidence class, scope, `requiresRealHost`/`requiresRithmicSimAccount`, test
+  coverage, limitation). `Stage34CoverageEvaluator.Evaluate(result)` derives the per-run status from
+  the results the run actually produced; the readable form is `docs/STAGE34_COVERAGE.md`.
+- The catalog was reconciled against the authoritative RiskPilot.BOT Stage 3/4 records on `main`
+  (`G3_STAGE3_STAGE4_ARCHITECTURE_CONTRACT.md`, `DECISION_LOG.md`, the D-031-2/R1, D-036/D-073,
+  D-078/D-080, D-085, D-095 and D-096 owner decisions). Every runtime requirement names the BOOT
+  test(s) that exercise its backing check(s) (`TestCoverage`); a source-only requirement has none.
+  `Stage34CoverageTests` fails if a runtime requirement loses its test coverage or if one of the
+  traced requirements (S3-D022-VERSION-CORRELATION, S3-NO-INVENTED-DATA, S4-ACCOUNT-STATE-UNBYPASSABLE,
+  S4-DRAWDOWN-CONTINUITY, S34-THREAD-SAFETY, ID-CONTRACT-EXPIRY, ID-PLATFORM) is dropped.
 - Coverage status is **derived, never asserted**: `VERIFIED` only when **every** backing check ran and
   PASSed; a missing backing check ⇒ `INCONCLUSIVE` (never PASS); a requirement with no runtime host API
   ⇒ `SOURCE_ONLY`. The artifact always carries a `statement` that BOOT does **not** fully validate

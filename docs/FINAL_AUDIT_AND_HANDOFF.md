@@ -313,11 +313,21 @@ the run actually produced.
   `instrument#<hash>`; the raw symbol never leaves the host layer. A wrong value is `FAIL`, a
   missing value is `INCONCLUSIVE` (never `PASS`), and a stub/mock value is `INCONCLUSIVE`.
 - **Honest coverage boundary.** Each requirement carries an evidence class (`RUNTIME_HOST` /
-  `SOURCE_LEVEL`), a verification scope (`FULL` / `PARTIAL` / `NONE`) and two prerequisites
-  (`requiresRealHost`, `requiresRithmicSimAccount`). Three requirements that live entirely inside
-  RiskPilot.BOT (structured invalidation provenance OD-1, the compiled `RiskPolicyLimits` + hash
-  D-036/D-073, and non-zero-defaulted portfolio state OD-2) are reported `SOURCE_ONLY` — the
-  existence of a BOT feature in source is **not** runtime evidence and is never `VERIFIED`.
+  `SOURCE_LEVEL`), a verification scope (`FULL` / `PARTIAL` / `NONE`), two prerequisites
+  (`requiresRealHost`, `requiresRithmicSimAccount`) and the BOOT test(s) that exercise its backing
+  checks. Six requirements that live entirely inside RiskPilot.BOT (no invented data invariant 4,
+  structured invalidation provenance OD-1, the compiled `RiskPolicyLimits` + hash D-036/D-073,
+  non-zero-defaulted portfolio state OD-2, drawdown/high-water-mark continuity D-031-2/R1, and
+  thread-safety/subscriber isolation invariant 8) are reported `SOURCE_ONLY` — the existence of a
+  BOT feature in source is **not** runtime evidence and is never `VERIFIED`.
+- **Reconciled against RiskPilot.BOT `main`.** The matrix was reconciled against the authoritative
+  BOT Stage 3/4 records (`G3_STAGE3_STAGE4_ARCHITECTURE_CONTRACT.md`, `DECISION_LOG.md`, and the
+  D-031-2/R1, D-036/D-073, D-078/D-080, D-085, D-095 and D-096 owner decisions), which added seven
+  requirements a first pass had overlooked: policy/configuration versioning and snapshot correlation
+  (D-022 condition 6), the non-bypassable verified-account enforcement / setter-visibility trust
+  boundary (OD-3 §6), drawdown continuity (D-031-2/R1), thread safety (invariant 8), the
+  contract-expiry pin and manual-rollover governance (D-085/D-095 §5), the NinjaTrader 8 platform
+  identity, and the no-invented-data invariant.
 - **Fail-closed.** A requirement is only `VERIFIED` when **every** backing check ran and PASSed in
   the run; a missing backing check leaves it `INCONCLUSIVE`, and an unobserved requirement is never
   `PASS`. Every `stage34-coverage.json` carries an explicit `statement` that BOOT does **not** fully
@@ -372,7 +382,7 @@ is complete; the stub build is unaffected.
 | --- | --- | --- |
 | Stub build | `dotnet build ... -p:UseStubs=true -c Release` | **succeeded** |
 | Solution build (incl. tool) | `dotnet build RiskPilot.Diagnostics.Nt8.sln -c Release` | **succeeded** |
-| Unit + integration tests | `dotnet test ... -c Release` | **571 passed / 0 failed** |
+| Unit + integration tests | `dotnet test ... -c Release` | **572 passed / 0 failed** |
 | Static safety scan | `python3 verification/addon-smoke/test_diagnostic_safety.py` | **PASS** (126 files, 34 patterns) |
 | Real-host build | `dotnet build ... -p:UseStubs=false -c Release` | **FAILED** — NT8 DLLs absent (see §5) |
 

@@ -20,11 +20,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   and `full-report.html` (full matrix). The readable form is `docs/STAGE34_COVERAGE.md`.
   - Each requirement records its BOT reference, the BOOT module(s) and exact check id(s), the host
     data and verification method, an evidence class (`RUNTIME_HOST` / `SOURCE_LEVEL`), a verification
-    scope (`FULL` / `PARTIAL` / `NONE`) and whether it needs a real host / a connected Rithmic SIM
-    account. The per-run status is **derived, never asserted**: `VERIFIED` only when every backing
-    check ran and PASSed; a missing backing check leaves it `INCONCLUSIVE` (never `PASS`); a
-    requirement with no runtime host API is `SOURCE_ONLY`. The artifact always carries an explicit
-    `statement` that BOOT does **not** fully validate Stage 3 or Stage 4.
+    scope (`FULL` / `PARTIAL` / `NONE`), whether it needs a real host / a connected Rithmic SIM
+    account, and the BOOT test(s) that exercise its backing checks. The per-run status is **derived,
+    never asserted**: `VERIFIED` only when every backing check ran and PASSed; a missing backing
+    check leaves it `INCONCLUSIVE` (never `PASS`); a requirement with no runtime host API is
+    `SOURCE_ONLY`. The artifact always carries an explicit `statement` that BOOT does **not** fully
+    validate Stage 3 or Stage 4.
+  - The catalog was reconciled against the authoritative RiskPilot.BOT Stage 3/4 records on `main`
+    (`G3_STAGE3_STAGE4_ARCHITECTURE_CONTRACT.md`, `DECISION_LOG.md`, the D-031-2/R1, D-036/D-073,
+    D-078/D-080, D-085, D-095 and D-096 owner decisions). That added seven requirements the first
+    pass had overlooked: policy/configuration versioning and snapshot correlation (D-022 condition 6),
+    the non-bypassable verified-account enforcement / setter-visibility trust boundary (OD-3 §6),
+    drawdown / high-water-mark continuity (D-031-2 / R1), thread-safety and subscriber isolation
+    (cross-stage invariant 8), the contract-expiry pin and manual-rollover governance (D-085 /
+    D-095 §5), the NinjaTrader 8 platform identity, and the no-invented-data invariant (invariant 4).
+    `Stage34CoverageTests` fails if a runtime requirement loses its test coverage or if one of these
+    traced requirements is dropped.
   - New read-only check **`M4.ES_PRODUCT_SPEC`** (M4): proves the loaded ES instrument's *economics*
     — point value 50, tick size 0.25, derived tick value 12.50, currency USD — which Owner Decision
     D-095 §4 makes part of the one immutable canonical ES specification. `M4.INSTRUMENT_IDENTITY`
