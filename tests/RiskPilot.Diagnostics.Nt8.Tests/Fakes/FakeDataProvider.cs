@@ -32,6 +32,12 @@ namespace RiskPilot.Diagnostics.Nt8.Tests.Fakes
         /// </summary>
         public DiagnosticSnapshot Snapshot { get; set; }
 
+        /// <summary>
+        /// Read-only source the M8 security scan reads through. A test sets this to drive the
+        /// scan; when left null M8 reports the scan as INCONCLUSIVE (never PASS).
+        /// </summary>
+        public RiskPilot.Diagnostics.Nt8.Core.Contract.ISecurityScanSource SecurityScanSource { get; set; }
+
         public FakeDataProvider()
         {
             Environment = new EnvironmentRecord { Environment = EnvironmentClass.Simulation };
@@ -65,5 +71,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests.Fakes
         public IReadOnlyList<string> GetMissingApis() { return MissingApis; }
 
         public DiagnosticSnapshot GetSnapshot() { return Snapshot; }
+
+        public RiskPilot.Diagnostics.Nt8.Core.Contract.ISecurityScanSource GetSecurityScanSource() { return SecurityScanSource; }
     }
 }

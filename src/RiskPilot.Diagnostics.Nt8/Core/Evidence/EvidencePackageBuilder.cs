@@ -772,11 +772,44 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             writer.WriteProperty("status", AvailableStatus);
             writer.WriteProperty("tradingDisabledRuntimeEvidence", safety.TradingDisabledRuntimeEvidence);
             writer.WriteProperty("readOnlyPostureObserved", safety.ReadOnlyPostureObserved);
-            writer.WriteProperty("staticScanPassed", safety.StaticScanPassed);
-            writer.WriteProperty("staticScanForbiddenApiCount", safety.StaticScanForbiddenApiCount);
-            writer.WriteProperty("staticScanFileCount", safety.StaticScanFileCount);
             writer.WriteProperty("reportSecretFree", safety.ReportSecretFree);
             writer.WriteStringArrayProperty("unobservableItems", SecretRedactor.RedactArray(ToArray(safety.UnobservableItems)));
+
+            var scan = safety.SecurityScan;
+            if (scan == null)
+            {
+                writer.WriteProperty("securityScan", UnavailableStatus);
+            }
+            else
+            {
+                writer.BeginObject("securityScan");
+                writer.WriteProperty("status", scan.Executed ? AvailableStatus : UnavailableStatus);
+                writer.WriteProperty("executed", scan.Executed);
+                writer.WriteProperty("sourceAvailable", scan.SourceAvailable);
+                writer.WriteProperty("filesScanned", scan.FilesScanned);
+                writer.WriteProperty("ruleCount", scan.RuleCount);
+                writer.WriteProperty("hitCount", scan.HitCount);
+                writer.WriteProperty("tradingDisabledObservable", scan.TradingDisabledObservable);
+                writer.WriteProperty("tradingDisabledDeclared", scan.TradingDisabledDeclared);
+                writer.WriteProperty("identityDefinitionPresent", scan.IdentityDefinitionPresent);
+                writer.WriteProperty("identityDefinitionReviewed", scan.IdentityDefinitionReviewed);
+                writer.WriteProperty("unavailableReason", SecretRedactor.Redact(scan.UnavailableReason));
+                writer.WriteStringArrayProperty("reasonCodes", SecretRedactor.RedactArray(ToArray(scan.ReasonCodes)));
+
+                writer.BeginArray("hits");
+                foreach (var hit in scan.Hits)
+                {
+                    writer.BeginObject();
+                    writer.WriteProperty("ruleId", SecretRedactor.Redact(hit.RuleId));
+                    writer.WriteProperty("category", SecretRedactor.Redact(hit.Category));
+                    writer.WriteProperty("file", SecretRedactor.Redact(hit.File));
+                    writer.WriteProperty("line", hit.Line);
+                    writer.EndObject();
+                }
+
+                writer.EndArray();
+                writer.EndObject();
+            }
             writer.BeginArray("evidence");
             foreach (var item in safety.Evidence)
             {

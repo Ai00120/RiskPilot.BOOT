@@ -784,7 +784,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
-        public void M8_StaticScan_IsInconclusiveWhenNotSupplied()
+        public void M8_SecurityScan_IsInconclusiveWhenNotSupplied()
         {
             var provider = new FakeDataProvider
             {
@@ -792,7 +792,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             };
 
             var results = new M8SafetyAcceptanceProbe().Evaluate(Context(provider));
-            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M8.STATIC_SAFETY_SCAN").Status);
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M8.SECURITY_SCAN").Status);
         }
 
         [Fact]
@@ -899,21 +899,31 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         [Fact]
         public void Runtime_SuppliesTradingDisabledRuntimeEvidence_SoM8CanPass()
         {
+            var provider = new FakeDataProvider
+            {
+                SecurityScanSource = CleanSecurityScanSource()
+            };
             using var runtime = new DiagnosticRuntime(
-                new FakeDataProvider(),
+                provider,
                 new FakeClock(new DateTime(2026, 11, 12, 8, 0, 0, DateTimeKind.Utc)),
                 64,
-                64)
-            {
-                StaticSafetyScan = new SafetyScanEvidence { Passed = true, ForbiddenApiHits = 0, FilesScanned = 75 }
-            };
+                64);
             runtime.Initialize();
             runtime.Start();
 
             var report = runtime.RunDiagnosticPass();
             var trading = Find(report.Results, "M8.TRADING_DISABLED");
             Assert.Equal(DiagnosticStatus.PASS, trading.Status);
-            Assert.Equal(DiagnosticStatus.PASS, Find(report.Results, "M8.STATIC_SAFETY_SCAN").Status);
+            Assert.Equal(DiagnosticStatus.PASS, Find(report.Results, "M8.SECURITY_SCAN").Status);
+        }
+
+        /// <summary>
+        /// A minimal, clean read-only source: a production AddOn declaring the trading-disabled
+        /// invariant and the reviewed identity definition carrying the Owner identity literal.
+        /// </summary>
+        internal static Fakes.FakeSecurityScanSource CleanSecurityScanSource()
+        {
+            return Fakes.FakeSecurityScanSource.Clean();
         }
 
     }

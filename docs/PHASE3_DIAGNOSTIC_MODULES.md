@@ -429,24 +429,38 @@ OrderFlow با `RESET_OPERATION_RECEIVED`؛ کنارگذاری TradeDelta با `
 
 ## 10. ماژول ۸ — Safety / Acceptance
 
-**پیاده‌سازی:** `Probes/M8SafetyAcceptanceProbe.cs`، `Host/DiagnosticRuntime.EnrichWithSafetyEvidence`.
+**پیاده‌سازی:** `Probes/M8SafetyAcceptanceProbe.cs` (اجرای read-only security scan)،
+`Core/Security/SecurityScanner.cs` + `Core/Security/SecurityScanRules.cs` (قوانین)،
+`Core/Contract/ISecurityScanSource.cs` + `Host/FileSystemSecurityScanSource.cs` (منبع read-only)،
+`Host/DiagnosticRuntime.EnrichWithSafetyEvidence`.
 
 | Check | معنا |
 |---|---|
+| `M8.SECURITY_SCAN` | اجرای read-only scan امنیتی روی سورس production (مالکیت کامل M8) |
 | `M8.TRADING_DISABLED` | شواهد **Runtime** برای Trading=Disabled |
 | `M8.READ_ONLY_POSTURE` | عدم فراخوانی API معاملاتی |
 | `M8.SECRET_FREE_REPORT` | گزارش بدون راز |
 | `M8.EVIDENCE_INTEGRITY` | یکپارچگی شواهد |
-| `M8.STATIC_SAFETY_SCAN` | نتیجهٔ static scan (out-of-band) |
 | `M8.UNOBSERVABLE` | فهرست موارد غیرقابل‌مشاهده |
 
 **قاعدهٔ کلیدی:** صرف وجود `Trading=Disabled` در فایل تنظیمات **برای PASS کافی نیست**. شواهد
 Runtime لازم است. `TradingDisabledRuntimeEvidence` توسط خود runtime (که هیچ کد مسیری برای فعال‌کردن
-معامله ندارد) و `StaticSafetyScan` از بیرون تأمین می‌شوند. اگر نباشند → `INCONCLUSIVE` با
+معامله ندارد) تأمین می‌شود. اگر نباشد → `INCONCLUSIVE` با
 `TRADING_DISABLED_RUNTIME_EVIDENCE_MISSING`.
 
-**مرجع API:** هیچ API معاملاتی فراخوانی نمی‌شود؛ صرفاً invariants خود ابزار.
-**تست‌ها:** `Phase3ModuleTests.M8_*` (۴ تست).
+**مالکیت امنیتی M8:** M8 خودش اسکن امنیتی read-only را **اجرا** می‌کند (نه اینکه فقط یک نتیجهٔ
+out-of-band را گزارش کند). منبع از طریق `IDiagnosticDataProvider.GetSecurityScanSource()`
+(`ISecurityScanSource`، فقط خواندن) تأمین می‌شود؛ منطق در `Core/Security/SecurityScanner.cs`
+(host-free) قرار دارد و قوانینش همان چک‌های قبلی را حفظ می‌کند: عدم API سفارش/تغییر حساب، عدم
+فعال‌سازی معاملهٔ زنده، عدم reflection/unsafe/interop، محدودبودن literalهای هویت Owner به فایل
+تعریف‌شده، و اعلان trading-disabled در AddOn. نتیجهٔ اسکن در `SessionContext.SecurityScan` منتشر
+می‌شود و در خروجی evidence گزارش می‌گردد، **بدون اجرای دوباره** (تک‌مالک).
+**Fail-closed:** منبع ناموجود/غیرقابل‌خواندن یا فایل خوانده‌نشده → `INCONCLUSIVE` (هرگز `PASS`)؛
+هیچ‌کدام از استثناها بی‌صدا به `PASS` تبدیل نمی‌شوند؛ یک hit مثبت → `FAIL`.
+
+**مرجع API:** هیچ API معاملاتی فراخوانی نمی‌شود؛ اسکن صرفاً سورس را می‌خواند و هیچ تنظیمات NT8 را
+تغییر نمی‌دهد.
+**تست‌ها:** `SecurityScanTests` (قوانین اسکنر + مالکیت/گزارش M8) و `Phase3ModuleTests.M8_*`.
 **محدودیت:** موارد غیرقابل‌مشاهده همیشه فهرست می‌شوند (نسخهٔ Runtime میزبان، نسخهٔ provider،
 aggressor side).
 
@@ -521,13 +535,14 @@ aggressor side).
 | M5 | `Phase3ModuleTests.M5_*` | 2 | PASS |
 | M6 | `Phase3ModuleTests.M6_*` | 4 | PASS |
 | M7 | `Phase3ModuleTests.M7_*` (11) + `M7StrategyTests` (16) | 27 | PASS |
-| M8 | `Phase3ModuleTests.M8_*` | 4 | PASS |
+| M8 | `Phase3ModuleTests.M8_*` (4) + `SecurityScanTests` (22: اسکنر + مالکیت M8) | 26 | PASS |
 | Runtime integration | `Phase3ModuleTests.Runtime_*` | 2 | PASS |
 | Counter/assembler | `Phase3ModuleTests.M6Consumer_*`, `SnapshotAssembler_*` | 2 | PASS |
 | Generic fail-closed | `ProbeTests.Probes_NeverReturnPassWithoutObservation`, `Phase3ModuleTests.AllPhase3Probes_NeverPassWithoutEvidence` | 2 | PASS |
 | **مجموع کل سوئیت** | | **149** | **PASS** |
 
-Static safety scan: **PASS** (75 فایل، 34 الگو).
+Static safety scan: **PASS** (119 فایل، 34 الگو). اسکنر درون‌فرآیندی `Core/Security/SecurityScanner.cs`
+همین ۳۴ الگو را در `M8.SECURITY_SCAN` اجرا می‌کند (تک‌مالک M8).
 
 ---
 

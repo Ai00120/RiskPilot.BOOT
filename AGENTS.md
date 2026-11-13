@@ -311,6 +311,34 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   connection identity enters it. Tests: `M7StrategyTests` (accumulator, assembler, host capture,
   runtime integration); a green stub run is **not** real-host proof.
 
+## M8 Security Scan (P7 — security ownership)
+
+- The read-only security scan is **owned and executed by M8** (`Core/Engine/Probes/M8SafetyAcceptanceProbe.cs`),
+  never injected as a bare boolean from outside. M8 runs the host-free `Core/Security/SecurityScanner.cs`
+  against the read-only source the data provider supplies. The previous out-of-band `StaticSafetyScan`
+  property / `SafetyScanEvidence` class on `DiagnosticRuntime` were removed.
+- The scan check id is `M8.SECURITY_SCAN` (was `M8.STATIC_SAFETY_SCAN`). It preserves every rule the
+  offline `verification/addon-smoke` scan applied (order/account mutation, live-trading enable,
+  reflection/unsafe/interop, identity-literal confinement, trading-disabled declaration), so there are
+  no missing checks and no duplicate execution (M8 is the single executor).
+- Source contract: `Core/Contract/ISecurityScanSource.cs` (`IsAvailable`, `GetSourceFiles()`, `ReadFile`,
+  `FileExists`) — strictly read-only. The host adapter is `Host/FileSystemSecurityScanSource.cs`
+  (reads production source under `src/RiskPilot.Diagnostics.Nt8`, excludes `/Stubs/`, `/obj/`, `/bin/`;
+  never writes and never touches NT8 configuration). `IDiagnosticDataProvider.GetSecurityScanSource()`
+  exposes it; the host provider returns a `FileSystemSecurityScanSource`.
+- Single result, two paths: M8 publishes the scan to `SessionContext.SecurityScan`; `SnapshotAssembler.MergeSecurityScan`
+  copies it into the export snapshot, so the live probe and the exported `safety-audit.json` report the
+  **same** scan without a second run.
+- Fail-closed: a null/unavailable/unreadable source, or no readable file, ⇒ `INCONCLUSIVE` (never PASS);
+  an unreadable file in the set is recorded as `SECURITY_SCAN_EXCEPTION` and blocks a clean PASS; a
+  positive forbidden hit or a leaked identity literal or a missing trading-disabled declaration ⇒ `FAIL`.
+  Exceptions and unavailable security info never silently produce PASS.
+- Identity literals are never hardcoded in the scanner: `SecurityScan.ContainsIdentityLiteral` draws them
+  from `ExpectedAccountIdentity`, so the scanner is never itself a leak site. `safety-audit.json` carries
+  a `securityScan` block (executed/counts/reasonCodes/hits by rule+file+line only — no code fragment).
+- Tests: `SecurityScanTests` (scanner rules + M8 ownership/reporting over the in-memory read-only source)
+  and the M8 cases in `Phase3ModuleTests` / `Phase5ScenarioTests`. A green stub run is **not** real-host proof.
+
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live

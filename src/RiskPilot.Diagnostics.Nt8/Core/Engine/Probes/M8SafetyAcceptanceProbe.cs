@@ -1,20 +1,24 @@
 using System;
 using System.Collections.Generic;
-using RiskPilot.Diagnostics.Nt8.Core.Identity;
 using RiskPilot.Diagnostics.Nt8.Core.Models;
 using RiskPilot.Diagnostics.Nt8.Core.Models.Observations;
 using RiskPilot.Diagnostics.Nt8.Core.Result;
+using RiskPilot.Diagnostics.Nt8.Core.Security;
 using RiskPilot.Diagnostics.Nt8.Core.Status;
 
 namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
 {
     /// <summary>
-    /// M8 — Safety &amp; acceptance. Verifies the read-only posture from runtime evidence, not
-    /// from a configuration value: <c>Trading=Disabled</c> in a settings file is not sufficient
-    /// on its own. The module reports the runtime evidence for trading-disabled, the static
-    /// proof that no order/account API exists in the tool, the secret-free state of the report,
-    /// and the items that remain unobservable. Missing runtime evidence is INCONCLUSIVE, never
-    /// PASS.
+    /// M8 — Safety &amp; acceptance. It owns and executes the read-only security scan and reports
+    /// the tool's runtime safety posture (trading-disabled, read-only), the secret-free state of
+    /// the report, the session evidence integrity and the items that remain unobservable.
+    /// <para>
+    /// The security scan is the single owner of the forbidden-API/identity-confinement checks: it
+    /// runs here, inside M8, over the read-only source the data provider supplies, and no other
+    /// module executes it, so there is no duplicate scan. It preserves every check the offline
+    /// <c>verification/addon-smoke</c> scan performed. Missing runtime evidence, an unavailable
+    /// scan source, or an unreadable file is INCONCLUSIVE, never PASS (fail-closed).
+    /// </para>
     /// </summary>
     public sealed class M8SafetyAcceptanceProbe : IDiagnosticProbe
     {
@@ -30,22 +34,173 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             var snapshot = context.Snapshot;
             var observation = snapshot != null ? snapshot.Safety : null;
 
+            // The security scan is owned by M8 and runs here, independent of whether the host
+            // supplied a safety observation: an absent observation must not suppress the scan.
+            var scan = RunSecurityScan(context);
+
+            // Publish the single scan result on the session so the evidence export reports the
+            // same scan the live probe produced, without a second (duplicate) execution.
+            try
+            {
+                context.Session.SecurityScan = scan;
+            }
+            catch (Exception)
+            {
+                // A session that cannot hold the scan still reports it on the live path.
+            }
+
+            results.Add(BuildSecurityScanCheck(scan, correlation, now));
+
             if (observation == null)
             {
                 results.Add(FindingFactory.Unobservable(ModuleId, "M8.TRADING_DISABLED", correlation, now,
                     "No safety observation was supplied by the host layer.",
                     "Run the pass inside the host so the runtime safety evidence is captured."));
+                results.Add(FindingFactory.Unobservable(ModuleId, "M8.READ_ONLY_POSTURE", correlation, now,
+                    "No safety observation was supplied by the host layer.",
+                    "Run the pass inside the host so the runtime safety evidence is captured."));
+                results.Add(FindingFactory.Unobservable(ModuleId, "M8.SECRET_FREE_REPORT", correlation, now,
+                    "No safety observation was supplied by the host layer.",
+                    "Run the pass inside the host so the runtime safety evidence is captured."));
+                results.Add(BuildEvidenceIntegrityCheck(context, correlation, now));
+                results.Add(BuildUnobservableCheck(null, correlation, now));
                 return results;
             }
 
             results.Add(BuildTradingDisabledCheck(observation, correlation, now));
             results.Add(BuildReadOnlyCheck(observation, correlation, now));
-            results.Add(BuildStaticScanCheck(observation, correlation, now));
             results.Add(BuildSecretFreeCheck(observation, correlation, now));
             results.Add(BuildEvidenceIntegrityCheck(context, correlation, now));
             results.Add(BuildUnobservableCheck(observation, correlation, now));
 
             return results;
+        }
+
+        /// <summary>
+        /// Runs the read-only security scan against the provider-supplied source. It never throws:
+        /// a null source, an exception or an unreadable source yields an unexecuted observation so
+        /// the check stays INCONCLUSIVE rather than PASS.
+        /// </summary>
+        private static SecurityScanObservation RunSecurityScan(ProbeContext context)
+        {
+            try
+            {
+                var source = context.DataProvider.GetSecurityScanSource();
+                return SecurityScanner.Scan(source);
+            }
+            catch (Exception)
+            {
+                return new SecurityScanObservation
+                {
+                    Executed = false,
+                    UnavailableReason = SecurityScanReasonCodes.Exception,
+                    ReasonCodes = new List<string> { SecurityScanReasonCodes.Exception }
+                };
+            }
+        }
+
+        /// <summary>
+        /// The read-only security scan result. PASS only when the scan actually executed, found no
+        /// forbidden pattern, the AddOn declared the trading-disabled invariant and the distinct
+        /// Owner identity literals stay confined to the reviewed definition file. A positive hit is
+        /// FAIL (it is itself evidence). An unexecuted/unavailable scan is INCONCLUSIVE.
+        /// </summary>
+        private DiagnosticResult BuildSecurityScanCheck(SecurityScanObservation scan, string correlation, DateTime now)
+        {
+            if (scan == null || !scan.Executed)
+            {
+                var reason = scan != null && !string.IsNullOrEmpty(scan.UnavailableReason)
+                    ? scan.UnavailableReason
+                    : SecurityScanReasonCodes.SourceUnavailable;
+
+                return DiagnosticResult
+                    .Inconclusive(ModuleId, "M8.SECURITY_SCAN", correlation, now)
+                    .WithFindingId("M8.SECURITY_SCAN")
+                    .WithReasonCode(reason)
+                    .WithObservation("The read-only security scan could not run: " + reason + ".")
+                    .WithSource(FindingFactory.SourceStaticScan)
+                    .WithMethod("Read-only scan of production source for forbidden order/account/reflection/unsafe patterns.")
+                    .WithLimitation("Without a readable source the absence of forbidden APIs is unproven; it is never reported as PASS.")
+                    .WithNextAction("Run the diagnostic where the production source is readable (the repo tree or the NinjaScript custom-compile folder).")
+                    .WithEvidence(DiagnosticEvidence.Unobservable(FindingFactory.SourceStaticScan, reason, now));
+            }
+
+            // A positive forbidden-pattern hit, a leaked identity literal, a missing
+            // trading-disabled declaration or a definition file that no longer defines the
+            // identity literals is itself evidence of a defect: FAIL, never PASS.
+            if (scan.HitCount > 0
+                || Contains(scan.ReasonCodes, SecurityScanReasonCodes.TradingDisabledMissing)
+                || Contains(scan.ReasonCodes, SecurityScanReasonCodes.DefinitionMissing)
+                || Contains(scan.ReasonCodes, SecurityScanReasonCodes.DefinitionLiteralMissing))
+            {
+                var evidence = new List<DiagnosticEvidence>
+                {
+                    DiagnosticEvidence.Observable(FindingFactory.SourceStaticScan, "forbiddenApiHits=" + scan.HitCount, now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourceStaticScan, "filesScanned=" + scan.FilesScanned, now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourceStaticScan, "tradingDisabledDeclared=" + scan.TradingDisabledDeclared, now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourceStaticScan, "identityDefinitionReviewed=" + scan.IdentityDefinitionReviewed, now)
+                };
+
+                // Report each hit by rule id and file only — never a code fragment, so a hit can
+                // never leak source into the finding or artifact.
+                foreach (var hit in scan.Hits)
+                {
+                    evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourceStaticScan,
+                        "hit rule=" + hit.RuleId + " category=" + hit.Category + " file=" + hit.File + " line=" + hit.Line, now));
+                }
+
+                return DiagnosticResult
+                    .Fail(ModuleId, "M8.SECURITY_SCAN", ErrorClass.ConfigurationInvalid, correlation, now)
+                    .WithFindingId("M8.SECURITY_SCAN")
+                    .WithReasonCode(ToArray(scan.ReasonCodes))
+                    .WithObservation("forbiddenApiHits=" + scan.HitCount + " filesScanned=" + scan.FilesScanned
+                        + " tradingDisabledDeclared=" + scan.TradingDisabledDeclared
+                        + " identityDefinitionReviewed=" + scan.IdentityDefinitionReviewed)
+                    .WithSource(FindingFactory.SourceStaticScan)
+                    .WithMethod("Read-only scan of production source for forbidden order/account/reflection/unsafe patterns and identity-literal confinement.")
+                    .WithLimitation("A static scan proves the absence of forbidden patterns in source; it is not a runtime guarantee.")
+                    .WithNextAction("Remove the forbidden pattern (or confirm and fix the identity/invariant finding), then re-run the pass.")
+                    .WithEvidence(evidence.ToArray());
+            }
+
+            // The scan ran but the AddOn's trading-disabled declaration was not observable (its
+            // file was not in the scanned set). The absence of that evidence is not a PASS.
+            if (!scan.TradingDisabledObservable)
+            {
+                return DiagnosticResult
+                    .Inconclusive(ModuleId, "M8.SECURITY_SCAN", correlation, now)
+                    .WithFindingId("M8.SECURITY_SCAN")
+                    .WithReasonCode(SecurityScanReasonCodes.TradingDisabledMissing)
+                    .WithObservation("forbiddenApiHits=" + scan.HitCount + " filesScanned=" + scan.FilesScanned
+                        + " tradingDisabledDeclared=UNOBSERVABLE")
+                    .WithSource(FindingFactory.SourceStaticScan)
+                    .WithMethod("Read-only scan of production source; the AddOn declaration file was not in the scanned set.")
+                    .WithLimitation("The trading-disabled invariant could not be confirmed because its declaring file was not scanned.")
+                    .WithNextAction("Confirm the AddOn source is present in the scanned source set, then re-run.")
+                    .WithEvidence(
+                        DiagnosticEvidence.Observable(FindingFactory.SourceStaticScan, "forbiddenApiHits=" + scan.HitCount, now),
+                        DiagnosticEvidence.Unobservable(FindingFactory.SourceStaticScan, "TRADING_DISABLED_DECLARATION_NOT_OBSERVED", now));
+            }
+
+            return DiagnosticResult
+                .Pass(ModuleId, "M8.SECURITY_SCAN", correlation, now)
+                .WithFindingId("M8.SECURITY_SCAN")
+                .WithReasonCode(SecurityScanReasonCodes.Passed,
+                    "FORBIDDEN_API_HITS=" + scan.HitCount,
+                    "FILES_SCANNED=" + scan.FilesScanned,
+                    "RULES_APPLIED=" + scan.RuleCount)
+                .WithObservation("forbiddenApiHits=" + scan.HitCount + " filesScanned=" + scan.FilesScanned
+                    + " rules=" + scan.RuleCount + " tradingDisabledDeclared=" + scan.TradingDisabledDeclared)
+                .WithSource(FindingFactory.SourceStaticScan)
+                .WithMethod("Read-only scan of production source for forbidden order/account/reflection/unsafe patterns and identity-literal confinement.")
+                .WithLimitation("A static scan proves the absence of forbidden patterns in source; it is not a runtime guarantee and it never mutates any host configuration.")
+                .WithNextAction("None.")
+                .WithEvidence(
+                    DiagnosticEvidence.Observable(FindingFactory.SourceStaticScan, "forbiddenApiHits=" + scan.HitCount, now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourceStaticScan, "filesScanned=" + scan.FilesScanned, now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourceStaticScan, "rulesApplied=" + scan.RuleCount, now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourceStaticScan, "tradingDisabledDeclared=" + scan.TradingDisabledDeclared, now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourceStaticScan, "identityDefinitionReviewed=" + scan.IdentityDefinitionReviewed, now));
         }
 
         private DiagnosticResult BuildTradingDisabledCheck(SafetyObservation observation, string correlation, DateTime now)
@@ -90,7 +245,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     .WithSource(FindingFactory.SourcePublicApi)
                     .WithMethod("Runtime check that no order/account/connection mutation path is reachable.")
                     .WithLimitation("Absence of mutation is only proven for the paths the tool exercises.")
-                    .WithNextAction("Run the pass inside the host; the static scan complements this check.");
+                    .WithNextAction("Run the pass inside the host; the security scan complements this check.");
             }
 
             return DiagnosticResult
@@ -99,39 +254,10 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 .WithReasonCode("READ_ONLY_POSTURE_OBSERVED")
                 .WithObservation("No order/account/connection mutation path is reachable from the tool.")
                 .WithSource(FindingFactory.SourcePublicApi)
-                .WithMethod("Runtime check plus the static scan of production source.")
-                .WithLimitation("Runtime observation is complemented by, but not replaced by, the static scan.")
+                .WithMethod("Runtime check plus the security scan of production source.")
+                .WithLimitation("Runtime observation is complemented by, but not replaced by, the security scan.")
                 .WithNextAction("None.")
                 .WithEvidence(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "readOnlyPostureObserved=true", now));
-        }
-
-        private DiagnosticResult BuildStaticScanCheck(SafetyObservation observation, string correlation, DateTime now)
-        {
-            if (!observation.StaticScanPassed)
-            {
-                return DiagnosticResult
-                    .Inconclusive(ModuleId, "M8.STATIC_SAFETY_SCAN", correlation, now)
-                    .WithFindingId("M8.STATIC_SAFETY_SCAN")
-                    .WithReasonCode("STATIC_SCAN_NOT_SUPPLIED")
-                    .WithObservation("No static safety scan result was supplied to this pass.")
-                    .WithSource(FindingFactory.SourceStaticScan)
-                    .WithMethod("The verification/addon-smoke static scan is run separately and its result is supplied here.")
-                    .WithLimitation("Without the scan result, the absence of forbidden APIs is not asserted by this module.")
-                    .WithNextAction("Run python3 verification/addon-smoke/test_diagnostic_safety.py and supply its result.");
-            }
-
-            return DiagnosticResult
-                .Pass(ModuleId, "M8.STATIC_SAFETY_SCAN", correlation, now)
-                .WithFindingId("M8.STATIC_SAFETY_SCAN")
-                .WithReasonCode("STATIC_SCAN_PASSED", "FORBIDDEN_API_HITS=" + observation.StaticScanForbiddenApiCount, "FILES_SCANNED=" + observation.StaticScanFileCount)
-                .WithObservation("forbiddenApiHits=" + observation.StaticScanForbiddenApiCount + " filesScanned=" + observation.StaticScanFileCount)
-                .WithSource(FindingFactory.SourceStaticScan)
-                .WithMethod("Static scan of production source for forbidden order/account/reflection/unsafe patterns.")
-                .WithLimitation("A static scan proves the absence of forbidden patterns in source; it is not a runtime guarantee.")
-                .WithNextAction("None.")
-                .WithEvidence(
-                    DiagnosticEvidence.Observable(FindingFactory.SourceStaticScan, "forbiddenApiHits=" + observation.StaticScanForbiddenApiCount, now),
-                    DiagnosticEvidence.Observable(FindingFactory.SourceStaticScan, "filesScanned=" + observation.StaticScanFileCount, now));
         }
 
         private DiagnosticResult BuildSecretFreeCheck(SafetyObservation observation, string correlation, DateTime now)
@@ -200,7 +326,9 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
 
         private DiagnosticResult BuildUnobservableCheck(SafetyObservation observation, string correlation, DateTime now)
         {
-            var items = observation.UnobservableItems ?? new List<string>();
+            var items = observation != null && observation.UnobservableItems != null
+                ? observation.UnobservableItems
+                : new List<string>();
             var evidence = new List<DiagnosticEvidence>();
             foreach (var item in items)
             {
@@ -222,6 +350,40 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 .WithLimitation("These items require an out-of-band confirmation; they can never be PASS from inside the process.")
                 .WithNextAction("Confirm these items out of band and record them in the acceptance report.")
                 .WithEvidence(evidence.ToArray());
+        }
+
+        private static bool Contains(IList<string> codes, string code)
+        {
+            if (codes == null)
+            {
+                return false;
+            }
+
+            foreach (var value in codes)
+            {
+                if (string.Equals(value, code, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string[] ToArray(IList<string> values)
+        {
+            if (values == null || values.Count == 0)
+            {
+                return new string[0];
+            }
+
+            var array = new string[values.Count];
+            for (var i = 0; i < values.Count; i++)
+            {
+                array[i] = values[i];
+            }
+
+            return array;
         }
     }
 }

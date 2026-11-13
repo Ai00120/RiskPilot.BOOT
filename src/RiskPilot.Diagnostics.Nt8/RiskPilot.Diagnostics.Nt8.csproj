@@ -53,6 +53,8 @@
     <Compile Include="Core\Status\DiagnosticStatus.cs" />
     <Compile Include="Core\Security\SecretRedactor.cs" />
     <Compile Include="Core\Security\SyntheticRef.cs" />
+    <Compile Include="Core\Security\SecurityScanRules.cs" />
+    <Compile Include="Core\Security\SecurityScanner.cs" />
     <Compile Include="Core\Models\ModelEnums.cs" />
     <Compile Include="Core\Models\NormalizedRecord.cs" />
     <Compile Include="Core\Models\EnvironmentRecord.cs" />
@@ -75,6 +77,7 @@
     <Compile Include="Core\Models\Observations\TradeDeltaObservation.cs" />
     <Compile Include="Core\Models\Observations\StrategyRiskGateObservation.cs" />
     <Compile Include="Core\Models\Observations\SafetyObservation.cs" />
+    <Compile Include="Core\Models\Observations\SecurityScanObservation.cs" />
     <Compile Include="Core\Models\Observations\AccountIdentityObservation.cs" />
     <Compile Include="Core\Models\Observations\TargetAccountConnectionObservation.cs" />
     <Compile Include="Core\Models\Observations\InstrumentIdentityObservation.cs" />
@@ -145,6 +148,7 @@
     <Compile Include="Core\Engine\Consumers\M7StrategyConsumer.cs" />
     <Compile Include="Core\Engine\Consumers\StrategyEvidenceAccumulator.cs" />
     <Compile Include="Core\Contract\IReadOnlyDiagnosticSource.cs" />
+    <Compile Include="Core\Contract\ISecurityScanSource.cs" />
 
     <!-- Host: the only layer that touches NinjaTrader types -->
     <Compile Include="Host\DispatcherBridge.cs" />
@@ -152,6 +156,7 @@
     <Compile Include="Host\EvidenceDirectorySink.cs" />
     <Compile Include="Host\MarketDataCapture.cs" />
     <Compile Include="Host\StrategyDiagnosticCapture.cs" />
+    <Compile Include="Host\FileSystemSecurityScanSource.cs" />
     <Compile Include="Host\Nt8HostDataProvider.cs" />
     <Compile Include="Host\DiagnosticRuntime.cs" />
     <Compile Include="Host\RuntimeDiagnosticRunner.cs" />

@@ -124,6 +124,29 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void EvidenceExport_SecurityScan_ReflectsTheSingleM8OwnedScan()
+        {
+            // M8 owns and executes the security scan. Its single result must reach BOTH the live
+            // probe and the exported package, without a second execution.
+            var provider = new FakeDataProvider { SecurityScanSource = FakeSecurityScanSource.Clean() };
+            using var runtime = Runtime(provider, 256, 256);
+            runtime.Start();
+
+            var result = RunFull(runtime);
+            var sink = new InMemoryEvidenceSink();
+            Assert.True(runtime.WriteEvidencePackage(result, sink, out _));
+
+            var safety = sink.Files[EvidencePackageCatalog.SafetyAuditJson];
+            Assert.Contains("securityScan", safety);
+            Assert.Contains("SECURITY_SCAN_PASSED", safety);
+            Assert.Contains("\"executed\":true", safety);
+
+            // The live probe path agreed with the export (the session published the same scan).
+            Assert.NotNull(runtime.Session.SecurityScan);
+            Assert.True(runtime.Session.SecurityScan.Executed);
+        }
+
+        [Fact]
         public void EvidenceExport_MarketDataSummary_ReflectsRealObservedIngestData()
         {
             // The exported market-data/dom summaries must reflect the market-data/DOM events the

@@ -60,19 +60,15 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             _duplicateWindow = duplicateWindow > 0 ? duplicateWindow : 8192;
             _evidenceCapacity = evidenceCapacity > 0 ? evidenceCapacity : 20000;
 
-            // The runtime owns the tool-side safety posture and the static-scan result, so it
-            // enriches the host snapshot with evidence the host layer does not have.
+            // The runtime owns the tool-side safety posture, so it enriches the host snapshot
+            // with evidence the host layer does not have. The M8 security scan itself is run by
+            // M8 (the single owner) against the read-only provider-supplied source; the runtime
+            // only supplies that source and does not execute the scan.
             _enrichedProvider = new EnrichedDataProvider(dataProvider);
             _enrichedProvider.AddEnricher(EnrichWithSafetyEvidence);
             _enrichedProvider.AddEnricher(EnrichWithPostTradeAudit);
             _dataProvider = _enrichedProvider;
         }
-
-        /// <summary>
-        /// Result of the static safety scan, supplied by the host or CI. Left at its default
-        /// (not passed) the scan check is INCONCLUSIVE, never PASS.
-        /// </summary>
-        public SafetyScanEvidence StaticSafetyScan { get; set; }
 
         public bool IsRunning { get { return _running; } }
 
@@ -872,23 +868,15 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
         /// <summary>
         /// Adds the tool-side safety evidence to a host snapshot. Trading-disabled and the
-        /// read-only posture are the tool's own runtime invariants; the static-scan result is
-        /// supplied out of band. Missing evidence stays unobserved so M8 reports INCONCLUSIVE.
+        /// read-only posture are the tool's own runtime invariants; the security-scan result is
+        /// NOT set here — M8 owns and executes the scan, so leaving it for M8 keeps a single owner
+        /// and avoids supplying a duplicate out-of-band result.
         /// </summary>
         private void EnrichWithSafetyEvidence(Core.Models.Observations.DiagnosticSnapshot snapshot)
         {
             var safety = snapshot.Safety ?? new Core.Models.Observations.SafetyObservation();
             safety.TradingDisabledRuntimeEvidence = true;
             safety.ReadOnlyPostureObserved = true;
-
-            var scan = StaticSafetyScan;
-            if (scan != null)
-            {
-                safety.StaticScanPassed = scan.Passed;
-                safety.StaticScanForbiddenApiCount = scan.ForbiddenApiHits;
-                safety.StaticScanFileCount = scan.FilesScanned;
-            }
-
             safety.ReportSecretFree = true;
             snapshot.Safety = safety;
         }
@@ -984,19 +972,5 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         {
             _files[name ?? string.Empty] = content ?? string.Empty;
         }
-    }
-
-    /// <summary>
-    /// Result of the static safety scan (verification/addon-smoke). It is supplied to the
-    /// runtime so M8 can report it as evidence; when it is not supplied the scan check is
-    /// INCONCLUSIVE, never PASS.
-    /// </summary>
-    public sealed class SafetyScanEvidence
-    {
-        public bool Passed { get; set; }
-
-        public int ForbiddenApiHits { get; set; }
-
-        public int FilesScanned { get; set; }
     }
 }
