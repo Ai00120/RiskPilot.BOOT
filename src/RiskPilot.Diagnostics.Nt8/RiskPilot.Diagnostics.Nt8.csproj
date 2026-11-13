@@ -147,6 +147,7 @@
     <Compile Include="Host\DispatcherBridge.cs" />
     <Compile Include="Host\FileReportSink.cs" />
     <Compile Include="Host\EvidenceDirectorySink.cs" />
+    <Compile Include="Host\MarketDataCapture.cs" />
     <Compile Include="Host\Nt8HostDataProvider.cs" />
     <Compile Include="Host\DiagnosticRuntime.cs" />
     <Compile Include="Host\RuntimeDiagnosticRunner.cs" />

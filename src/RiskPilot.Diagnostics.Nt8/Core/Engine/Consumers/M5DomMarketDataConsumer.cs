@@ -34,6 +34,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Consumers
 
             if (record is DomRecord dom)
             {
+                // The observation instant is the ingest time the pipeline stamped on the
+                // record; the source timestamp is only a trust-labelled hint, so freshness is
+                // derived from a value the tool actually observed.
+                _session.RecordMarketDataEventUtc(dom.IngestedAtUtc);
+
                 switch (dom.Operation)
                 {
                     case DomOperation.Insert:
@@ -50,7 +55,9 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Consumers
                         break;
                 }
 
-                if (dom.IsReset)
+                // A reset signalled as a flag on a non-reset operation is still one reset;
+                // counting it again for an explicit Reset operation would double-count.
+                if (dom.IsReset && dom.Operation != DomOperation.Reset)
                 {
                     counters.Increment(RuntimeCounterKeys.DomHostReset);
                 }
@@ -60,6 +67,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Consumers
 
             if (record is MarketDataRecord marketData)
             {
+                _session.RecordMarketDataEventUtc(marketData.IngestedAtUtc);
+
                 if (marketData.Kind == MarketDataKind.Quote)
                 {
                     counters.Increment(RuntimeCounterKeys.QuoteObserved);

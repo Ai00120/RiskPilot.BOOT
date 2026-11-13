@@ -137,7 +137,11 @@ namespace RiskPilot.Diagnostics.SampleReport
             Add("M3", "M3.ACCOUNT_SURFACE", DiagnosticStatus.PASS, "accounts=1 orderSnapshots=2", ErrorClass.None, "ACCOUNT_SURFACE_OBSERVED");
             Add("M3", "M3.F05_ORDER_FILL_CONTINUITY", DiagnosticStatus.INCONCLUSIVE, "unmatchedTerminalOrders=0 unmatchedExecutions=0", ErrorClass.None, "ORDER_FILL_CONTINUITY_INCOMPLETE");
             Add("M4", "M4.D078_APPROVAL", DiagnosticStatus.FAIL, "No D-078 operator field approval is recorded.", ErrorClass.ApprovalRequired, "D078_FIELD_APPROVAL_NOT_APPROVED");
-            Add("M5", "M5.SNAPSHOT_SYNC", DiagnosticStatus.FAIL, "sync=42 failure=1 outOfBounds=41", ErrorClass.DataUnavailable, "SYNC_FAILURE=1", "UPDATE_OOB=41");
+            Add("M5", "M5.DOM_SURFACE", DiagnosticStatus.PASS, "level1Quote=True lastTrade=True depth=True", ErrorClass.None, "DOM_SURFACE_OBSERVED");
+            Add("M5", "M5.LEVEL1", DiagnosticStatus.PASS, "quote=True lastTrade=True", ErrorClass.None, "QUOTE_OBSERVED", "LAST_TRADE_OBSERVED");
+            Add("M5", "M5.DEPTH", DiagnosticStatus.PASS, "depthObserved=True depthOperations=42", ErrorClass.None, "DEPTH_OBSERVED", "DEPTH_OPERATIONS=42");
+            Add("M5", "M5.SNAPSHOT_SYNC", DiagnosticStatus.FAIL, "sync=42 failure=1 outOfBounds=41", ErrorClass.DataUnavailable, "SNAPSHOT_SYNC_FAILURE", "SYNC=42", "SYNC_FAILURE=1", "OUT_OF_BOUNDS_TOTAL=41");
+            Add("M5", "M5.FRESHNESS", DiagnosticStatus.INCONCLUSIVE, "lastDomEventAgeSeconds=0.5 stale=False", ErrorClass.None, "FRESH", "LAST_EVENT_AGE_SECONDS=0.5");
             Add("M6", "M6.DIRECTION_SOURCE", DiagnosticStatus.INCONCLUSIVE, "provenance=ALL_QUOTE_DERIVED", ErrorClass.None, "PROVENANCE=ALL_QUOTE_DERIVED");
             Add("M7", "M7.CANDIDATE_REJECTION", DiagnosticStatus.INCONCLUSIVE, "allCandidatesInvalid=1234", ErrorClass.None, "ALL_CANDIDATES_INVALID=1234");
             Add("M8", "M8.TRADING_DISABLED", DiagnosticStatus.PASS, "tradingDisabledRuntimeEvidence=true", ErrorClass.None, "TRADING_DISABLED_RUNTIME_EVIDENCE_PRESENT");
@@ -149,7 +153,7 @@ namespace RiskPilot.Diagnostics.SampleReport
                 new ModuleStatusView { ModuleId = "M2", Title = "Connection & Provider Identity", Status = DiagnosticStatus.PASS, CheckCount = 2, Executed = true },
                 new ModuleStatusView { ModuleId = "M3", Title = "Account & Order Lifecycle (F-05)", Status = DiagnosticStatus.INCONCLUSIVE, CheckCount = 2, Executed = true },
                 new ModuleStatusView { ModuleId = "M4", Title = "Instrument Attestation / D-078", Status = DiagnosticStatus.FAIL, CheckCount = 1, Executed = true },
-                new ModuleStatusView { ModuleId = "M5", Title = "DOM & Market Data", Status = DiagnosticStatus.FAIL, CheckCount = 1, Executed = true },
+                new ModuleStatusView { ModuleId = "M5", Title = "DOM & Market Data", Status = DiagnosticStatus.FAIL, CheckCount = 5, Executed = true },
                 new ModuleStatusView { ModuleId = "M6", Title = "TradeDelta / OrderFlow", Status = DiagnosticStatus.INCONCLUSIVE, CheckCount = 1, Executed = true },
                 new ModuleStatusView { ModuleId = "M7", Title = "Strategies / Risk Gate", Status = DiagnosticStatus.INCONCLUSIVE, CheckCount = 1, Executed = true },
                 new ModuleStatusView { ModuleId = "M8", Title = "Safety / Acceptance", Status = DiagnosticStatus.PASS, CheckCount = 1, Executed = true },
@@ -276,6 +280,9 @@ namespace RiskPilot.Diagnostics.SampleReport
                 },
                 DomMarketData = new DomMarketDataObservation
                 {
+                    DataSurfaceObservable = true,
+                    DepthObserved = true,
+                    LastEventUtc = new DateTime(2026, 11, 12, 8, 0, 3, 500, DateTimeKind.Utc),
                     HostAdapter = new DomCounterBlock
                     {
                         Layer = "HOST_ADAPTER",

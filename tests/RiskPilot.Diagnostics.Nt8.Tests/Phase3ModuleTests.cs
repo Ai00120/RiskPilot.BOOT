@@ -676,7 +676,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             session.Counters.Increment(RuntimeCounterKeys.OrderIdEmpty, 1);
 
             var host = new DiagnosticSnapshot { OrderLifecycle = new OrderLifecycleObservation() };
-            var merged = SnapshotAssembler.Assemble(host, session.Counters);
+            var merged = SnapshotAssembler.Assemble(host, session);
 
             Assert.Equal(3, merged.OrderLifecycle.OrderSnapshotCount);
             Assert.Equal(2, merged.OrderLifecycle.OrderIdClassCounts[OrderIdClass.Valid]);

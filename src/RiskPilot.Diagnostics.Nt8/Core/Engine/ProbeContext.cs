@@ -58,7 +58,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
                     {
                         try
                         {
-                            _snapshot = SnapshotAssembler.Assemble(DataProvider.GetSnapshot(), Session.Counters);
+                            _snapshot = SnapshotAssembler.Assemble(DataProvider.GetSnapshot(), Session);
                         }
                         catch (Exception)
                         {

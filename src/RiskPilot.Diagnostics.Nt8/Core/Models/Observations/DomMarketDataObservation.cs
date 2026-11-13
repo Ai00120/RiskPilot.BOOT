@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
@@ -64,6 +65,20 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
     /// </summary>
     public sealed class DomMarketDataObservation
     {
+        /// <summary>
+        /// True once the host DOM/market-data surface was actually reachable: a Level I or
+        /// Level II stream event was observed, or the host adapter declared its counters.
+        /// Until then every derived check must stay INCONCLUSIVE, never PASS.
+        /// </summary>
+        public bool DataSurfaceObservable { get; set; }
+
+        /// <summary>
+        /// True when a Level II depth (DOM) event was actually observed. This is separate from
+        /// <see cref="Level1QuoteObserved"/> because Level I quotes and Level II depth are
+        /// different streams; a Level I quote must never be presented as Level II depth.
+        /// </summary>
+        public bool DepthObserved { get; set; }
+
         public DomCounterBlock HostAdapter { get; set; }
 
         public DomCounterBlock Recorder { get; set; }
@@ -73,6 +88,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
 
         /// <summary>True when a Level I last-trade stream was observed.</summary>
         public bool LastTradeObserved { get; set; }
+
+        /// <summary>
+        /// UTC instant of the most recent observed market-data/DOM event, when one was seen.
+        /// The age is derived from this and the tool clock; it is never fabricated. Null means
+        /// no event was observed, so freshness is unobservable.
+        /// </summary>
+        public DateTime? LastEventUtc { get; set; }
 
         /// <summary>Seconds since the last DOM event, when observable.</summary>
         public double? LastDomEventAgeSeconds { get; set; }

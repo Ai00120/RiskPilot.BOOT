@@ -202,6 +202,32 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - Tests: `InstrumentIdentityTests` (verifier + probe) and `HostInstrumentIdentityTests` (host
   adapter over the offline stub surface); a green stub run is **not** real-host proof.
 
+## M5 DOM & market data (P4 — data reliability)
+
+- M5 now ingests **real** host data: `Host/MarketDataCapture.cs` subscribes (read-only) to the
+  loaded ES instrument's `Instrument.MarketData` (Level I) and `Instrument.MarketDepth` (Level II)
+  `Update` events and feeds normalized `MarketDataRecord`/`DomRecord`s into `EventIngestPipeline`.
+  The AddOn (re)subscribes before each pass via `EnsureMarketDataCapture` (wired through
+  `RuntimeDiagnosticRunner`'s optional `Func<bool>`), and detaches on dispose.
+- The event types live in `NinjaTrader.Data` (`MarketDataEventArgs`, `MarketDepthEventArgs`,
+  `MarketDataType`, `Operation`); `MarketData`/`MarketDepth` live in `NinjaTrader.Cbi`. The real
+  `Operation` enum has **only** `Add/Update/Remove` (no `Insert`) — the stub mirrors this so the
+  `UseStubs=false` build compiles. `MarketDepthEventArgs.Position` is an `int` (0-based ladder).
+- Subscribe on `instrument.Dispatcher` with `InvokeAsync` (documented pattern); guard with
+  `HasShutdownStarted`/`HasShutdownFinished`. The stub `Instrument.Dispatcher` runs inline.
+- `SnapshotAssembler.Assemble` now takes the whole `SessionContext` (not just counters) so
+  `MergeDomMarketData` can derive freshness from `SessionContext.LastMarketDataEventUtc` (newest
+  event instant, recorded by `M5DomMarketDataConsumer`). `M5DomMarketDataConsumer` also fixed a
+  double-count: `IsReset` on a non-`Reset` operation increments `DomHostReset` once, not twice.
+- Fail-closed contract: `M5.DOM_SURFACE`, `M5.DEPTH`, `M5.LEVEL1`, `M5.DATA_INTEGRITY`,
+  `M5.FRESHNESS` stay `INCONCLUSIVE` with no observed surface; any positive counter (sync failure,
+  out-of-bounds, invalid, gap, drop) is itself evidence → `FAIL`. `M5.FRESHNESS` is always
+  `INCONCLUSIVE` and only labels `FRESH`/`STALE` with the real age; a future-stamped event (negative
+  age) stays unobservable. Depth (Level II) is never inferred from a Level I quote.
+- `market-data-summary.json` / `dom-summary.json` carry `dataSurfaceObservable`, `depthObserved`,
+  `lastEventUtc` (never fabricated; `UNOBSERVABLE` when absent). Tests: `M5DomMarketDataTests`
+  (valid/missing/stale/invalid + host capture over the offline stub surface).
+
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live

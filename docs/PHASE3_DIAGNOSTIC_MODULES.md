@@ -274,18 +274,37 @@ boolean/count + `instrument#<hash>` کاهش می‌دهد. مقایسهٔ ری�
 ## 7. ماژول ۵ — DOM / Market Data
 
 **پیاده‌سازی:** `Probes/M5DomMarketDataProbe.cs`، `Consumers/M5DomMarketDataConsumer.cs`،
-`SnapshotAssembler.MergeDom`.
+`Host/MarketDataCapture.cs`، `SnapshotAssembler.MergeDomMarketData`.
 
 | Check | معنا |
 |---|---|
+| `M5.DOM_SURFACE` | دسترس‌پذیری سطح دادهٔ DOM/Market Data (Level I یا Level II یا شمارنده‌های Host Adapter) |
 | `M5.LEVEL1` | Level I Quote + Last Trade |
-| `M5.DOM_SURFACE` | Level II DOM |
+| `M5.DEPTH` | Level II DOM (جریانی جدا از Level I؛ یک Quote هرگز به‌عنوان Depth گزارش نمی‌شود) |
 | `M5.HOST_LAYER_COUNTERS` | شمارنده‌های لایهٔ Host Adapter |
 | `M5.RECORDER_LAYER_COUNTERS` | شمارنده‌های لایهٔ Recorder |
-| `M5.SNAPSHOT_SYNC` | Snapshot Sync / Failure |
-| `M5.VALIDITY` | Invalid Price/Size/Position |
-| `M5.DATA_INTEGRITY` | Insert/Update/Remove/Reset و Out-of-Bounds |
-| `M5.FRESHNESS` | تازگی داده |
+| `M5.SNAPSHOT_SYNC` | Snapshot Sync / Failure / Out-of-Bounds |
+| `M5.VALIDITY` | Invalid Price/Size/Position و رویدادهای Malformed |
+| `M5.DATA_INTEGRITY` | Sequence Gap و Drop روی مسیر Ingest |
+| `M5.FRESHNESS` | تازگی داده (سن آخرین رویداد مشاهده‌شده) |
+
+**جریان داده (از API میزبان تا نتیجه):** `Instrument.MarketData` (Level I) و
+`Instrument.MarketDepth` (Level II) توسط `MarketDataCapture` — فقط روی ES ای که NT8
+واقعاً بارگذاری کرده (`ResolveLoadedInstrument`) — اشتراک می‌شوند و هر رویداد به یک
+`MarketDataRecord` / `DomRecord` نرمال‌سازی و وارد `EventIngestPipeline` می‌شود. سپس
+`M5DomMarketDataConsumer` روی رشتهٔ Drain شمارنده‌ها و زمان آخرین رویداد را در
+`SessionContext` ثبت می‌کند و `SnapshotAssembler` آن‌ها را روی `DomMarketDataObservation`
+ادغام می‌کند. هیچ مقدار ساختگی تولید نمی‌شود.
+
+**قرارداد صحت (Fail-Closed):**
+
+- `PASS` فقط روی دادهٔ واقعاً مشاهده‌شده. بدون سطح دادهٔ مشاهده‌شده، `M5.DOM_SURFACE`،
+  `M5.DEPTH`، `M5.LEVEL1`، `M5.DATA_INTEGRITY` و `M5.FRESHNESS` همگی `INCONCLUSIVE`.
+- یک شمارندهٔ مثبت (Sync Failure، Out-of-Bounds، Invalid، Gap، Drop) خودش شاهد است و
+  `FAIL` می‌دهد؛ صفر فقط پس از مشاهدهٔ واقعی جریان «پاک» است.
+- `M5.FRESHNESS` همیشه `INCONCLUSIVE` است و فقط `FRESH`/`STALE` را با سن واقعی گزارش
+  می‌کند؛ سنِ منفی (رویداد آینده نسبت به ساعت ابزار) قابل‌اعتماد نیست و `INCONCLUSIVE`
+  می‌ماند.
 
 **دو لایه جداگانه گزارش می‌شوند** (شمارنده‌ها هرگز با هم مخلوط نمی‌شوند):
 
@@ -295,11 +314,14 @@ boolean/count + `instrument#<hash>` کاهش می‌دهد. مقایسهٔ ری�
 - **Recorder** (Baseline Recorder): `DOM_DEPTH` = 102,300؛ UPDATE = 92,988؛ INSERT = 7,007؛
   REMOVE = 2,078؛ RESET = 227.
 
-**مرجع API:** `MarketData` (Level I), `MarketDepth` (Level II), رویدادهای `MarketDepthUpdate`,
-`MarketDepth.Reset`.
-**تست‌ها:** `Phase3ModuleTests.M5_*` (۲ تست).
+**مرجع API:** `Instrument.MarketData` (Level I، `MarketDataEventArgs`)،
+`Instrument.MarketDepth` (Level II، `MarketDepthEventArgs`)، `MarketDataType` و `Operation`
+(هر دو در `NinjaTrader.Data`)، `Instrument.MarketDepth.Reset`.
+**تست‌ها:** `M5DomMarketDataTests` (معتبر/گم‌شده/کهنه/نامعتبر + آداپتور میزبان روی stub)،
+`Phase3ModuleTests.M5_*`، `Phase5ScenarioTests` (سناریوهای DOM).
 **محدودیت:** Out-of-Bounds به‌تنهایی = از‌دست‌رفتن قطعی داده نیست؛ فقط نقض ایندکس است. Gap/loss
-واقعی با شمارندهٔ Sync Failure و Sequence جدا گزارش می‌شود.
+واقعی با شمارندهٔ Sync Failure و Sequence جدا گزارش می‌شود. یک Build سبز روی stub
+**اثبات سازگاری با میزبان واقعی NT8 نیست**.
 
 ---
 

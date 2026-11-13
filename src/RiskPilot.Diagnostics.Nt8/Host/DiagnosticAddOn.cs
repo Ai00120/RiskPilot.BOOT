@@ -26,6 +26,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         private DiagnosticRuntime _runtime;
         private DiagnosticViewState _viewState;
         private DiagnosticRunCoordinator _coordinator;
+        private MarketDataCapture _marketDataCapture;
         private bool _started;
         private bool _disposed;
 
@@ -111,12 +112,18 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     _runtime = new DiagnosticRuntime(provider, SystemClock.Instance, 4096, 8192);
                     _runtime.Initialize();
 
+                    // The market-data capture subscribes to the loaded ES instrument's public
+                    // Level I/II streams and feeds normalized records into the runtime, so M5
+                    // reports real host data. It is read-only and is (re)subscribed before each
+                    // pass; a failure leaves M5 INCONCLUSIVE rather than fabricating data.
+                    _marketDataCapture = new MarketDataCapture(record => _runtime != null && _runtime.Ingest(record), () => HostIsLive);
+
                     // The run coordinator owns the single-run guarantee and marshals its UI
                     // notifications through the switchable dispatcher. The dispatcher has no
                     // target until a host window exists; until then it applies notifications
                     // inline to the view state, so a run's progress and result are never lost.
                     _viewState = new DiagnosticViewState();
-                    var runner = new RuntimeDiagnosticRunner(_runtime, BuildEvidenceSink());
+                    var runner = new RuntimeDiagnosticRunner(_runtime, BuildEvidenceSink(), EnsureMarketDataCapture);
                     _coordinator = new DiagnosticRunCoordinator(runner, _uiDispatcher, _runtime.Log);
                     WireViewState();
 
@@ -127,9 +134,39 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     _runtime = null;
                     _coordinator = null;
                     _viewState = null;
+                    _marketDataCapture = null;
                     Log("RiskPilot Diagnostics initialization failed: " + Core.Errors.ErrorClassifier.Describe(ex),
                         NinjaTrader.Cbi.LogLevel.Error);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Best-effort (re)subscription of the market-data capture to the loaded instrument.
+        /// Invoked before each diagnostic pass so the Level I/II streams are attached once the
+        /// host has loaded the ES instrument. It never throws and never fabricates data: when the
+        /// instrument is not loaded yet it simply returns false and M5 stays INCONCLUSIVE.
+        /// </summary>
+        public bool EnsureMarketDataCapture()
+        {
+            MarketDataCapture capture;
+            lock (_gate)
+            {
+                capture = _marketDataCapture;
+            }
+
+            if (capture == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                return capture.TrySubscribe();
+            }
+            catch (Exception)
+            {
+                return false;
             }
         }
 
@@ -220,6 +257,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         {
             DiagnosticRuntime runtime;
             DiagnosticRunCoordinator coordinator;
+            MarketDataCapture capture;
             lock (_gate)
             {
                 if (_disposed)
@@ -230,8 +268,25 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 _disposed = true;
                 runtime = _runtime;
                 coordinator = _coordinator;
+                capture = _marketDataCapture;
                 _runtime = null;
                 _coordinator = null;
+                _marketDataCapture = null;
+            }
+
+            // Detach from the host market-data events before tearing anything down, so no
+            // callback can race the runtime disposal.
+            if (capture != null)
+            {
+                try
+                {
+                    capture.Detach();
+                }
+                catch (Exception ex)
+                {
+                    Log("RiskPilot Diagnostics market-data detach failed: " + Core.Errors.ErrorClassifier.Describe(ex),
+                        NinjaTrader.Cbi.LogLevel.Error);
+                }
             }
 
             // Cancel and join any active run before tearing down the runtime, so a run in

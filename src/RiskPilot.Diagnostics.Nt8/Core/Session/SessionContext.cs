@@ -19,6 +19,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Session
         private long _duplicates;
         private long _sequenceGaps;
         private long _timestampInvalid;
+        private long _lastMarketDataEventTicks;
 
         public SessionContext(string sessionId, DateTime startedAtUtc)
         {
@@ -87,6 +88,39 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Session
         public bool HasDataLoss
         {
             get { return DroppedCount > 0 || SequenceGapCount > 0; }
+        }
+
+        /// <summary>
+        /// Records the UTC instant of the most recent observed market-data/DOM event, keeping
+        /// the newest. Used to derive data freshness from a real observation; it is never
+        /// fabricated and stays absent until an event is actually seen.
+        /// </summary>
+        public void RecordMarketDataEventUtc(DateTime utc)
+        {
+            var ticks = utc.ToUniversalTime().Ticks;
+            long current;
+            do
+            {
+                current = Interlocked.Read(ref _lastMarketDataEventTicks);
+                if (ticks <= current)
+                {
+                    return;
+                }
+            }
+            while (Interlocked.CompareExchange(ref _lastMarketDataEventTicks, ticks, current) != current);
+        }
+
+        /// <summary>
+        /// UTC instant of the most recent observed market-data/DOM event, or null when no such
+        /// event was observed.
+        /// </summary>
+        public DateTime? LastMarketDataEventUtc
+        {
+            get
+            {
+                var ticks = Interlocked.Read(ref _lastMarketDataEventTicks);
+                return ticks > 0 ? new DateTime(ticks, DateTimeKind.Utc) : (DateTime?)null;
+            }
         }
     }
 }

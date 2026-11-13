@@ -475,7 +475,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
             Assert.True(session.SequenceGapCount > 0);
 
-            var merged = SnapshotAssembler.Assemble(new DiagnosticSnapshot(), session.Counters);
+            var merged = SnapshotAssembler.Assemble(new DiagnosticSnapshot(), session);
             var provider = new FakeDataProvider { Snapshot = merged };
             var results = new M5DomMarketDataProbe().Evaluate(Context(provider));
             Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M5.DATA_INTEGRITY").Status);
@@ -490,7 +490,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.True(pipeline.Ingest(session, new MarketDataRecord { InstrumentId = "ES 12-26", Kind = MarketDataKind.Trade, SourceSequence = 10 }));
             Assert.True(pipeline.Ingest(session, new MarketDataRecord { InstrumentId = "ES 12-26", Kind = MarketDataKind.Trade, SourceSequence = 14 }));
 
-            var merged = SnapshotAssembler.Assemble(new DiagnosticSnapshot(), session.Counters);
+            var merged = SnapshotAssembler.Assemble(new DiagnosticSnapshot(), session);
             var provider = new FakeDataProvider { Snapshot = merged };
             var results = new M6TradeDeltaProbe().Evaluate(Context(provider));
             Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M6.SEQUENCE_CONTINUITY").Status);

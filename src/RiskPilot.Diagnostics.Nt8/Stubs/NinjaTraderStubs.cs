@@ -187,6 +187,26 @@ namespace NinjaTrader.Cbi
         public static readonly System.Collections.ObjectModel.Collection<Instrument> All =
             new System.Collections.ObjectModel.Collection<Instrument>();
 
+        /// <summary>
+        /// Level I market data surface. Mirrors the public <c>Instrument.MarketData</c> object:
+        /// a read-only snapshot plus an <c>Update</c> event. Offline the snapshot is empty and the
+        /// event is only raised when a test raises it.
+        /// </summary>
+        public MarketData MarketData { get; } = new MarketData();
+
+        /// <summary>
+        /// Level II market-depth surface. Mirrors the public <c>Instrument.MarketDepth</c> object:
+        /// bid/ask ladders plus an <c>Update</c> event.
+        /// </summary>
+        public MarketDepth MarketDepth { get; } = new MarketDepth();
+
+        /// <summary>
+        /// The instrument's dispatcher. Mirrors the public <c>Instrument.Dispatcher</c> surface,
+        /// which the host marshals event subscription through. Offline it runs posted work inline.
+        /// </summary>
+        public System.Windows.Threading.Dispatcher Dispatcher { get; set; } =
+            new System.Windows.Threading.Dispatcher();
+
         public static Instrument GetInstrument(string fullName)
         {
             if (string.IsNullOrEmpty(fullName))
@@ -204,6 +224,67 @@ namespace NinjaTrader.Cbi
 
             return null;
         }
+    }
+
+    /// <summary>
+    /// Offline stub of the public Level I market-data type. Only the members the diagnostic
+    /// adapter reads are declared; the event is a plain event a test can raise.
+    /// </summary>
+    public class MarketData
+    {
+#pragma warning disable 67 // stub-only event; present to mirror the real host surface
+        public event EventHandler<NinjaTrader.Data.MarketDataEventArgs> Update;
+#pragma warning restore 67
+
+        public NinjaTrader.Data.MarketDataEventArgs Bid { get; set; } = new NinjaTrader.Data.MarketDataEventArgs();
+        public NinjaTrader.Data.MarketDataEventArgs Ask { get; set; } = new NinjaTrader.Data.MarketDataEventArgs();
+        public NinjaTrader.Data.MarketDataEventArgs Last { get; set; } = new NinjaTrader.Data.MarketDataEventArgs();
+
+        /// <summary>Raises the <see cref="Update"/> event (test helper; mirrors a host callback).</summary>
+        public void RaiseUpdate(NinjaTrader.Data.MarketDataEventArgs args)
+        {
+            var handler = Update;
+            if (handler != null)
+            {
+                handler(this, args);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Offline stub of the public Level II market-depth type. Only the members the diagnostic
+    /// adapter reads are declared; the event is a plain event a test can raise.
+    /// </summary>
+    public class MarketDepth
+    {
+#pragma warning disable 67 // stub-only event; present to mirror the real host surface
+        public event EventHandler<NinjaTrader.Data.MarketDepthEventArgs> Update;
+#pragma warning restore 67
+
+        public Instrument Instrument { get; set; }
+
+        public System.Collections.Generic.List<MarketDepthLevel> Bids { get; } =
+            new System.Collections.Generic.List<MarketDepthLevel>();
+
+        public System.Collections.Generic.List<MarketDepthLevel> Asks { get; } =
+            new System.Collections.Generic.List<MarketDepthLevel>();
+
+        /// <summary>Raises the <see cref="Update"/> event (test helper; mirrors a host callback).</summary>
+        public void RaiseUpdate(NinjaTrader.Data.MarketDepthEventArgs args)
+        {
+            var handler = Update;
+            if (handler != null)
+            {
+                handler(this, args);
+            }
+        }
+    }
+
+    /// <summary>Offline stub of one market-depth ladder level.</summary>
+    public class MarketDepthLevel
+    {
+        public double Price { get; set; }
+        public long Volume { get; set; }
     }
 
     public class Position
@@ -271,6 +352,56 @@ namespace System.Windows.Threading
                 action();
             }
         }
+    }
+}
+
+namespace NinjaTrader.Data
+{
+    /// <summary>Offline stub of the public Level I market-data event arguments.</summary>
+    public class MarketDataEventArgs : EventArgs
+    {
+        public NinjaTrader.Cbi.Instrument Instrument { get; set; }
+        public MarketDataType MarketDataType { get; set; }
+        public double Price { get; set; }
+        public double Bid { get; set; }
+        public double Ask { get; set; }
+        public long Volume { get; set; }
+        public DateTime Time { get; set; }
+        public bool IsReset { get; set; }
+    }
+
+    /// <summary>Offline stub of the public Level II market-depth event arguments.</summary>
+    public class MarketDepthEventArgs : EventArgs
+    {
+        public NinjaTrader.Cbi.Instrument Instrument { get; set; }
+        public MarketDataType MarketDataType { get; set; }
+        public Operation Operation { get; set; }
+        public int Position { get; set; }
+        public double Price { get; set; }
+        public long Volume { get; set; }
+        public DateTime Time { get; set; }
+        public bool IsReset { get; set; }
+    }
+
+    public enum MarketDataType
+    {
+        Ask,
+        Bid,
+        Last,
+        DailyHigh,
+        DailyLow,
+        DailyVolume,
+        LastClose,
+        Opening,
+        OpenInterest,
+        Settlement
+    }
+
+    public enum Operation
+    {
+        Add,
+        Update,
+        Remove
     }
 }
 

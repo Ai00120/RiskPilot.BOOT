@@ -797,11 +797,25 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// </summary>
         private Instrument ResolveAttestationInstrument()
         {
+            return ResolveLoadedInstrument(_requestedInstrumentId, () => MasterMetadataReady);
+        }
+
+        /// <summary>
+        /// Resolves the loaded ES instrument from the host discovery surface. An explicitly
+        /// configured id wins; otherwise the actual loaded surface (<c>Instrument.All</c>) is
+        /// consulted and the instrument is used only when its root symbol matches the permanent
+        /// ES root. Ambiguous (more than one ES root) or absent roots resolve to null so the
+        /// caller fails closed rather than binding to an arbitrary instrument. Never throws.
+        /// </summary>
+        public static Instrument ResolveLoadedInstrument(string requestedInstrumentId, Func<bool> masterMetadataReady)
+        {
             try
             {
-                if (!string.IsNullOrEmpty(_requestedInstrumentId))
+                var ready = masterMetadataReady != null && SafeBool(masterMetadataReady) == true;
+
+                if (!string.IsNullOrEmpty(requestedInstrumentId))
                 {
-                    return Instrument.GetInstrument(_requestedInstrumentId);
+                    return Instrument.GetInstrument(requestedInstrumentId);
                 }
 
                 var loaded = Instrument.All;
@@ -816,7 +830,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 {
                     foreach (var candidate in loaded)
                     {
-                        if (candidate == null || !MasterMetadataReady)
+                        if (candidate == null || !ready)
                         {
                             continue;
                         }
@@ -835,7 +849,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 }
 
                 // Ambiguity is not accepted: more than one loaded instrument carrying the ES root
-                // leaves the target unresolved so the attestation cannot silently pick one.
+                // leaves the target unresolved so the caller cannot silently pick one.
                 return matches == 1 ? resolved : null;
             }
             catch (Exception)
