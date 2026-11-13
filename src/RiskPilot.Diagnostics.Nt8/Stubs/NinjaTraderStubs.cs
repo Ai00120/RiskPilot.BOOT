@@ -180,6 +180,13 @@ namespace NinjaTrader.Cbi
         public Exchange Exchange { get; set; }
         public MasterInstrument MasterInstrument { get; set; }
 
+        /// <summary>
+        /// The instruments NinjaTrader currently has loaded (the discovery surface an AddOn can
+        /// read). Offline the collection is empty; a test populates it explicitly.
+        /// </summary>
+        public static readonly System.Collections.ObjectModel.Collection<Instrument> All =
+            new System.Collections.ObjectModel.Collection<Instrument>();
+
         public static Instrument GetInstrument(string fullName)
         {
             return null;

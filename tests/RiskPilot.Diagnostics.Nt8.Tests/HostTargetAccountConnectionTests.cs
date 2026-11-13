@@ -14,6 +14,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
     /// provider attribution) so a regression in the adapter is caught offline. This validates the
     /// adapter against the stub surface only; it is NOT proof of real host behaviour.
     /// </summary>
+    [Collection("StubHostState")]
     public class HostTargetAccountConnectionTests
     {
         private const string ExpectedAccount = "SimRP.BOT";

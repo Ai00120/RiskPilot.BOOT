@@ -32,7 +32,7 @@
 | M1 | Environment / API Compatibility | `Probes/M1EnvironmentProbe.cs` |
 | M2 | Connection / Provider Identity | `Probes/M2ConnectionProbe.cs` |
 | M3 | Account / Order Lifecycle (F-05) | `Probes/M3AccountOrderProbe.cs` + `Consumers/M3OrderLifecycleConsumer.cs` |
-| M4 | Instrument Attestation / D-078 | `Probes/M4InstrumentAttestationProbe.cs` + `Instruments/CanonicalInstrumentId.cs` |
+| M4 | Instrument Attestation / D-078 | `Probes/M4InstrumentAttestationProbe.cs` + `Instruments/CanonicalInstrumentId.cs` + `Core/Identity/InstrumentIdentityVerifier.cs` |
 | M5 | DOM / Market Data | `Probes/M5DomMarketDataProbe.cs` + `Consumers/M5DomMarketDataConsumer.cs` |
 | M6 | TradeDelta / OrderFlow | `Probes/M6TradeDeltaProbe.cs` + `Consumers/M6TradeDeltaConsumer.cs` |
 | M7 | Strategies / Risk Gate | `Probes/M7StrategyRiskGateProbe.cs` + `Consumers/M7StrategyConsumer.cs` |
@@ -212,16 +212,33 @@ mode `Simulation`، currency `USD`.
 ## 6. ماژول ۴ — Instrument Attestation / D-078
 
 **پیاده‌سازی:** `Probes/M4InstrumentAttestationProbe.cs`، `Instruments/CanonicalInstrumentId.cs`،
-`Core/Engine/AttestationReasonCodes.cs`، `Host/Nt8HostDataProvider.BuildAttestationObservation()`.
+`Core/Engine/AttestationReasonCodes.cs`، `Core/Identity/InstrumentIdentityVerifier.cs`،
+`Host/Nt8HostDataProvider.BuildAttestationObservation()`،
+`Host/Nt8HostDataProvider.BuildInstrumentIdentityObservation()`.
 
 | Check | معنا |
 |---|---|
+| `M4.INSTRUMENT_IDENTITY` | تطابق هویت واقعی instrument انتخاب‌شده با ES/CME (PASS/FAIL/INCONCLUSIVE) |
 | `M4.HOST_METADATA` | Name, Contract/Expiry, Exchange, Tick Size/Value, Currency |
 | `M4.FIELD_METADATA` | کامل‌بودن فیلدهای Master Instrument |
 | `M4.D096_ROUTE_CANDIDATE` | کاندید مسیر Globex + Rithmic-only |
 | `M4.REGISTRY_MATCH` | تطابق Canonical Instrument Id |
 | `M4.D078_APPROVAL` | وضعیت تأیید D-078 |
 | `M4.ATTESTATION_OUTCOME` | علل شکست به‌صورت جدا |
+
+**هویت instrument (M4.INSTRUMENT_IDENTITY):** میزبان سطح `Instrument.All` (instrument‌های
+بارگذاری‌شدهٔ NinjaTrader) را می‌خواند — نه یک نام ساخته‌شده از یک رشتهٔ پیکربندی — و هر فیلد را به
+boolean/count + `instrument#<hash>` کاهش می‌دهد. مقایسهٔ ریشهٔ نماد **exact و ordinal** است
+(`ES`)، نوع `Future`، ارز `USD` و صرافی فقط وقتی تأیید می‌شود که متادیتای مسیر پیکربندی‌شدهٔ D-096
+(مسیر انتخاب‌شدهٔ Globex، مجموعهٔ پیکربندی‌شدهٔ دقیقاً {Globex}، تنها مسیر provider متصل Rithmic)
+برقرار باشد. **CME هرگز از متن «ES» استنتاج نمی‌شود** و صرافی تأییدنشده هرگز PASS نمی‌شود.
+
+- wrong instrument (ریشهٔ مشابه/متفاوت) → `FAIL` (`INSTRUMENT_ROOT_MISMATCH`)
+- missing instrument → `INCONCLUSIVE` (`INSTRUMENT_IDENTITY_NO_INSTRUMENT_OBSERVED`)
+- ambiguous instrument (بیش از یک تطابق) → `INCONCLUSIVE` (`INSTRUMENT_IDENTITY_AMBIGUOUS`)
+- missing exchange metadata → `INCONCLUSIVE` (`EXCHANGE_METADATA_UNOBSERVABLE`)
+- unsupported route (Globex/provider/مجموعهٔ صرافی مغایر) → `FAIL` (`EXCHANGE_MISMATCH`)
+- فیلد غیرقابل‌مشاهده → `INCONCLUSIVE`؛ یک تضاد مشاهده‌شده بر فیلد غیرقابل‌مشاهده **اولویت** دارد.
 
 **علل شکست (جداگانه ثبت می‌شوند):**
 
@@ -233,15 +250,19 @@ mode `Simulation`، currency `USD`.
 
 - `CanonicalInstrumentId.Build` فقط یک **حدس امن** است؛ در صورت عدم‌تطابق با `EvidenceIdentity`
   (`ES_FUTURES_CME_DEC26`) → `MISSING_INSTRUMENT_SPECIFICATION`.
+- هویت دائمی **ریشهٔ ES** است (D-095 §5) و expiry پین نمی‌شود؛ فقط فرم canonical ریشه/venue لازم است.
 - `D078Approved` در ابزار **همیشه false** است؛ ابزار **هرگز خودکار Approve نمی‌کند**. تأیید
   D-078 یک فرآیند Owner-controlled و خارج از ابزار است.
-- `MasterInstrument.*` فقط بعد از `DataLoaded`/`Realtime` خوانده می‌شود (`_masterMetadataReady`).
+- `MasterInstrument.*` فقط بعد از `DataLoaded`/`Realtime` خوانده می‌شود (`_masterMetadataReady`);
+  قبل از آن `INCONCLUSIVE` است، نه FAIL.
 
-**مرجع API:** `Instrument.FullName`, `Instrument.Expiry`, `Instrument.Exchange`,
+**مرجع API:** `Instrument.All`, `Instrument.FullName`, `Instrument.Expiry`, `Instrument.Exchange`,
 `Instrument.MasterInstrument.{Name,InstrumentType,Currency,TickSize,PointValue,Exchanges}`.
-**تست‌ها:** `Phase3ModuleTests.M4_*` (۴ تست).
+**تست‌ها:** `Phase3ModuleTests.M4_*`, `InstrumentIdentityTests` (verifier + probe),
+`HostInstrumentIdentityTests` (آداپتور میزبان روی stub).
 **محدودیت:** Registry و وضعیت D-078 توسط فرآیند بازبینی‌شدهٔ Owner تأمین می‌شوند؛ ابزار فقط
-**مشاهده** می‌کند. اطلاعات تأییدنشده هرگز معتبر نمایش داده نمی‌شود.
+**مشاهده** می‌کند. صرافی یک mapping مسیر پیکربندی‌شده است، نه attestation مستقل از صرافی.
+اطلاعات تأییدنشده هرگز معتبر نمایش داده نمی‌شود.
 
 ---
 
@@ -439,7 +460,7 @@ aggressor side).
 | M1 | `Phase3ModuleTests.M1_*` (4) + `ProbeTests.M1_*` (4) | 8 | PASS |
 | M2 | `Phase3ModuleTests.M2_*` (3) + `ProbeTests.M2_*` (3) | 6 | PASS |
 | M3 | `Phase3ModuleTests.M3_*` | 5 | PASS |
-| M4 | `Phase3ModuleTests.M4_*` | 4 | PASS |
+| M4 | `Phase3ModuleTests.M4_*` (4) + `InstrumentIdentityTests` (18) + `HostInstrumentIdentityTests` (10) | 32 | PASS |
 | M5 | `Phase3ModuleTests.M5_*` | 2 | PASS |
 | M6 | `Phase3ModuleTests.M6_*` | 4 | PASS |
 | M7 | `Phase3ModuleTests.M7_*` | 3 | PASS |

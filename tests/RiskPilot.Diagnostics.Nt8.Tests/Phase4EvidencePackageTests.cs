@@ -323,6 +323,57 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void InstrumentsJson_ReportsInstrumentIdentity_WithNoRawSymbol()
+        {
+            // A fully matching ES/CME identity is reported as PASS in the instruments artifact, and
+            // the artifact never carries the raw contract symbol.
+            var dataset = new EvidenceDataset();
+            dataset.Snapshot = new DiagnosticSnapshot
+            {
+                InstrumentIdentity = new InstrumentIdentityObservation
+                {
+                    InstrumentSurfaceObservable = true,
+                    ObservedInstrumentCount = 1,
+                    RootMetadataObservable = true,
+                    MatchingInstrumentCount = 1,
+                    InstrumentRef = SyntheticRef.For("instrument", "ES 12-26"),
+                    RootSymbolObservable = true,
+                    RootSymbolMatches = true,
+                    InstrumentTypeObservable = true,
+                    InstrumentTypeMatches = true,
+                    CurrencyObservable = true,
+                    CurrencyMatches = true,
+                    SymbolParsed = true,
+                    CanonicalInstrumentId = "ES_FUTURES_CME_DEC26",
+                    CanonicalIdObservable = true,
+                    CanonicalIdMatches = true,
+                    ExchangeMetadataObservable = true,
+                    SelectedRouteIsGlobex = true,
+                    ConfiguredExchangesAreGlobexOnly = true,
+                    ProviderRouteIsRithmicOnly = true,
+                    ExchangeConfirmedCme = true
+                }
+            };
+
+            var package = EvidencePackageBuilder.Build(RunResult(), dataset);
+            Assert.True(package.VerifyIntegrity(out var failure), failure);
+
+            var instruments = package.Read(EvidencePackageCatalog.InstrumentsJson);
+            Assert.Contains("\"instrumentIdentity\"", instruments);
+            Assert.Contains("INSTRUMENT_IDENTITY_MATCH", instruments);
+            Assert.Contains("\"status\":\"PASS\"", instruments);
+            Assert.DoesNotContain("ES 12-26", instruments);
+        }
+
+        [Fact]
+        public void InstrumentsJson_InstrumentIdentity_IsInconclusive_WhenUnobservable()
+        {
+            var package = EvidencePackageBuilder.Build(RunResult(), new EvidenceDataset());
+            var instruments = package.Read(EvidencePackageCatalog.InstrumentsJson);
+            Assert.Contains("\"instrumentIdentity\":\"UNOBSERVABLE\"", instruments);
+        }
+
+        [Fact]
         public void PartialDataset_ReportsOnlyObservedSectionsAvailable()
         {
             // Only connections + accounts are observable; every other section must be

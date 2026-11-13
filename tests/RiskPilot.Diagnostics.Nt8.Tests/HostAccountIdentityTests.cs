@@ -15,6 +15,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
     /// is caught offline. This validates the adapter against the stub surface only; it is NOT
     /// proof of real host behaviour (see the offline build caveat).
     /// </summary>
+    [Collection("StubHostState")]
     public class HostAccountIdentityTests
     {
         private const string ExpectedAccount = "SimRP.BOT";

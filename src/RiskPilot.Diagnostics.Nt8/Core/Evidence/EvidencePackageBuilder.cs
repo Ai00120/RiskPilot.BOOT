@@ -452,6 +452,25 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
                 writer.WriteProperty("attestation", "UNOBSERVABLE");
             }
 
+            var identity = dataset.Snapshot != null ? dataset.Snapshot.InstrumentIdentity : null;
+            if (identity != null)
+            {
+                var verdict = Core.Identity.InstrumentIdentityVerifier.Evaluate(identity);
+                writer.BeginObject("instrumentIdentity");
+                writer.WriteProperty("status", verdict.Status.ToWire());
+                writer.WriteProperty("observedInstrumentCount", verdict.ObservedInstrumentCount);
+                writer.WriteProperty("matchingInstrumentCount", verdict.MatchingInstrumentCount);
+                writer.WriteProperty("instrumentRef", SecretRedactor.Redact(verdict.InstrumentRef));
+                writer.WriteStringArrayProperty("reasonCodes", SecretRedactor.RedactArray(ToArray(verdict.ReasonCodes)));
+                writer.WriteStringArrayProperty("mismatchedFields", ToArray(verdict.MismatchedFields));
+                writer.WriteStringArrayProperty("unobservableFields", ToArray(verdict.UnobservableFields));
+                writer.EndObject();
+            }
+            else
+            {
+                writer.WriteProperty("instrumentIdentity", "UNOBSERVABLE");
+            }
+
             writer.EndObject();
             return writer.ToString();
         }

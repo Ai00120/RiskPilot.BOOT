@@ -32,6 +32,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             var snapshot = context.Snapshot;
             var observation = snapshot != null ? snapshot.Attestation : null;
 
+            // The canonical instrument identity check is independent of the D-078/D-096 attestation
+            // observation: it is emitted even when the attestation surface is unavailable, so M4
+            // always reports whether the selected instrument matches the permanent ES/CME identity.
+            results.Add(BuildInstrumentIdentityCheck(context, correlation, now));
+
             if (observation == null)
             {
                 results.Add(FindingFactory.Unobservable(ModuleId, "M4.HOST_METADATA", correlation, now,
@@ -48,6 +53,69 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             results.Add(BuildAttestationOutcomeCheck(observation, correlation, now));
 
             return results;
+        }
+
+        /// <summary>
+        /// Proves the instrument NinjaTrader actually has selected/loaded is the permanent ES/CME
+        /// identity. The host reduces the loaded instrument surface to booleans/counts plus a
+        /// synthetic instrument reference; the verifier
+        /// (<see cref="Core.Identity.InstrumentIdentityVerifier"/>) decides PASS/FAIL/INCONCLUSIVE.
+        /// The exchange is never inferred from the symbol text: the configured-route metadata must
+        /// confirm CME, and an unconfirmed exchange keeps the result INCONCLUSIVE, never PASS.
+        /// </summary>
+        private DiagnosticResult BuildInstrumentIdentityCheck(ProbeContext context, string correlation, DateTime now)
+        {
+            var snapshot = context.Snapshot;
+            var observation = snapshot != null ? snapshot.InstrumentIdentity : null;
+            var verdict = Core.Identity.InstrumentIdentityVerifier.Evaluate(observation);
+
+            var result = verdict.Status == DiagnosticStatus.PASS
+                ? DiagnosticResult.Pass(ModuleId, "M4.INSTRUMENT_IDENTITY", correlation, now)
+                : (verdict.Status == DiagnosticStatus.FAIL
+                    ? DiagnosticResult.Fail(ModuleId, "M4.INSTRUMENT_IDENTITY", ErrorClass.MissingInstrumentSpecification, correlation, now)
+                    : DiagnosticResult.Inconclusive(ModuleId, "M4.INSTRUMENT_IDENTITY", correlation, now));
+
+            var observationText = "instruments=" + verdict.ObservedInstrumentCount
+                + " rootMatches=" + verdict.MatchingInstrumentCount
+                + " instrumentRef=" + (string.IsNullOrEmpty(verdict.InstrumentRef) ? "none" : verdict.InstrumentRef)
+                + " mismatchedFields=" + Describe(verdict.MismatchedFields)
+                + " unobservableFields=" + Describe(verdict.UnobservableFields);
+
+            var evidence = new List<DiagnosticEvidence>();
+            foreach (var code in verdict.ReasonCodes)
+            {
+                evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "reason=" + code, now));
+            }
+
+            evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi,
+                "instruments=" + verdict.ObservedInstrumentCount, now));
+            evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi,
+                "rootMatches=" + verdict.MatchingInstrumentCount, now));
+
+            if (verdict.Status == DiagnosticStatus.INCONCLUSIVE
+                && verdict.ObservedInstrumentCount == 0)
+            {
+                evidence.Add(DiagnosticEvidence.Unobservable(FindingFactory.SourcePublicApi,
+                    "no loaded instrument identity was observable", now));
+            }
+
+            return result
+                .WithFindingId("M4.INSTRUMENT_IDENTITY")
+                .WithReasonCode(JoinReasonCodes(verdict.ReasonCodes))
+                .WithObservation(observationText)
+                .WithSource(verdict.Status == DiagnosticStatus.INCONCLUSIVE && verdict.ObservedInstrumentCount == 0
+                    ? FindingFactory.SourceUnobservable
+                    : FindingFactory.SourcePublicApi)
+                .WithMethod("Read the loaded instrument discovery surface (Instrument.All), matched the root symbol "
+                    + "exactly, and compared the selected instrument's root, instrument type, currency and the "
+                    + "D-096 configured-route venue metadata against the permanent ES/CME identity.")
+                .WithLimitation("The venue is a configured-route mapping, not an independent exchange-issued "
+                    + "listing-venue attestation; an unconfirmed exchange or route keeps the identity unproven "
+                    + "(INCONCLUSIVE). The raw symbol is never reported.")
+                .WithNextAction(verdict.Status == DiagnosticStatus.PASS
+                    ? "None."
+                    : "Load/subscribe the permanent ES contract on the CME route, then re-run.")
+                .WithEvidence(evidence.ToArray());
         }
 
         private DiagnosticResult BuildHostMetadataCheck(InstrumentAttestationObservation observation, string correlation, DateTime now)
@@ -225,6 +293,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 .WithLimitation("This is the designed fail-closed outcome; the tool reports the cause, it never resolves it.")
                 .WithNextAction("Address each reported cause separately; never auto-approve.")
                 .WithEvidence(evidence.ToArray());
+        }
+
+        private static string Describe(IList<string> fields)
+        {
+            return fields == null || fields.Count == 0 ? "none" : string.Join("|", fields);
         }
 
         private static string[] JoinReasonCodes(IList<string> failures)
