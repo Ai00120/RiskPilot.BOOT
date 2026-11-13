@@ -418,6 +418,12 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   `KnownNonSecretVersions` too, or it will be masked in the evidence and can trip `IsSecretFree`.
 - Tests: `NinjaTraderCompatibilityTests` (declaration invariants + M1 check + environment.json block +
   redaction round-trip). A green stub run is **not** real-host proof.
+- **Static-scan guard:** `verification/addon-smoke/test_diagnostic_safety.py` fails if a NinjaTrader
+  version literal (`"8.1.<n>..."`) appears in production source outside `NinjaTraderCompatibility.cs`,
+  and fails if the `.csproj` header no longer contains the declared target/minimum. This is the
+  machine check that stops a future doc/probe edit from silently re-introducing version drift.
+- The SAMPLE generator derives each finding's severity from the real `DiagnosticResult` (matching
+  `DiagnosticEngine`), so a sample `INCONCLUSIVE` is `MEDIUM`, not a hardcoded `INFO`.
 
 ## Reference repo
 

@@ -80,6 +80,20 @@ ALLOWED_REFLECTION_FILES = {
 IDENTITY_LITERALS = ["SimRP.BOT", "My Rithmic"]
 IDENTITY_DEFINITION_FILE = "src/RiskPilot.Diagnostics.Nt8/Core/Identity/AccountIdentityVerifier.cs"
 
+# The declared NinjaTrader host versions (minimum supported / target) are published evidence and
+# must live in exactly one reviewed file. A version literal (for example "8.1.9.0") appearing
+# anywhere else in production source is version drift: a document, probe or report could then
+# disagree with the single source of truth. This is a source-confined literal only; the declared
+# constants remain readable at runtime.
+VERSION_DEFINITION_FILE = "src/RiskPilot.Diagnostics.Nt8/Core/Identity/NinjaTraderCompatibility.cs"
+VERSION_LITERAL = re.compile(r'"8\.1\.\d[^"]*"')
+
+# The .csproj header restates the target/minimum for a reader who never opens the C# source. The
+# guard below fails if it drifts from the single source of truth, so the two cannot disagree.
+CSPROJ_FILE = "src/RiskPilot.Diagnostics.Nt8/RiskPilot.Diagnostics.Nt8.csproj"
+TARGET_VERSION_DECL = re.compile(r'TargetVersion\s*=\s*"([0-9][0-9.]*)"')
+MINIMUM_VERSION_DECL = re.compile(r'MinimumSupportedVersion\s*=\s*"([0-9][0-9.]*)"')
+
 
 def iter_source_files():
     for path in SRC_DIR.rglob("*.cs"):
@@ -94,6 +108,12 @@ def strip_comments_and_strings(text):
     text = re.sub(r"//[^\n]*", " ", text)
     text = re.sub(r'@"(?:[^"]|"")*"', '""', text, flags=re.DOTALL)
     text = re.sub(r'"(?:\\.|[^"\\])*"', '""', text)
+    return text
+
+
+def strip_comments(text):
+    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.DOTALL)
+    text = re.sub(r"//[^\n]*", " ", text)
     return text
 
 
@@ -132,6 +152,35 @@ def main():
             for literal in IDENTITY_LITERALS:
                 if literal in text:
                     failures.append(f"{rel}: owner identity literal '{literal}' must not appear outside {IDENTITY_DEFINITION_FILE}")
+
+    # The declared NinjaTrader host versions must be confined to the single reviewed definition
+    # file, so no probe/report can hardcode a drifting version. A version literal elsewhere in
+    # production source (outside comments and other string literals) is version drift.
+    version_definition = REPO / VERSION_DEFINITION_FILE
+    if not version_definition.exists():
+        failures.append(f"{VERSION_DEFINITION_FILE}: version definition file is missing")
+    else:
+        for path, rel in files:
+            if rel == VERSION_DEFINITION_FILE:
+                continue
+            body = strip_comments(path.read_text(encoding="utf-8"))
+            if VERSION_LITERAL.search(body):
+                failures.append(
+                    f"{rel}: NinjaTrader version literal must not appear outside {VERSION_DEFINITION_FILE}"
+                )
+
+    # The .csproj header must agree with the declared constants, so the two never disagree.
+    if version_definition.exists():
+        definition_text = version_definition.read_text(encoding="utf-8")
+        target = TARGET_VERSION_DECL.search(definition_text)
+        minimum = MINIMUM_VERSION_DECL.search(definition_text)
+        csproj = REPO / CSPROJ_FILE
+        if target and minimum and csproj.exists():
+            csproj_text = csproj.read_text(encoding="utf-8")
+            if f"NinjaTrader {target.group(1)}" not in csproj_text:
+                failures.append(f"{CSPROJ_FILE}: target version {target.group(1)} missing/drifted in header")
+            if f"minimum supported {minimum.group(1)}" not in csproj_text:
+                failures.append(f"{CSPROJ_FILE}: minimum supported version {minimum.group(1)} missing/drifted in header")
 
     if failures:
         print("STATIC SAFETY CHECK: FAIL")

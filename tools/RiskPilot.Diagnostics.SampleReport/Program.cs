@@ -118,7 +118,7 @@ namespace RiskPilot.Diagnostics.SampleReport
                     ModuleId = module,
                     FindingId = check,
                     Status = status,
-                    Severity = status == DiagnosticStatus.FAIL ? DiagnosticSeverity.High : DiagnosticSeverity.Info,
+                    Severity = result.Severity,
                     Observation = observation,
                     Source = "NinjaTrader Public API",
                     Method = "SAMPLE data (synthetic).",

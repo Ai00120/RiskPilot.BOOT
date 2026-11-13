@@ -199,6 +199,11 @@ findings.json               manifest.json
   کدهای دلیل از `LifecycleVerifier`) از خود snapshot ارزیابی می‌شود؛ بدون سطح مشاهده‌پذیر
   `"lifecycle": "UNOBSERVABLE"` نوشته می‌شود، هرگز مقدار ساختگی. فاز اتصال به‌صراحت
   `DEFERRED_TO_M2` است.
+- `environment.json` → بلوک `ninjaTraderCompatibility` (نسخهٔ هدف، حداقل پشتیبانی‌شده،
+  `verifiedAtRuntime`, `testedVersions`, `verifiedBuild`, `statement`) از تک‌منبع
+  `Core/Identity/NinjaTraderCompatibility.cs` نوشته می‌شود. چون هیچ API عمومی نسخهٔ نصب‌شدهٔ میزبان را
+  افشا نمی‌کند، `verifiedAtRuntime` روی `false` و `testedVersions` خالی می‌ماند تا اجرای واقعی روی
+  میزبان ثبت شود؛ هرگز سازگاریِ راستی‌آزمایی‌نشده ادعا نمی‌شود.
 
 ### 5.2 Manifest
 

@@ -23,10 +23,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   minimumSupportedVersion, verifiedAtRuntime, testedVersions, verifiedBuild, statement) and
   `summary.html` shows the target version with its verification status. `SecretRedactor` now
   preserves the tool's own declared version strings (which share the IPv4 shape) while still
-  masking genuine IP addresses, so the compatibility evidence is not corrupted. Tests:
+  masking genuine IP addresses, so the compatibility evidence is not corrupted. The offline static
+  safety scan now also fails on version drift: a NinjaTrader version literal outside the single
+  definition file, or a `.csproj` header that disagrees with the declared constants. Tests:
   `NinjaTraderCompatibilityTests`.
 
 ### Fixed
+
+- **SAMPLE findings reported the wrong severity.** The sample generator hardcoded every non-`FAIL`
+  finding to `INFO`, so an `INCONCLUSIVE` finding (which production reports as `MEDIUM`) appeared as
+  `INFO` in the committed sample. The generator now copies the real `DiagnosticResult.Severity`,
+  matching `DiagnosticEngine`. The sample package and `SHA256SUMS.txt` were regenerated.
 
 - **The AddOn lifecycle was not actually observable by M1 (organization/correctness).** M1 carried a
   `M1.LIFECYCLE` check that read an untyped `RuntimeObservation.LifecycleStates` list which the host

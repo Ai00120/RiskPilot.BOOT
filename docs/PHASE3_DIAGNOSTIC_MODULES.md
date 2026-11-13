@@ -105,6 +105,7 @@ CONNECTION یک عضو `State` نیست و به‌صراحت به **M2** واگ�
 | `M1.BUILD_MODE` | `UseStubs` و `TargetFramework` |
 | `M1.ENVIRONMENT_CLASS` | Live / Simulation / Unknown |
 | `M1.HOST_VERSION` | همیشه `INCONCLUSIVE` (Unobservable) |
+| `M1.HOST_COMPATIBILITY` | وضعیت سازگاری اعلام‌شده (نسخهٔ هدف/حداقل پشتیبانی‌شده)؛ همیشه `INCONCLUSIVE` تا راستی‌آزمایی روی میزبان واقعی (هرگز `PASS` با تغییر داکیومنت) |
 
 **قرارداد fail-closed (`LifecycleVerifier`):** سطح نامشاهده‌پذیر یا مقدار stub/mock ⇒ `INCONCLUSIVE`؛
 عضو `State` ناشناخته ⇒ `INCONCLUSIVE`؛ گذارِ معکوس (rank نزولی) یا حالت بعد از `Terminated` ⇒ `FAIL`؛
@@ -523,6 +524,8 @@ aggressor side).
 ### ۱۱.۳ هرگز قابل‌مشاهده با API عمومی (همیشه INCONCLUSIVE / Unobservable)
 
 - نسخهٔ دقیق Runtime میزبان NT8.
+- سازگاری میزبان (`M1.HOST_COMPATIBILITY`): نسخهٔ هدف فقط یک «قصد پروژه» است و هیچ API عمومی
+  نسخهٔ نصب‌شده را افشا نمی‌کند، پس همیشه `INCONCLUSIVE` است تا اجرای واقعی روی میزبان ثبت شود.
 - نسخهٔ build provider (Rithmic).
 - aggressor side معاملات از Level I.
 - عمق کامل order book فراتر از آنچه `MarketDepth` می‌دهد.
