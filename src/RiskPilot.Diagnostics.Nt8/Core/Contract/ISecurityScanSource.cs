@@ -17,6 +17,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Contract
         bool IsAvailable { get; }
 
         /// <summary>
+        /// True only when the entire permitted BOOT source tree was enumerated and read without
+        /// error. False when a file or directory was skipped (an unreadable entry, a reparse point,
+        /// or a partial enumeration), so a scan over an incompletely covered source set is never
+        /// reported as a clean, complete PASS.
+        /// </summary>
+        bool IsComplete { get; }
+
+        /// <summary>
         /// Repo-relative paths (POSIX form) of the production source files to scan. It excludes
         /// offline stubs and build output. The list is ordered deterministically.
         /// </summary>

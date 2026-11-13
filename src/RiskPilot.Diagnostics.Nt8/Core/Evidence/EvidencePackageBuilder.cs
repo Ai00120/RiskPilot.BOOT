@@ -848,6 +848,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
                 writer.WriteProperty("status", scan.Executed ? AvailableStatus : UnavailableStatus);
                 writer.WriteProperty("executed", scan.Executed);
                 writer.WriteProperty("sourceAvailable", scan.SourceAvailable);
+                writer.WriteProperty("sourceComplete", scan.SourceComplete);
                 writer.WriteProperty("filesScanned", scan.FilesScanned);
                 writer.WriteProperty("ruleCount", scan.RuleCount);
                 writer.WriteProperty("hitCount", scan.HitCount);

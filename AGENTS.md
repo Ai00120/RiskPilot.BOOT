@@ -349,11 +349,24 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   offline `verification/addon-smoke` scan applied (order/account mutation, live-trading enable,
   reflection/unsafe/interop, identity-literal confinement, trading-disabled declaration), so there are
   no missing checks and no duplicate execution (M8 is the single executor).
-- Source contract: `Core/Contract/ISecurityScanSource.cs` (`IsAvailable`, `GetSourceFiles()`, `ReadFile`,
-  `FileExists`) — strictly read-only. The host adapter is `Host/FileSystemSecurityScanSource.cs`
+- Source contract: `Core/Contract/ISecurityScanSource.cs` (`IsAvailable`, `IsComplete`, `GetSourceFiles()`,
+  `ReadFile`, `FileExists`) — strictly read-only. The host adapter is `Host/FileSystemSecurityScanSource.cs`
   (reads production source under `src/RiskPilot.Diagnostics.Nt8`, excludes `/Stubs/`, `/obj/`, `/bin/`;
   never writes and never touches NT8 configuration). `IDiagnosticDataProvider.GetSecurityScanSource()`
   exposes it; the host provider returns a `FileSystemSecurityScanSource`.
+- **Scan scope is confined to the BOOT installation directory.** The host adapter resolves only the
+  standalone repo folder (`src/RiskPilot.Diagnostics.Nt8`) or the NinjaScript custom-compile folder
+  `AddOns\RiskPilot.Diagnostics.Nt8` (the BOOT *child* of `AddOns`, never a bare `AddOns` parent), so an
+  unrelated third-party/user AddOn can never be scanned or produce a BOOT finding. `ResolveDefaultRoot(base, documents)`
+  is the testable resolution entry point. Every read passes one containment gate (`ResolveWithinRoot`):
+  rooted and `..`-escaping relative paths are refused, and a reparse point (symbolic link/junction) on the
+  root, a file, or any path component is never followed. The candidate-root presence probe and the tree
+  walk are reparse-aware and bounded — never `SearchOption.AllDirectories`, which would follow a symlink
+  out of the tree. The BOOT root itself must be a real (non-reparse) directory containing production source.
+- **Incomplete coverage is never PASS.** `IsComplete` is false when any file/directory is skipped (an
+  unreadable entry or a reparse point) or the tree was only partially enumerated; the scanner folds that
+  into `SourceComplete` + `SECURITY_SCAN_INCOMPLETE`, and M8 reports the check `INCONCLUSIVE` (an empty
+  or partially covered set is never a clean PASS). A skipped file is recorded, never silently ignored.
 - Single result, two paths: M8 publishes the scan to `SessionContext.SecurityScan`; `SnapshotAssembler.MergeSecurityScan`
   copies it into the export snapshot, so the live probe and the exported `safety-audit.json` report the
   **same** scan without a second run.
@@ -364,8 +377,15 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - Identity literals are never hardcoded in the scanner: `SecurityScan.ContainsIdentityLiteral` draws them
   from `ExpectedAccountIdentity`, so the scanner is never itself a leak site. `safety-audit.json` carries
   a `securityScan` block (executed/counts/reasonCodes/hits by rule+file+line only — no code fragment).
-- Tests: `SecurityScanTests` (scanner rules + M8 ownership/reporting over the in-memory read-only source)
-  and the M8 cases in `Phase3ModuleTests` / `Phase5ScenarioTests`. A green stub run is **not** real-host proof.
+- Tests: `SecurityScanTests` (scanner rules + M8 ownership/reporting over the in-memory read-only source),
+  `SecurityScanScopeTests` (the scope/traversal/symlink/incomplete-coverage regression set below), and the
+  M8 cases in `Phase3ModuleTests` / `Phase5ScenarioTests`. A green stub run is **not** real-host proof.
+- `SecurityScanScopeTests` covers: the correct BOOT directory; an unrelated sibling AddOn (never scanned);
+  the custom-compile layout resolving the BOOT child of `AddOns` and never the bare `AddOns` parent;
+  parent-directory and `..` traversal (refused) versus an in-root `..` (allowed); a BOOT root that is a
+  symlink (unavailable); a symlinked directory/file inside BOOT (never traversed/read, marks incomplete);
+  a missing/empty BOOT directory (unavailable, never PASS); an unreadable directory/file (incomplete,
+  never PASS); and M8 reporting `INCONCLUSIVE` for an incomplete source set.
 
 ## M1 lifecycle diagnostics (P9 — lifecycle ownership)
 

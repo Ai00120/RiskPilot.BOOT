@@ -206,6 +206,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     {
                         Executed = true,
                         SourceAvailable = true,
+                        SourceComplete = true,
                         FilesScanned = 103,
                         RuleCount = RiskPilot.Diagnostics.Nt8.Core.Security.SecurityScanCatalog.RuleCount,
                         TradingDisabledObservable = true,

@@ -59,6 +59,7 @@
     <Compile Include="StubHostStateCollection.cs" />
     <Compile Include="Phase3ModuleTests.cs" />
     <Compile Include="SecurityScanTests.cs" />
+    <Compile Include="SecurityScanScopeTests.cs" />
     <Compile Include="Phase4RunCoordinatorTests.cs" />
     <Compile Include="Phase4EvidencePackageTests.cs" />
     <Compile Include="Phase4PostTradeAuditTests.cs" />

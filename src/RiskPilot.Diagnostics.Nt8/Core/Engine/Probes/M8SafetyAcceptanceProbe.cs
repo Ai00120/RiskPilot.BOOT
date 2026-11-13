@@ -182,6 +182,26 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                         DiagnosticEvidence.Unobservable(FindingFactory.SourceStaticScan, "TRADING_DISABLED_DECLARATION_NOT_OBSERVED", now));
             }
 
+            // The scan ran over a readable set, but it could not cover the whole permitted source
+            // set (a skipped file, a reparse point, or an unreadable entry). A clean result over a
+            // partially covered set is not a PASS; it is INCONCLUSIVE.
+            if (!scan.SourceComplete)
+            {
+                return DiagnosticResult
+                    .Inconclusive(ModuleId, "M8.SECURITY_SCAN", correlation, now)
+                    .WithFindingId("M8.SECURITY_SCAN")
+                    .WithReasonCode(SecurityScanReasonCodes.Incomplete)
+                    .WithObservation("forbiddenApiHits=" + scan.HitCount + " filesScanned=" + scan.FilesScanned
+                        + " sourceComplete=false")
+                    .WithSource(FindingFactory.SourceStaticScan)
+                    .WithMethod("Read-only scan of production source; the permitted source set could not be fully covered.")
+                    .WithLimitation("A partially covered source set cannot prove the absence of forbidden patterns; it is never reported as PASS.")
+                    .WithNextAction("Confirm every production file under the BOOT directory is readable, then re-run.")
+                    .WithEvidence(
+                        DiagnosticEvidence.Observable(FindingFactory.SourceStaticScan, "forbiddenApiHits=" + scan.HitCount, now),
+                        DiagnosticEvidence.Unobservable(FindingFactory.SourceStaticScan, "SOURCE_SET_NOT_FULLY_COVERED", now));
+            }
+
             return DiagnosticResult
                 .Pass(ModuleId, "M8.SECURITY_SCAN", correlation, now)
                 .WithFindingId("M8.SECURITY_SCAN")

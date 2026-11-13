@@ -73,6 +73,18 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Security
                 return Unavailable(observation, SecurityScanReasonCodes.SourceUnavailable);
             }
 
+            // The source reports whether it could enumerate and read the whole permitted set. An
+            // incomplete source set is never a clean pass; it is recorded (never silently ignored).
+            bool sourceComplete;
+            try
+            {
+                sourceComplete = source.IsComplete;
+            }
+            catch (Exception)
+            {
+                sourceComplete = false;
+            }
+
             IReadOnlyList<string> files;
             try
             {
@@ -191,15 +203,25 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Security
                 observation.ReasonCodes.Add(SecurityScanReasonCodes.Exception);
             }
 
+            // The scan is complete only when the source covered its whole permitted set and every
+            // file in that set was read. A skipped file (an unreadable entry or a reparse point) or
+            // a source that could not fully enumerate makes the coverage incomplete.
+            var scanComplete = sourceComplete && unreadable == 0;
+            if (!scanComplete)
+            {
+                observation.ReasonCodes.Add(SecurityScanReasonCodes.Incomplete);
+            }
+
             observation.Executed = true;
             observation.SourceAvailable = true;
+            observation.SourceComplete = scanComplete;
             observation.FilesScanned = filesScanned;
 
             if (observation.HitCount == 0
                 && observation.TradingDisabledObservable
                 && observation.TradingDisabledDeclared
                 && observation.IdentityDefinitionReviewed
-                && unreadable == 0)
+                && scanComplete)
             {
                 observation.ReasonCodes.Add(SecurityScanReasonCodes.Passed);
             }

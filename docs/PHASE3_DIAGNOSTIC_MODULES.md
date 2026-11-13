@@ -484,9 +484,21 @@ out-of-band را گزارش کند). منبع از طریق `IDiagnosticDataProv
 **Fail-closed:** منبع ناموجود/غیرقابل‌خواندن یا فایل خوانده‌نشده → `INCONCLUSIVE` (هرگز `PASS`)؛
 هیچ‌کدام از استثناها بی‌صدا به `PASS` تبدیل نمی‌شوند؛ یک hit مثبت → `FAIL`.
 
+**دامنهٔ اسکن (scope):** `FileSystemSecurityScanSource` فقط پوشهٔ نصب BOOT را اسکن می‌کند — یا
+`src/RiskPilot.Diagnostics.Nt8` (repo) یا `AddOns\RiskPilot.Diagnostics.Nt8` (مسیر custom-compile)،
+یعنی **فرزند** `AddOns` و هرگز خودِ پوشهٔ `AddOns`. بنابراین AddOnهای بیگانه/نصب‌شدهٔ کاربر هرگز
+اسکن نمی‌شوند و نمی‌توانند یافتهٔ امنیتی BOOT تولید کنند. هر مسیر پیش از خواندن canonicalize و به
+ریشه محدود می‌شود: مسیرهای rooted و `..`-فرار رد می‌شوند و هیچ symbolic link / reparse point (روی
+ریشه، فایل، یا هر جزء مسیر) دنبال نمی‌شود. اگر پوشهٔ BOOT موجود/معتبر/قابل‌دسترس نباشد → منبع
+unavailable و اسکن `INCONCLUSIVE`. اگر پوشه یا فایلی نتواند enumerate/read شود، اسکن **incomplete**
+(`SECURITY_SCAN_INCOMPLETE` + `SourceComplete=false`) می‌شود و هرگز `PASS` نمی‌دهد؛ هیچ فایل
+نادیده‌گرفته‌شده‌ای بی‌صدا نادیده گرفته نمی‌شود.
+
 **مرجع API:** هیچ API معاملاتی فراخوانی نمی‌شود؛ اسکن صرفاً سورس را می‌خواند و هیچ تنظیمات NT8 را
 تغییر نمی‌دهد.
-**تست‌ها:** `SecurityScanTests` (قوانین اسکنر + مالکیت/گزارش M8) و `Phase3ModuleTests.M8_*`.
+**تست‌ها:** `SecurityScanTests` (قوانین اسکنر + مالکیت/گزارش M8)، `SecurityScanScopeTests` (دامنهٔ
+اسکن: پوشهٔ درست، AddOn بیگانه، traversal، symlink/reparse، پوشهٔ گمشده/خالی/غیرقابل‌خواندن،
+پوشش ناقص) و `Phase3ModuleTests.M8_*`.
 **محدودیت:** موارد غیرقابل‌مشاهده همیشه فهرست می‌شوند (نسخهٔ Runtime میزبان، نسخهٔ provider،
 aggressor side).
 
