@@ -104,10 +104,16 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
             host.InvalidSizeCount += counters.Get(RuntimeCounterKeys.DomHostInvalidSize);
             host.InvalidPositionCount += counters.Get(RuntimeCounterKeys.DomHostInvalidPosition);
 
+            // A malformed depth event is itself evidence the host adapter was reached: the host
+            // delivered an event we could not use. Counting it keeps the loss visible instead of
+            // hiding it behind an "unobservable" surface.
+            observation.MalformedCount += counters.Get(RuntimeCounterKeys.DomHostMalformed);
+
             // The host layer is observable once it reported any DOM activity or declared it so.
             host.Observable = host.Observable
                 || host.InsertCount > 0 || host.UpdateCount > 0 || host.RemoveCount > 0
-                || host.ResetCount > 0 || host.SnapshotSyncCount > 0;
+                || host.ResetCount > 0 || host.SnapshotSyncCount > 0
+                || observation.MalformedCount > 0;
 
             observation.HostAdapter = host;
 
@@ -128,8 +134,6 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
             {
                 observation.LastTradeObserved = true;
             }
-
-            observation.MalformedCount += counters.Get(RuntimeCounterKeys.DomHostMalformed);
 
             // Freshness is derived from the newest event the ingest path actually observed; it
             // is never fabricated, and stays absent until an event is seen.

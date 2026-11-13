@@ -112,6 +112,26 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M5.LEVEL1").Status);
             Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M5.FRESHNESS").Status);
             Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M5.DATA_INTEGRITY").Status);
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M5.VALIDITY").Status);
+        }
+
+        [Fact]
+        public void Validity_ObservableHostButNoDepth_IsInconclusiveNotPass()
+        {
+            // A zero invalid count is only "clean" once a depth stream was observed. With an
+            // observable host surface but no depth event there was nothing to validate, so the
+            // check must not report a clean PASS on absent data.
+            var provider = ProviderWith(new DomMarketDataObservation
+            {
+                DataSurfaceObservable = true,
+                Level1QuoteObserved = true,
+                HostAdapter = ObservableHost()
+            });
+
+            var validity = Find(new M5DomMarketDataProbe().Evaluate(Context(provider)), "M5.VALIDITY");
+
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, validity.Status);
+            Assert.Contains("VALIDITY_NOT_OBSERVED", validity.ReasonCodes);
         }
 
         [Fact]
@@ -334,8 +354,129 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             consumer.Consume(new MarketDataRecord { InstrumentId = "ES", Kind = MarketDataKind.Trade, IngestedAtUtc = Now.AddSeconds(-5) });
             Assert.Equal(Now, session.LastMarketDataEventUtc);
 
-            consumer.Consume(new DomRecord { InstrumentId = "ES", Operation = DomOperation.Insert, IngestedAtUtc = Now.AddSeconds(3) });
+            consumer.Consume(new DomRecord { InstrumentId = "ES", Operation = DomOperation.Insert, Price = 5000.0, IngestedAtUtc = Now.AddSeconds(3) });
             Assert.Equal(Now.AddSeconds(3), session.LastMarketDataEventUtc);
+        }
+
+        // ---------------- Consumer: validity counting from real records ----------------
+
+        [Fact]
+        public void Consumer_ValidDepthRecord_CountsNoInvalidFields()
+        {
+            var session = new SessionContext(SessionId.New(Now), Now);
+            var consumer = new M5DomMarketDataConsumer(session);
+
+            consumer.Consume(new DomRecord
+            {
+                InstrumentId = "ES 12-26",
+                Operation = DomOperation.Update,
+                Position = 2,
+                Price = 4999.75,
+                Volume = 7,
+                IngestedAtUtc = Now
+            });
+
+            Assert.Equal(0, session.Counters.Get(RuntimeCounterKeys.DomHostInvalidPrice));
+            Assert.Equal(0, session.Counters.Get(RuntimeCounterKeys.DomHostInvalidSize));
+            Assert.Equal(0, session.Counters.Get(RuntimeCounterKeys.DomHostInvalidPosition));
+            Assert.Equal(0, session.Counters.Get(RuntimeCounterKeys.DomHostMalformed));
+        }
+
+        [Fact]
+        public void Consumer_NegativePrice_IsCountedAsInvalidPrice()
+        {
+            var session = new SessionContext(SessionId.New(Now), Now);
+            var consumer = new M5DomMarketDataConsumer(session);
+
+            consumer.Consume(new DomRecord
+            {
+                InstrumentId = "ES 12-26",
+                Operation = DomOperation.Update,
+                Position = 2,
+                Price = -1.0,
+                Volume = 7,
+                IngestedAtUtc = Now
+            });
+
+            Assert.Equal(1, session.Counters.Get(RuntimeCounterKeys.DomHostInvalidPrice));
+        }
+
+        [Fact]
+        public void Consumer_NonFinitePrice_IsCountedAsInvalidPrice()
+        {
+            var session = new SessionContext(SessionId.New(Now), Now);
+            var consumer = new M5DomMarketDataConsumer(session);
+
+            consumer.Consume(new DomRecord { InstrumentId = "ES 12-26", Operation = DomOperation.Update, Position = 2, Price = double.NaN, Volume = 7, IngestedAtUtc = Now });
+            consumer.Consume(new DomRecord { InstrumentId = "ES 12-26", Operation = DomOperation.Insert, Position = 3, Price = double.PositiveInfinity, Volume = 1, IngestedAtUtc = Now });
+
+            Assert.Equal(2, session.Counters.Get(RuntimeCounterKeys.DomHostInvalidPrice));
+        }
+
+        [Fact]
+        public void Consumer_NegativeVolume_IsCountedAsInvalidSize()
+        {
+            var session = new SessionContext(SessionId.New(Now), Now);
+            var consumer = new M5DomMarketDataConsumer(session);
+
+            consumer.Consume(new DomRecord
+            {
+                InstrumentId = "ES 12-26",
+                Operation = DomOperation.Update,
+                Position = 2,
+                Price = 5000.0,
+                Volume = -1,
+                IngestedAtUtc = Now
+            });
+
+            Assert.Equal(1, session.Counters.Get(RuntimeCounterKeys.DomHostInvalidSize));
+        }
+
+        [Fact]
+        public void Consumer_NegativePosition_IsCountedAsInvalidPosition()
+        {
+            var session = new SessionContext(SessionId.New(Now), Now);
+            var consumer = new M5DomMarketDataConsumer(session);
+
+            consumer.Consume(new DomRecord
+            {
+                InstrumentId = "ES 12-26",
+                Operation = DomOperation.Update,
+                Position = -1,
+                Price = 5000.0,
+                Volume = 3,
+                IngestedAtUtc = Now
+            });
+
+            Assert.Equal(1, session.Counters.Get(RuntimeCounterKeys.DomHostInvalidPosition));
+        }
+
+        [Fact]
+        public void Consumer_UnknownOperationOrMissingInstrument_IsCountedAsMalformed()
+        {
+            var session = new SessionContext(SessionId.New(Now), Now);
+            var consumer = new M5DomMarketDataConsumer(session);
+
+            consumer.Consume(new DomRecord { InstrumentId = "ES 12-26", Operation = DomOperation.Unknown, IngestedAtUtc = Now });
+            consumer.Consume(new DomRecord { InstrumentId = string.Empty, Operation = DomOperation.Update, Price = 5000.0, IngestedAtUtc = Now });
+
+            Assert.Equal(2, session.Counters.Get(RuntimeCounterKeys.DomHostMalformed));
+            // A malformed record contributes no depth-operation evidence.
+            Assert.Equal(0, session.Counters.Get(RuntimeCounterKeys.DomHostUpdate));
+        }
+
+        [Fact]
+        public void Consumer_Reset_DoesNotCountInvalidFields()
+        {
+            // A reset carries no price/size/position, so it must never be counted as invalid.
+            var session = new SessionContext(SessionId.New(Now), Now);
+            var consumer = new M5DomMarketDataConsumer(session);
+
+            consumer.Consume(new DomRecord { InstrumentId = "ES 12-26", Operation = DomOperation.Reset, IsReset = true, IngestedAtUtc = Now });
+
+            Assert.Equal(0, session.Counters.Get(RuntimeCounterKeys.DomHostInvalidPrice));
+            Assert.Equal(0, session.Counters.Get(RuntimeCounterKeys.DomHostInvalidSize));
+            Assert.Equal(0, session.Counters.Get(RuntimeCounterKeys.DomHostInvalidPosition));
         }
 
         // ---------------- Assembler: real evidence propagation ----------------
@@ -359,6 +500,54 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.True(dom.Level1QuoteObserved);
             Assert.True(dom.LastTradeObserved);
             Assert.Equal(Now.AddSeconds(-2), dom.LastEventUtc);
+        }
+
+        [Fact]
+        public void Assembler_MalformedDepthRecord_MakesSurfaceObservableAndFailsValidity()
+        {
+            // A malformed depth record must not be hidden behind an "unobservable" surface: the
+            // host delivered an event we could not use, and the loss must be visible as a FAIL.
+            var session = new SessionContext(SessionId.New(Now), Now);
+            var consumer = new M5DomMarketDataConsumer(session);
+            consumer.Consume(new DomRecord { InstrumentId = string.Empty, Operation = DomOperation.Update, Price = 5000.0, IngestedAtUtc = Now });
+
+            var merged = SnapshotAssembler.Assemble(new DiagnosticSnapshot(), session);
+            var provider = new FakeDataProvider { Snapshot = merged };
+            var results = new M5DomMarketDataProbe().Evaluate(Context(provider));
+
+            Assert.True(merged.DomMarketData.DataSurfaceObservable);
+            Assert.Equal(1, merged.DomMarketData.MalformedCount);
+            Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M5.VALIDITY").Status);
+            Assert.Contains("INVALID_EVENTS_OBSERVED", Find(results, "M5.VALIDITY").ReasonCodes);
+        }
+
+        [Fact]
+        public void Assembler_InvalidDepthField_FailsValidity_FromRealIngest()
+        {
+            var session = new SessionContext(SessionId.New(Now), Now);
+            var consumer = new M5DomMarketDataConsumer(session);
+            consumer.Consume(new DomRecord { InstrumentId = "ES 12-26", Operation = DomOperation.Update, Position = 2, Price = -1.0, Volume = 7, IngestedAtUtc = Now });
+
+            var merged = SnapshotAssembler.Assemble(new DiagnosticSnapshot(), session);
+            var provider = new FakeDataProvider { Snapshot = merged };
+            var results = new M5DomMarketDataProbe().Evaluate(Context(provider));
+
+            Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M5.VALIDITY").Status);
+            Assert.Contains("INVALID_PRICE=1", Find(results, "M5.VALIDITY").ReasonCodes);
+        }
+
+        [Fact]
+        public void Assembler_ValidDepthRecords_ValidityIsPass_OnRealEvidence()
+        {
+            var session = new SessionContext(SessionId.New(Now), Now);
+            var consumer = new M5DomMarketDataConsumer(session);
+            consumer.Consume(new DomRecord { InstrumentId = "ES 12-26", Operation = DomOperation.Update, Position = 2, Price = 4999.75, Volume = 7, IngestedAtUtc = Now });
+
+            var merged = SnapshotAssembler.Assemble(new DiagnosticSnapshot(), session);
+            var provider = new FakeDataProvider { Snapshot = merged };
+            var results = new M5DomMarketDataProbe().Evaluate(Context(provider));
+
+            Assert.Equal(DiagnosticStatus.PASS, Find(results, "M5.VALIDITY").Status);
         }
 
         // ---------------- Host capture adapter (offline stub surface) ----------------

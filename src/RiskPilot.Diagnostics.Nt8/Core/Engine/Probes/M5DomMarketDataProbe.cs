@@ -274,24 +274,37 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             var invalid = block.InvalidPriceCount + block.InvalidSizeCount + block.InvalidPositionCount;
             var malformed = observation.MalformedCount;
 
-            return (invalid == 0 && malformed == 0
-                    ? DiagnosticResult.Pass(ModuleId, "M5.VALIDITY", correlation, now)
-                    : DiagnosticResult.Fail(ModuleId, "M5.VALIDITY", ErrorClass.DataUnavailable, correlation, now))
+            // A positive count is itself evidence that depth evidence is incomplete, so it fails
+            // regardless. A zero count is only "clean" once a depth stream was actually observed:
+            // with no depth events there was nothing to validate, so the check stays INCONCLUSIVE
+            // rather than reporting a clean PASS on absent data.
+            var hasInvalid = invalid > 0 || malformed > 0;
+            var status = hasInvalid ? DiagnosticStatus.FAIL
+                : (observation.DepthObserved ? DiagnosticStatus.PASS : DiagnosticStatus.INCONCLUSIVE);
+            var result = status == DiagnosticStatus.FAIL
+                ? DiagnosticResult.Fail(ModuleId, "M5.VALIDITY", ErrorClass.DataUnavailable, correlation, now)
+                : (status == DiagnosticStatus.INCONCLUSIVE
+                    ? DiagnosticResult.Inconclusive(ModuleId, "M5.VALIDITY", correlation, now)
+                    : DiagnosticResult.Pass(ModuleId, "M5.VALIDITY", correlation, now));
+
+            return result
                 .WithFindingId("M5.VALIDITY")
                 .WithReasonCode(
-                    invalid == 0 && malformed == 0 ? "NO_INVALID_EVENTS" : "INVALID_EVENTS_OBSERVED",
+                    hasInvalid ? "INVALID_EVENTS_OBSERVED"
+                        : (observation.DepthObserved ? "NO_INVALID_EVENTS" : "VALIDITY_NOT_OBSERVED"),
                     "INVALID_PRICE=" + block.InvalidPriceCount,
                     "INVALID_SIZE=" + block.InvalidSizeCount,
                     "INVALID_POSITION=" + block.InvalidPositionCount,
                     "MALFORMED=" + malformed)
                 .WithObservation("invalidPrice=" + block.InvalidPriceCount + " invalidSize=" + block.InvalidSizeCount
-                    + " invalidPosition=" + block.InvalidPositionCount + " malformed=" + malformed)
+                    + " invalidPosition=" + block.InvalidPositionCount + " malformed=" + malformed
+                    + " depthObserved=" + observation.DepthObserved)
                 .WithSource(FindingFactory.SourceRuntimeCounters)
                 .WithMethod("Counted DOM events rejected for an invalid price, size or position, and malformed events.")
-                .WithLimitation("Invalid events are counted, never silently dropped; a non-zero count means depth evidence is incomplete.")
-                .WithNextAction(invalid == 0 && malformed == 0
-                    ? "None."
-                    : "Inspect the invalid/malformed DOM events; depth evidence is incomplete until they are understood.")
+                .WithLimitation("Invalid events are counted, never silently dropped; a non-zero count means depth evidence is incomplete. A zero count is only clean once a depth stream was observed.")
+                .WithNextAction(hasInvalid
+                    ? "Inspect the invalid/malformed DOM events; depth evidence is incomplete until they are understood."
+                    : (observation.DepthObserved ? "None." : "Observe a depth stream so validity can be evaluated."))
                 .WithEvidence(
                     DiagnosticEvidence.Observable(FindingFactory.SourceRuntimeCounters, "invalidPrice=" + block.InvalidPriceCount, now),
                     DiagnosticEvidence.Observable(FindingFactory.SourceRuntimeCounters, "invalidSize=" + block.InvalidSizeCount, now),

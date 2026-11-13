@@ -302,9 +302,18 @@ boolean/count + `instrument#<hash>` کاهش می‌دهد. مقایسهٔ ری�
   `M5.DEPTH`، `M5.LEVEL1`، `M5.DATA_INTEGRITY` و `M5.FRESHNESS` همگی `INCONCLUSIVE`.
 - یک شمارندهٔ مثبت (Sync Failure، Out-of-Bounds، Invalid، Gap، Drop) خودش شاهد است و
   `FAIL` می‌دهد؛ صفر فقط پس از مشاهدهٔ واقعی جریان «پاک» است.
+- `M5.VALIDITY` از رکوردهای واقعیِ وارد‌شده مشتق می‌شود: `M5DomMarketDataConsumer` هر
+  رکورد DOM با Price منفی/غیرمتناهی، Volume منفی، Position منفی یا Operation/Instrument
+  نامعتبر را شمارش می‌کند (Reset اعتبارسنجی نمی‌شود). یک رویداد Malformed خودش سطح داده را
+  «مشاهده‌شده» می‌کند تا از‌دست‌رفتن پشت سطح «غیرقابل‌مشاهده» پنهان نشود.
 - `M5.FRESHNESS` همیشه `INCONCLUSIVE` است و فقط `FRESH`/`STALE` را با سن واقعی گزارش
   می‌کند؛ سنِ منفی (رویداد آینده نسبت به ساعت ابزار) قابل‌اعتماد نیست و `INCONCLUSIVE`
   می‌ماند.
+- شاهدِ مشاهده‌شده باید به **هر دو مسیر** برسد: Probe زنده (از طریق `ProbeContext` →
+  `SnapshotAssembler.Assemble`) و بستهٔ شواهد صادرشده
+  (`DiagnosticRuntime.BuildEvidenceDataset`). تنظیم فقط در یک مسیر باعث می‌شود
+  `market-data-summary.json` / `dom-summary.json` سطحی «مشاهده‌نشده» را گزارش کنند، درحالی‌که
+  رکوردهای واقعی وارد شده‌اند.
 
 **دو لایه جداگانه گزارش می‌شوند** (شمارنده‌ها هرگز با هم مخلوط نمی‌شوند):
 
