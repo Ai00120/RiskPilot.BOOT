@@ -10,6 +10,10 @@
 > This audit was performed independently and did not assume the earlier phases were correct.
 > It re-read the source, re-ran the suites, and probed for fail-open behaviour. Four real
 > defects were found and fixed. The fixes are described below with the reasoning.
+>
+> A follow-up audit (this revision) additionally corrected **M6**, whose host adapter never
+> classified trade direction, so the module reported the tool's own unclassified prints instead
+> of the host's behaviour. See §3.6.
 
 ---
 
@@ -198,7 +202,37 @@ correlation evidence, `DateTime.ToString("yyyy-MM-dd")` for instrument expiry, a
 could differ; under a non-ISO culture the separator could change. All three now use
 `CultureInfo.InvariantCulture`.
 
-### 3.6 Flaky test (not a product defect)
+### 3.6 M6 described the tool's own gap, not the host (P5 follow-up)
+
+**Severity: high (misleading diagnostic).** The M6 host adapter copied the Level I `Last` event
+into a `MarketDataRecord` but never classified its direction. On a real feed every observed print
+was therefore counted `Unknown`, `AllDirectionsQuoteDerived` was never true, and the module
+reported the tool's own unclassified prints as if they were the host's behaviour. Several
+follow-on defects compounded it:
+
+1. **`M6.SEQUENCE_CONTINUITY` could still pass on a stream whose continuity was never measured.**
+   NT8's Level I surface exposes no source sequence, so a zero gap count proves nothing. The check
+   now requires an *observed* trade stream **and** an observed source sequence before it can
+   `PASS`; with no measured sequence it stays `INCONCLUSIVE`, and a positive gap count still
+   `FAIL`s regardless.
+2. **`M6.TRADEDELTA_COMPLETENESS` passed on a bare caller-supplied string.** A `COMPLETE` that the
+   observed evidence contradicts (no observed trade stream, a sequence gap, or an unclassified
+   direction) now `FAIL`s; when the runtime does not supply a completeness the assembler derives
+   one from the observed stream (`COMPLETE`/`INCOMPLETE`) or leaves it `UNOBSERVABLE`.
+3. **Reset evidence missed the Level II reset.** Only a Level I reset was counted; a Level II depth
+   reset (the event that invalidates the derived order-flow/DOM mirror) is now counted separately.
+4. **The OrderFlow engine readiness was declared without a host source.** No public API exposes it,
+   so when it is not supplied it is reported `UNOBSERVABLE` with unobservable evidence.
+
+**Fix.** A host-free `TradeDirectionClassifier` derives the aggressor side from the print price
+against the best bid/ask carried on the same event (falling back to the last observed quote). The
+`M6TradeDeltaConsumer` applies it, always counting a derived direction as `DerivedFromQuote` (never
+provider-confirmed) and preserving a host-supplied classification or explicit unknown reason
+verbatim. A new `M6.TRADE_STREAM` check reports whether the order-flow surface was reachable at
+all, so an unobserved surface is explicit rather than implicit. The observation also carries the
+weakest source-time basis actually observed on the trade stream (never hardcoded).
+
+### 3.7 Flaky test (not a product defect)
 
 Three runtime-integration tests used a fixed `Thread.Sleep(50)` to wait for the drain thread and
 could race under load. They now wait deterministically on the session's processed count.
@@ -305,18 +339,19 @@ is complete; the stub build is unaffected.
 | --- | --- | --- |
 | Stub build | `dotnet build ... -p:UseStubs=true -c Release` | **succeeded** |
 | Solution build (incl. tool) | `dotnet build RiskPilot.Diagnostics.Nt8.sln -c Release` | **succeeded** |
-| Unit + integration tests | `dotnet test ... -c Release` | **240 passed / 0 failed** |
-| Static safety scan | `python3 verification/addon-smoke/test_diagnostic_safety.py` | **PASS** (103 files, 34 patterns) |
+| Unit + integration tests | `dotnet test ... -c Release` | **417 passed / 0 failed** |
+| Static safety scan | `python3 verification/addon-smoke/test_diagnostic_safety.py` | **PASS** (111 files, 34 patterns) |
 | Real-host build | `dotnet build ... -p:UseStubs=false -c Release` | **FAILED** — NT8 DLLs absent (see §5) |
 
-Test files (20) and their focus include queue/backpressure (`EventQueueTests`,
+Test files (21) and their focus include queue/backpressure (`EventQueueTests`,
 `ThreadSafetyTests`), duplicate/gap detection (`DuplicateEventTests`, `SequenceGapTests`),
 lifecycle and isolation (`LifecycleTests`, `SessionIsolationTests`), status propagation and
 timestamp provenance (`StatusPropagationTests`, `TimestampTests`), redaction
 (`SecretRedactionTests`), the eight probes (`Phase3ModuleTests`, `ProbeTests`), the evidence
 package and post-trade audit (`Phase4EvidencePackageTests`, `Phase4PostTradeAuditTests`), the run
 coordinator and runtime integration (`Phase4RunCoordinatorTests`,
-`Phase4RuntimeIntegrationTests`), and the Phase-5 scenarios (`Phase5ScenarioTests`).
+`Phase4RuntimeIntegrationTests`), the M5 DOM/market-data suite (`M5DomMarketDataTests`), the M6
+TradeDelta/OrderFlow suite (`M6TradeDeltaTests`), and the Phase-5 scenarios (`Phase5ScenarioTests`).
 
 ---
 
@@ -341,8 +376,16 @@ result of running this tool in this environment, and no definitive root cause is
 
 - The exact NinjaTrader host version and the provider build are not exposed by any public API;
   they are reported `UNOBSERVABLE`.
-- Trade aggressor side is not derivable from public Level I data; a quote-derived direction is
-  never presented as provider-confirmed.
+- Trade aggressor side is not exposed by public Level I data; a direction can only be *derived* by
+  comparing the print to the quote, so it is labelled quote-derived and never presented as
+  provider-confirmed. A print that cannot be classified keeps an explicit cause (no BBO, incomplete
+  BBO, crossed/invalid BBO, inside the spread) rather than being guessed.
+- No public API exposes the OrderFlow engine readiness or the TradeDelta completeness (both are the
+  trading engine's own derived state); they are reported only when supplied and otherwise
+  `UNOBSERVABLE`.
+- NinjaTrader's Level I surface exposes no source sequence, so per-stream trade continuity is not
+  measurable from Level I alone; `M6.SEQUENCE_CONTINUITY` stays `INCONCLUSIVE` unless a source
+  sequence is observed.
 - `Instrument.MasterInstrument.*` is only valid after `DataLoaded`/`Realtime`.
 - Provider identity is resolved by string comparison (no guaranteed `Provider.Rithmic` enum).
 - The post-trade audit surface comes from the host's already-read `Account.Orders` snapshot plus

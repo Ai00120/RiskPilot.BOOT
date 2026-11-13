@@ -11,6 +11,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ### Fixed
 
+- **M6 reported every real trade print as an unclassified trade (misleading diagnostic).** The
+  host adapter copied the Level I `Last` event into a `MarketDataRecord` but never classified its
+  direction, so on a real Rithmic/ES feed every observed print was counted `Unknown` and
+  `AllDirectionsQuoteDerived` was never true — the M6 direction evidence described the tool's own
+  gap, not the host. The new host-free `TradeDirectionClassifier` derives the aggressor side from
+  the print price against the best bid/ask carried on the same event (falling back to the last
+  observed quote), and the `M6TradeDeltaConsumer` applies it. A derived direction is always
+  counted as `DerivedFromQuote`, never provider-confirmed; a print that already carries a
+  classification or an explicit unknown reason is counted exactly as reported (never
+  re-derived); and a print that cannot be classified keeps its precise cause
+  (`NO_BBO`/`BBO_INCOMPLETE`/`BBO_INVALID`/`INSIDE_SPREAD`/`PROVIDER_REPORTED`), with an
+  `unclassified` bucket so the unknown total is always fully attributed.
+- **`M6.SEQUENCE_CONTINUITY` could still pass on a stream whose continuity was never measured
+  (fail-open).** NT8's public Level I surface exposes no source sequence, so a zero gap count
+  proves nothing. The check now requires an *observed* trade stream **and** an observed source
+  sequence before it can `PASS`; with no measured sequence it stays `INCONCLUSIVE`, and a positive
+  gap count still `FAIL`s regardless.
+- **`M6.TRADEDELTA_COMPLETENESS` passed on a bare caller-supplied string.** No public NinjaTrader
+  API exposes TradeDelta completeness, so a `COMPLETE` value that the observed evidence
+  contradicts (no observed trade stream, a sequence gap, or an unclassified direction) now `FAIL`s
+  instead of passing; when the runtime does not supply a completeness the assembler derives one
+  from the observed stream (`COMPLETE`/`INCOMPLETE`) or leaves it `UNOBSERVABLE`. An `INCOMPLETE`
+  stays `INCONCLUSIVE`.
+- **M6 reset evidence missed the Level II reset that actually invalidates order-flow state.** The
+  consumer counted a reset only from the Level I feed; it now counts a Level II depth reset (the
+  event that invalidates the derived order-flow/DOM mirror) separately, and `M6.RESET_HANDLING`
+  reports both. The M6 observation also carries the weakest source-time basis actually observed on
+  the trade stream (never hardcoded) and a `M6.TRADE_STREAM` surface check, so an unobserved
+  order-flow surface is explicit rather than implicit.
+- **M6 declared the OrderFlow engine readiness without a host source.** No public API exposes the
+  OrderFlow readiness, so when it is not supplied the readiness is reported `UNOBSERVABLE` with
+  unobservable evidence instead of being presented as an observed value.
 - **`M2.ACCOUNT_CONNECTION_ASSOCIATION` did not prove the target account's actual connection.**
   The check compared each account's provider with the provider of *its* reported connection, but
   it never proved that the *target* account (D-095/D-096: `SimRP.BOT`) is bound to the required
@@ -51,6 +83,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 - `TargetAccountConnectionObservation` (host-free; booleans/counts + synthetic account ref only)
   and `TargetAccountConnectionVerifier`, which decide the target account→connection→provider
   association with no raw identity in the result.
+- **M6 data-reliability test suite** (`tests/.../M6TradeDeltaTests.cs`) covering the direction
+  classifier (buy/sell/inside-spread/crossed-book/one-sided/no-quote/sentinel prices), the
+  consumer (event-BBO and last-quote classification, host-supplied preservation, sequence
+  observation, weakest source-time basis, per-feed resets), the assembler derivations, the probe's
+  fail-closed semantics (unobserved stream, unmeasured sequence, corroborated vs contradicted
+  completeness), the host capture adapter over the offline stub surface, and runtime integration
+  through to the exported `TradeDelta` evidence.
+- New M6 fields in `orderflow-summary.json`: `tradeStreamObservable`, `sequenceObservable`,
+  `unknownUnclassified`, `sourceTimeBasis`, and the per-feed reset counts
+  (`marketDataResetCount`, `depthResetCount`).
 - A privacy-preserving `connectionAssociation` block in `accounts.json` (status, reason codes,
   field-level detail, counts and a synthetic account ref; no raw account or connection name).
 - Regression tests: `TargetAccountConnectionTests` (verifier + M2 probe: exact match, wrong

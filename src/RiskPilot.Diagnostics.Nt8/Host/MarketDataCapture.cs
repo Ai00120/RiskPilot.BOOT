@@ -157,6 +157,10 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
             try
             {
+                // The Level I Last event carries no aggressor side. Record the best bid/ask the host
+                // reported on this same event (0 = not populated) so the M6 consumer can derive the
+                // direction from real host data instead of counting every print as unknown. No
+                // direction is asserted here: the derivation and its provenance live in the core.
                 var record = new MarketDataRecord
                 {
                     InstrumentId = args.Instrument != null ? args.Instrument.FullName : string.Empty,

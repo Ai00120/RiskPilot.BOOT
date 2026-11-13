@@ -11,7 +11,13 @@ M5,M5.LEVEL1,M5.LEVEL1,PASS,INFO,NONE,NinjaTrader Public API,quote=True lastTrad
 M5,M5.DEPTH,M5.DEPTH,PASS,INFO,NONE,NinjaTrader Public API,depthObserved=True depthOperations=42,Synthetic documentation sample; not a runtime observation.,None (sample).
 M5,M5.SNAPSHOT_SYNC,M5.SNAPSHOT_SYNC,FAIL,HIGH,DATA_UNAVAILABLE,NinjaTrader Public API,sync=42 failure=1 outOfBounds=41,Synthetic documentation sample; not a runtime observation.,None (sample).
 M5,M5.FRESHNESS,M5.FRESHNESS,INCONCLUSIVE,MEDIUM,NONE,NinjaTrader Public API,lastDomEventAgeSeconds=0.5 stale=False,Synthetic documentation sample; not a runtime observation.,None (sample).
+M6,M6.TRADE_STREAM,M6.TRADE_STREAM,PASS,INFO,NONE,NinjaTrader Public API,tradeStreamObservable=true buyDerived=118 sellDerived=122 unknown=4,Synthetic documentation sample; not a runtime observation.,None (sample).
 M6,M6.DIRECTION_SOURCE,M6.DIRECTION_SOURCE,INCONCLUSIVE,MEDIUM,NONE,NinjaTrader Public API,provenance=ALL_QUOTE_DERIVED,Synthetic documentation sample; not a runtime observation.,None (sample).
+M6,M6.UNKNOWN_DIRECTION,M6.UNKNOWN_DIRECTION,INCONCLUSIVE,MEDIUM,NONE,NinjaTrader Public API,unknown=4 insideSpread=4,Synthetic documentation sample; not a runtime observation.,None (sample).
+M6,M6.TRADEDELTA_COMPLETENESS,M6.TRADEDELTA_COMPLETENESS,INCONCLUSIVE,MEDIUM,NONE,NinjaTrader Public API,completeness=INCOMPLETE reason=UNAVAILABLE_TRADE_DELTA,Synthetic documentation sample; not a runtime observation.,None (sample).
+M6,M6.RESET_HANDLING,M6.RESET_HANDLING,INCONCLUSIVE,MEDIUM,NONE,NinjaTrader Public API,resetObserved=false resetCount=0,Synthetic documentation sample; not a runtime observation.,None (sample).
+M6,M6.SEQUENCE_CONTINUITY,M6.SEQUENCE_CONTINUITY,PASS,INFO,NONE,NinjaTrader Public API,sequenceGaps=0 sequenceObservable=true sourceTimeBasis=SERVER_TIME_UNVERIFIED,Synthetic documentation sample; not a runtime observation.,None (sample).
+M6,M6.ORDERFLOW_READINESS_VS_STRATEGY_SKIP,M6.ORDERFLOW_READINESS_VS_STRATEGY_SKIP,INCONCLUSIVE,MEDIUM,NONE,NinjaTrader Public API,orderFlowReadiness=AVAILABLE resetObserved=false,Synthetic documentation sample; not a runtime observation.,None (sample).
 M7,M7.CANDIDATE_REJECTION,M7.CANDIDATE_REJECTION,INCONCLUSIVE,MEDIUM,NONE,NinjaTrader Public API,allCandidatesInvalid=1234,Synthetic documentation sample; not a runtime observation.,None (sample).
 M8,M8.TRADING_DISABLED,M8.TRADING_DISABLED,PASS,INFO,NONE,NinjaTrader Public API,tradingDisabledRuntimeEvidence=true,Synthetic documentation sample; not a runtime observation.,None (sample).
 M9,M9.AUDIT_SURFACE,M9.AUDIT_SURFACE,PASS,INFO,NONE,NinjaTrader Public API,accounts=1 orderSnapshots=2,Synthetic documentation sample; not a runtime observation.,None (sample).

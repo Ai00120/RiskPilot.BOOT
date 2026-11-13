@@ -241,6 +241,42 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   `dom-summary.json` reporting an unobserved surface even though real records were ingested.
   Regression test: `Phase4RuntimeIntegrationTests.EvidenceExport_MarketDataSummary_ReflectsRealObservedIngestData`.
 
+## M6 TradeDelta / OrderFlow (P5 — data reliability)
+
+- M6's surface is the **trade stream** (`MarketDataRecord` of `Kind=Trade`) plus the Level II depth
+  feed (for resets). The host adapter (`MarketDataCapture`) records the Level I `Last` print with
+  the best bid/ask carried on the same event; NT8's public Level I surface has **no aggressor
+  side**, so the direction is *derived*, never provider-confirmed.
+- `Core/Engine/TradeDirectionClassifier.cs` is the host-free, pure classifier: price ≥ ask ⇒ Buy,
+  price ≤ bid ⇒ Sell, inside a valid uncrossed spread ⇒ unknown `PriceInsideSpread`, crossed book ⇒
+  `BboInvalid`, one side only ⇒ `BboIncomplete`, neither ⇒ `NoBboAvailable`. `ToPositiveOrNull`
+  treats a host `0`/non-finite quote as unavailable. A derived direction is always counted as
+  `TradeDirectionSource.DerivedFromQuote`; a print that already carries a classification or an
+  explicit unknown reason is counted exactly as reported (never re-derived).
+- `M6TradeDeltaConsumer` classifies from the event BBO, falling back to the **last observed quote**
+  (`MarketDataRecord` of `Kind=Quote`). It counts buy/sell/unknown (with the exact cause, plus an
+  `unclassified` bucket so the unknown total is fully attributed), the per-stream sequence
+  observation, the weakest observed `SourceTimeBasis` (counter `td.sourceTimeBasis.worst`, encoded
+  basis+1 so `Unknown=0` stays distinct from "no observation"), and **per-feed resets**
+  (`td.reset.marketData`, `td.reset.depth`) — a Level II depth reset is what invalidates the
+  derived order-flow/DOM mirror, so it is tracked separately from a Level I reset.
+- `SnapshotAssembler.MergeTradeDelta` derives `TradeStreamObservable`, `SequenceObservable`,
+  `AllDirectionsQuoteDerived`, the per-feed reset counts, the source-time basis and a
+  `TradeDeltaCompleteness` when the host did not supply one (`COMPLETE`/`INCOMPLETE`/`UNOBSERVABLE`).
+- Fail-closed contract: `M6.TRADE_STREAM`, `M6.SEQUENCE_CONTINUITY` and `M6.TRADEDELTA_COMPLETENESS`
+  never `PASS` without an observed trade stream. `M6.SEQUENCE_CONTINUITY` additionally requires an
+  **observed source sequence** (NT8 Level I exposes none), so a zero gap count is `INCONCLUSIVE`
+  unless continuity was actually measurable; a positive gap count always `FAIL`s. A `COMPLETE` that
+  the evidence contradicts (no observed stream / sequence gap / unclassified direction) `FAIL`s;
+  an `INCOMPLETE` stays `INCONCLUSIVE`.
+- `M6.ORDERFLOW_READINESS_VS_STRATEGY_SKIP` reports engine readiness vs a per-strategy decision as
+  two scopes with `NOT_DECLARED_CONTRADICTION`; no public API exposes OrderFlow readiness, so an
+  unsupplied value is reported `UNOBSERVABLE` with unobservable evidence, never assumed.
+- `orderflow-summary.json` carries the derived evidence (`tradeStreamObservable`,
+  `sequenceObservable`, `unknownUnclassified`, `sourceTimeBasis`, per-feed reset counts). Tests:
+  `M6TradeDeltaTests` (classifier + consumer + assembler + probe + host capture over the offline
+  stub surface + runtime integration); a green stub run is **not** real-host proof.
+
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live

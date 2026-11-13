@@ -18,6 +18,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
     /// reported as two separate observations with their scope and time; the module does not
     /// declare a contradiction or a resolution without evidence.
     /// </para>
+    /// <para>
+    /// No public NinjaTrader API exposes the OrderFlow engine readiness or the TradeDelta
+    /// completeness (both are the trading engine's own derived state), so those fields are only
+    /// reported when supplied and are otherwise UNOBSERVABLE. A zero gap or unknown count is
+    /// only "clean" once the trade stream was actually observed and its continuity was
+    /// measurable; otherwise the check stays INCONCLUSIVE, never PASS.
+    /// </para>
     /// </summary>
     public sealed class M6TradeDeltaProbe : IDiagnosticProbe
     {
@@ -41,6 +48,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 return results;
             }
 
+            results.Add(BuildTradeStreamCheck(observation, correlation, now));
             results.Add(BuildDirectionSourceCheck(observation, correlation, now));
             results.Add(BuildUnknownDirectionCheck(observation, correlation, now));
             results.Add(BuildTradeDeltaCompletenessCheck(observation, correlation, now));
@@ -49,6 +57,34 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             results.Add(BuildApparentTensionCheck(observation, correlation, now));
 
             return results;
+        }
+
+        /// <summary>
+        /// Reports whether the trade stream surface was actually reachable at all. Until a print
+        /// is observed the derived checks have nothing to reason about, so the module says so
+        /// explicitly instead of leaving the absence implicit.
+        /// </summary>
+        private DiagnosticResult BuildTradeStreamCheck(TradeDeltaObservation observation, string correlation, DateTime now)
+        {
+            if (!observation.TradeStreamObservable)
+            {
+                return FindingFactory.Unobservable(ModuleId, "M6.TRADE_STREAM", correlation, now,
+                    "No trade print was observed on the Level I trade stream; the order-flow surface was not reachable.",
+                    "Subscribe the instrument and re-run while trades are printing.");
+            }
+
+            return DiagnosticResult
+                .Pass(ModuleId, "M6.TRADE_STREAM", correlation, now)
+                .WithFindingId("M6.TRADE_STREAM")
+                .WithReasonCode("TRADE_STREAM_OBSERVED")
+                .WithObservation("tradeStreamObservable=true buyDerived=" + observation.BuyDerivedCount
+                    + " sellDerived=" + observation.SellDerivedCount
+                    + " unknown=" + observation.UnknownCount)
+                .WithSource(FindingFactory.SourcePublicApi)
+                .WithMethod("Instrument.MarketData (Level I) last-trade subscription; prints classified from the observed BBO.")
+                .WithLimitation("Presence is asserted only for prints seen while the tool ran; a quiet market is not a failure.")
+                .WithNextAction("None.")
+                .WithEvidence(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "tradeStreamObservable=true", now));
         }
 
         private DiagnosticResult BuildDirectionSourceCheck(TradeDeltaObservation observation, string correlation, DateTime now)
@@ -119,13 +155,15 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     "NO_BBO=" + observation.UnknownNoBboCount,
                     "BBO_INCOMPLETE=" + observation.UnknownBboIncompleteCount,
                     "BBO_INVALID=" + observation.UnknownBboInvalidCount,
-                    "PROVIDER_REPORTED_UNKNOWN=" + observation.UnknownProviderReportedCount)
+                    "PROVIDER_REPORTED_UNKNOWN=" + observation.UnknownProviderReportedCount,
+                    "UNCLASSIFIED=" + observation.UnknownUnclassifiedCount)
                 .WithObservation("unknown=" + observation.UnknownCount
                     + " ratePct=" + rate.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
                     + " insideSpread=" + observation.UnknownInsideSpreadCount
                     + " noBbo=" + observation.UnknownNoBboCount
                     + " bboIncomplete=" + observation.UnknownBboIncompleteCount
-                    + " bboInvalid=" + observation.UnknownBboInvalidCount)
+                    + " bboInvalid=" + observation.UnknownBboInvalidCount
+                    + " unclassified=" + observation.UnknownUnclassifiedCount)
                 .WithSource(FindingFactory.SourcePublicApi)
                 .WithMethod("Attributed each unknown direction to a specific cause (inside spread, no BBO, incomplete BBO, invalid BBO, provider-unknown).")
                 .WithLimitation("The unknown-direction rate is reported, never eliminated; an unknown direction is never filled in with a guess.")
@@ -141,25 +179,51 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
 
         private DiagnosticResult BuildTradeDeltaCompletenessCheck(TradeDeltaObservation observation, string correlation, DateTime now)
         {
-            var completeness = observation.TradeDeltaCompleteness ?? "UNOBSERVABLE";
-            var status = completeness == "COMPLETE" ? DiagnosticStatus.PASS
-                : (completeness == "UNOBSERVABLE" ? DiagnosticStatus.INCONCLUSIVE : DiagnosticStatus.INCONCLUSIVE);
+            var completeness = string.IsNullOrEmpty(observation.TradeDeltaCompleteness)
+                ? "UNOBSERVABLE"
+                : observation.TradeDeltaCompleteness;
 
-            return (status == DiagnosticStatus.PASS
+            // A COMPLETE is only corroborated once a print was actually observed and its continuity
+            // was measurable. A "COMPLETE" claimed without an observed trade stream (or with a
+            // sequence gap / unclassified print) is contradicted by the evidence, so it FAILs
+            // rather than being reported as a clean PASS.
+            var contradicted = completeness == "COMPLETE"
+                && (!observation.TradeStreamObservable
+                    || observation.SequenceGapCount > 0
+                    || observation.UnknownUnclassifiedCount > 0);
+
+            var status = contradicted ? DiagnosticStatus.FAIL
+                : (completeness == "COMPLETE" ? DiagnosticStatus.PASS : DiagnosticStatus.INCONCLUSIVE);
+
+            var result = contradicted
+                ? DiagnosticResult.Fail(ModuleId, "M6.TRADEDELTA_COMPLETENESS", ErrorClass.DataUnavailable, correlation, now)
+                : (completeness == "COMPLETE"
                     ? DiagnosticResult.Pass(ModuleId, "M6.TRADEDELTA_COMPLETENESS", correlation, now)
-                    : DiagnosticResult.Inconclusive(ModuleId, "M6.TRADEDELTA_COMPLETENESS", correlation, now))
+                    : DiagnosticResult.Inconclusive(ModuleId, "M6.TRADEDELTA_COMPLETENESS", correlation, now));
+
+            var reason = contradicted
+                ? (observation.SequenceGapCount > 0
+                    ? "COMPLETENESS_CONTRADICTED_SEQUENCE_GAP"
+                    : (!observation.TradeStreamObservable
+                        ? "COMPLETENESS_CONTRADICTED_NO_TRADE_STREAM"
+                        : "COMPLETENESS_CONTRADICTED_UNCLASSIFIED_DIRECTION"))
+                : "COMPLETENESS=" + completeness;
+
+            return result
                 .WithFindingId("M6.TRADEDELTA_COMPLETENESS")
-                .WithReasonCode("COMPLETENESS=" + completeness,
+                .WithReasonCode(reason,
                     string.IsNullOrEmpty(observation.TradeDeltaUnavailableReason) ? "NO_REASON_REPORTED" : observation.TradeDeltaUnavailableReason)
                 .WithObservation("completeness=" + completeness
                     + (string.IsNullOrEmpty(observation.TradeDeltaUnavailableReason) ? string.Empty : " reason=" + observation.TradeDeltaUnavailableReason))
                 .WithSource(FindingFactory.SourcePublicApi)
-                .WithMethod("Read the TradeDelta completeness state and its reported reason.")
-                .WithLimitation("An incomplete TradeDelta cannot be used as if it were complete; the tool never repairs it.")
-                .WithNextAction(completeness == "COMPLETE"
+                .WithMethod("Read the TradeDelta completeness state; when the runtime did not supply one it is derived from the observed trade stream.")
+                .WithLimitation("An incomplete TradeDelta cannot be used as if it were complete; the tool never repairs it. A COMPLETE is only trusted when the observed trade stream corroborates it.")
+                .WithNextAction(completeness == "COMPLETE" && !contradicted
                     ? "None."
                     : "Investigate the reported incompleteness reason before relying on TradeDelta.")
-                .WithEvidence(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "completeness=" + completeness, now));
+                .WithEvidence(
+                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "completeness=" + completeness, now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "tradeStreamObservable=" + observation.TradeStreamObservable, now));
         }
 
         private DiagnosticResult BuildResetCheck(TradeDeltaObservation observation, string correlation, DateTime now)
@@ -171,16 +235,19 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 .Inconclusive(ModuleId, "M6.RESET_HANDLING", correlation, now)
                 .WithFindingId("M6.RESET_HANDLING")
                 .WithReasonCode(reset ? "RESET_OPERATION_RECEIVED" : "NO_RESET_OBSERVED", "RESET_COUNT=" + count)
-                .WithObservation("resetObserved=" + reset + " resetCount=" + count)
+                .WithObservation("resetObserved=" + reset + " resetCount=" + count
+                    + " marketDataResets=" + observation.MarketDataResetCount
+                    + " depthResets=" + observation.DepthResetCount)
                 .WithSource(FindingFactory.SourcePublicApi)
-                .WithMethod("Observed DOM/stream RESET operations and their effect on order-flow state.")
-                .WithLimitation("A reset invalidates the derived order-flow state; the tool reports the reset, it never re-derives a state that assumed continuity.")
+                .WithMethod("Observed Level I market-data and Level II depth RESET operations and their effect on order-flow state.")
+                .WithLimitation("A depth reset invalidates the derived order-flow state; the tool reports the reset, it never re-derives a state that assumed continuity.")
                 .WithNextAction(reset
                     ? "Treat the order-flow state after the reset as re-based; correlate with the strategy-skip observation below."
                     : "None.")
                 .WithEvidence(
                     DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "resetObserved=" + reset, now),
-                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "resetCount=" + count, now));
+                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "marketDataResets=" + observation.MarketDataResetCount, now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "depthResets=" + observation.DepthResetCount, now));
         }
 
         private DiagnosticResult BuildSequenceContinuityCheck(TradeDeltaObservation observation, string correlation, DateTime now)
@@ -188,18 +255,20 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             var gaps = observation.SequenceGapCount;
 
             // A positive gap count is itself evidence of a problem, so it fails regardless. A zero
-            // count is only meaningful once the order-flow/trade stream was actually observed:
-            // with no observed stream there is nothing to have been continuous, so the check stays
+            // count is only meaningful once the trade stream was actually observed AND its continuity
+            // was measurable: NinjaTrader's Level I surface carries no source sequence, so with no
+            // observed sequence there is nothing to have been continuous and the check stays
             // INCONCLUSIVE rather than reporting a clean PASS on absent data.
             if (gaps == 0)
             {
-                var observedTrades = observation.BuyDerivedCount + observation.SellDerivedCount
-                    + observation.UnknownCount;
-                if (observedTrades == 0 && !observation.ResetObserved)
+                if (!observation.TradeStreamObservable || !observation.SequenceObservable)
                 {
+                    var reason = !observation.TradeStreamObservable
+                        ? "No trade print was observed, so sequence continuity could not be evaluated."
+                        : "No source-reported trade sequence was observed (NT8 Level I exposes none), so per-stream continuity was not measurable.";
                     return FindingFactory.Unobservable(ModuleId, "M6.SEQUENCE_CONTINUITY", correlation, now,
-                        "No order-flow/trade stream was observed, so sequence continuity could not be evaluated.",
-                        "Subscribe the order-flow/trade stream and re-run while trades are arriving.");
+                        reason,
+                        "Observe a trade stream that carries a source sequence, or rely on M5.DATA_INTEGRITY for the ingest-path gap signal.");
                 }
             }
 
@@ -207,11 +276,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     ? DiagnosticResult.Pass(ModuleId, "M6.SEQUENCE_CONTINUITY", correlation, now)
                     : DiagnosticResult.Fail(ModuleId, "M6.SEQUENCE_CONTINUITY", ErrorClass.SequenceGap, correlation, now))
                 .WithFindingId("M6.SEQUENCE_CONTINUITY")
-                .WithReasonCode("SEQUENCE_GAPS=" + gaps, "SOURCE_TIME_BASIS=" + observation.SourceTimeBasis.ToWire())
-                .WithObservation("sequenceGaps=" + gaps + " sourceTimeBasis=" + observation.SourceTimeBasis.ToWire())
+                .WithReasonCode("SEQUENCE_GAPS=" + gaps,
+                    "SOURCE_SEQUENCE_OBSERVABLE=" + observation.SequenceObservable,
+                    "SOURCE_TIME_BASIS=" + observation.SourceTimeBasis.ToWire())
+                .WithObservation("sequenceGaps=" + gaps + " sequenceObservable=" + observation.SequenceObservable
+                    + " sourceTimeBasis=" + observation.SourceTimeBasis.ToWire())
                 .WithSource(FindingFactory.SourceRuntimeCounters)
-                .WithMethod("Per-stream sequence-gap detection on the order-flow stream.")
-                .WithLimitation("Source timestamps are server-time-unverified, so sequence continuity is the stronger continuity signal.")
+                .WithMethod("Per-stream sequence-gap detection on the order-flow stream, from source-reported sequence numbers.")
+                .WithLimitation("Source timestamps are server-time-unverified, so sequence continuity is the stronger continuity signal; a clean result requires an observed source sequence.")
                 .WithNextAction(gaps == 0
                     ? "None."
                     : "Treat the affected order-flow window as incomplete.");
@@ -224,7 +296,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             // different scopes (engine readiness vs. a per-strategy decision at a specific
             // time). The tool reports both raw observations with their scope and does NOT
             // declare a contradiction or a resolution without evidence.
-            var readiness = observation.OrderFlowReadiness ?? "UNOBSERVABLE";
+            //
+            // No public NinjaTrader API exposes the OrderFlow engine readiness, so when the
+            // runtime did not supply it the readiness is reported as UNOBSERVABLE rather than
+            // assumed, and its evidence is marked unobservable.
+            var readinessObservable = !string.IsNullOrEmpty(observation.OrderFlowReadiness)
+                && observation.OrderFlowReadiness != "UNOBSERVABLE";
+            var readiness = readinessObservable ? observation.OrderFlowReadiness : "UNOBSERVABLE";
             var resetObserved = observation.ResetObserved;
 
             return DiagnosticResult
@@ -238,12 +316,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 .WithObservation("orderFlowReadiness=" + readiness
                     + " resetObserved=" + resetObserved
                     + " note=two different scopes (engine readiness vs per-strategy decision at a time); no contradiction is declared without evidence.")
-                .WithSource(FindingFactory.SourcePublicApi)
+                .WithSource(readinessObservable ? FindingFactory.SourcePublicApi : FindingFactory.SourceUnobservable)
                 .WithMethod("Reported the engine readiness state and the reset/strategy-skip evidence as separate observations with their scope.")
-                .WithLimitation("The two observations come from different scopes and different times; the tool does not declare a contradiction or a resolution without evidence.")
+                .WithLimitation("No public API exposes the OrderFlow engine readiness; when it is not supplied it is reported as UNOBSERVABLE. The two observations come from different scopes and times, so the tool does not declare a contradiction or a resolution without evidence.")
                 .WithNextAction("Correlate the readiness heartbeat timestamp with the strategy-skip timestamp to see whether the reset preceded the skip.")
                 .WithEvidence(
-                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "orderFlowReadiness=" + readiness, now),
+                    readinessObservable
+                        ? DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "orderFlowReadiness=" + readiness, now)
+                        : DiagnosticEvidence.Unobservable(FindingFactory.SourceUnobservable, "ORDER_FLOW_READINESS_NOT_SUPPLIED", now),
                     DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "resetObserved=" + resetObserved, now),
                     DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "scope=ENGINE_READINESS_VS_STRATEGY_DECISION", now));
         }

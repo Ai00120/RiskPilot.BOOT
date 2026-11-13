@@ -34,31 +34,69 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         public long UnknownProviderReportedCount { get; set; }
 
         /// <summary>
-        /// True when every trade direction came from a quote derivation (no provider-supplied
-        /// direction). When true, no direction may be reported as provider-confirmed.
+        /// Unknown-direction trades that carried no classification and no reason at all. These are
+        /// counted so the unknown total is always fully attributed and the completeness derivation
+        /// can see unclassified coverage.
         /// </summary>
+        public long UnknownUnclassifiedCount { get; set; }
+
+        /// <summary>
+        /// True when at least one trade print was actually observed on the trade stream. Until a
+        /// print is seen, a zero unknown/gap count proves nothing, so the derived checks stay
+        /// INCONCLUSIVE rather than reporting a clean PASS on absent data.
+        /// </summary>
+        public bool TradeStreamObservable { get; set; }
+
+        /// <summary>
+        /// True when at least one observed trade print carried a source-reported sequence number,
+        /// so per-stream continuity was actually measurable. NT8 Level I does not expose a source
+        /// sequence, so this is normally false and sequence continuity stays INCONCLUSIVE.
+        /// </summary>
+        public bool SequenceObservable { get; set; }
+
+        /// <summary>True when every trade direction came from a quote derivation (no provider-supplied
+        /// direction). When true, no direction may be reported as provider-confirmed.</summary>
         public bool AllDirectionsQuoteDerived { get; set; }
 
         /// <summary>True when at least one direction was supplied explicitly by the provider.</summary>
         public bool AnyProviderSuppliedDirection { get; set; }
 
-        /// <summary>OrderFlow readiness state observed ("AVAILABLE", "UNAVAILABLE", "UNOBSERVABLE").</summary>
+        /// <summary>
+        /// OrderFlow readiness state observed ("AVAILABLE", "UNAVAILABLE", "UNOBSERVABLE").
+        /// No public NinjaTrader API exposes the OrderFlow engine readiness (it is the trading
+        /// engine's own derived state), so the runtime leaves this UNOBSERVABLE.
+        /// </summary>
         public string OrderFlowReadiness { get; set; }
 
         /// <summary>Reason the OrderFlow stream is not ready, when reported.</summary>
         public string OrderFlowUnavailableReason { get; set; }
 
-        /// <summary>TradeDelta completeness state observed ("COMPLETE", "INCOMPLETE", "UNOBSERVABLE").</summary>
+        /// <summary>
+        /// TradeDelta completeness state observed ("COMPLETE", "INCOMPLETE", "UNOBSERVABLE").
+        /// No public NinjaTrader API exposes the TradeDelta completeness; when it is not supplied
+        /// explicitly the assembler derives it from the observed trade stream (unclassified prints
+        /// or sequence gaps make it INCOMPLETE), and the probe only PASSes a COMPLETE that the
+        /// observed stream actually corroborates.
+        /// </summary>
         public string TradeDeltaCompleteness { get; set; }
 
         /// <summary>Reason TradeDelta is incomplete/unavailable, when reported.</summary>
         public string TradeDeltaUnavailableReason { get; set; }
 
-        /// <summary>True when a stream reset (RESET operation) was observed.</summary>
+        /// <summary>True when a stream reset (RESET operation) was observed on either feed.</summary>
         public bool ResetObserved { get; set; }
 
-        /// <summary>Number of stream resets observed.</summary>
+        /// <summary>Number of stream resets observed across both feeds.</summary>
         public long ResetCount { get; set; }
+
+        /// <summary>Stream resets observed on the Level I market-data feed.</summary>
+        public long MarketDataResetCount { get; set; }
+
+        /// <summary>
+        /// Stream resets observed on the Level II depth feed. A depth reset is what invalidates the
+        /// derived order-flow/DOM mirror, so it is reported separately from a Level I reset.
+        /// </summary>
+        public long DepthResetCount { get; set; }
 
         /// <summary>Number of per-stream sequence gaps observed for the order-flow stream.</summary>
         public long SequenceGapCount { get; set; }
