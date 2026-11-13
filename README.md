@@ -55,9 +55,10 @@ src/RiskPilot.Diagnostics.Nt8/          The AddOn (shippable product)
 │   └── Contract/                        IReadOnlyDiagnosticSource (optional)
 ├── Host/                                The ONLY layer that touches NinjaTrader types
 ├── Stubs/                               Offline compile-time stubs (USE_STUBS only)
-└── Properties/AssemblyInfo.cs
+└── Properties/AssemblyInfo.cs            Standalone DLL metadata — NEVER staged into NT8 Custom
 tests/RiskPilot.Diagnostics.Nt8.Tests/   xUnit unit tests
-verification/addon-smoke/                 Static safety scan (no NT8 required)
+verification/addon-smoke/                 Static safety + NT8 compilation regression checks
+tools/nt8-source-package/                 Deterministic NinjaScript source-bundle packager
 tools/RiskPilot.Diagnostics.SampleReport/ SAMPLE evidence-package generator
 docs/                                     Phase 1–5 records, guides, sample package
 CHANGELOG.md                              Release history
@@ -74,6 +75,7 @@ export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1   # only if the runner lacks ICU
 dotnet build src/RiskPilot.Diagnostics.Nt8/RiskPilot.Diagnostics.Nt8.csproj -p:UseStubs=true
 dotnet test  tests/RiskPilot.Diagnostics.Nt8.Tests/RiskPilot.Diagnostics.Nt8.Tests.csproj
 python3 verification/addon-smoke/test_diagnostic_safety.py
+python3 verification/addon-smoke/test_nt8_compilation_regression.py
 ```
 
 With `UseStubs=true` (the default) the project targets `net8.0` and compiles
@@ -89,16 +91,32 @@ dotnet build src\RiskPilot.Diagnostics.Nt8\RiskPilot.Diagnostics.Nt8.csproj -p:U
 
 With `UseStubs=false` the project targets `net48` and references the real assemblies from
 `C:\Program Files\NinjaTrader 8\bin\`. Adjust the `HintPath` entries if NinjaTrader is installed
-elsewhere. The canonical NT8 workflow is to place the `.cs` files under
-`Documents\NinjaTrader 8\bin\Custom\AddOns\` and compile with the NinjaScript Editor.
+elsewhere. The canonical NT8 workflow is to compile staged `.cs` sources with the NinjaScript
+Editor — but **only** the deterministic bundle produced by
+`tools/nt8-source-package/package_addon_sources.py` may be placed under
+`Documents\NinjaTrader 8\bin\Custom\AddOns\`. Never copy `Properties\AssemblyInfo.cs`, `Stubs\`,
+`*.csproj`, `bin\` or `obj\` into that tree: NT8 compiles every `.cs` file there into its own
+`NinjaTrader.Custom.dll`, which already carries `bin\Custom\AssemblyInfo.cs` (CS0579 duplicate
+attributes). See [`docs/INSTALL.md`](docs/INSTALL.md).
 
 ## Installation (NinjaTrader)
 
-1. Compile the AddOn against the real host (see build mode 2).
-2. Copy the produced `RiskPilot.Diagnostics.Nt8.dll` (or the `.cs` sources) into
+Use **one** of these two paths, never both (mixing a DLL and duplicate source classes in
+`AddOns\` breaks compilation):
+
+1. **Compiled DLL (recommended).** Build with `-p:UseStubs=false`, then copy the produced
+   `RiskPilot.Diagnostics.Nt8.dll` into
    `Documents\NinjaTrader 8\bin\Custom\AddOns\`.
-3. Compile once inside NinjaTrader (NinjaScript Editor → Compile) to register the AddOn.
-4. Restart NinjaTrader. The AddOn activates on the next start (`SetDefaults` → `Active`).
+2. **NinjaScript source bundle.** Run the packager (it stages only `Core\` and `Host\` `.cs`
+   files and refuses any conflicting `AssemblyInfo.cs`):
+   ```bat
+   python3 tools\nt8-source-package\package_addon_sources.py --output "%USERPROFILE%\Documents\NinjaTrader 8\bin\Custom\AddOns\RiskPilot.Diagnostics.Nt8"
+   ```
+   Then compile inside NinjaTrader (New → NinjaScript Editor → right-click **AddOns** → **Compile**).
+
+Finally, restart NinjaTrader. The AddOn activates on the next start (`SetDefaults` → `Active`).
+The `GenerateAssemblyInfo=false` setting and `Properties/AssemblyInfo.cs` are required by the
+standalone DLL build and are deliberately kept out of the NinjaScript Custom source tree.
 
 Report artifacts are written to a directory **outside** the Git working tree, per repository
 governance for output locations.

@@ -11,6 +11,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ### Added
 
+- **Deterministic NinjaScript source-bundle packager.** `tools/nt8-source-package/package_addon_sources.py`
+  stages only the `Core/` and `Host/` `.cs` files explicitly compiled by the standalone project,
+  fails closed on any `AssemblyInfo.cs`, `[assembly: ...]` attribute, `bin/`, `obj/` or build
+  artifact, and is idempotent on re-run. It is now the only supported way to place BOOT sources
+  under `Documents\NinjaTrader 8\bin\Custom\AddOns\`. `docs/INSTALL.md` and `README.md` document
+  the CS0579 root cause and recovery. Regression coverage:
+  `verification/addon-smoke/test_nt8_compilation_regression.py` (also wired into both CI
+  workflows) plus `CompilationRegressionTests`.
+
 - **Stage 3 / Stage 4 diagnostic coverage audit (Prompt 11).** A final integration audit traced the
   important Stage 3 (Position Sizing) and Stage 4 (Independent Risk Gate) requirements defined in
   RiskPilot.BOT to the BOOT modules and checks that can provide evidence for them. The matrix is
@@ -70,6 +79,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   `NinjaTraderCompatibilityTests`.
 
 ### Fixed
+
+- **NinjaTrader 8.1.9.0 CS0579 duplicate assembly attributes.** Root cause: NT8 compiles every
+  `.cs` file under `bin\Custom` into one `NinjaTrader.Custom.dll` that already has its own
+  `bin\Custom\AssemblyInfo.cs`. Copying `Properties/AssemblyInfo.cs` (or VS-generated
+  `obj/**/*.AssemblyInfo.cs`) into the Custom tree duplicated AssemblyTitle, AssemblyDescription,
+  AssemblyCompany, AssemblyProduct, AssemblyCopyright, ComVisible and AssemblyVersion. The
+  standalone project's own `AssemblyInfo.cs` and `GenerateAssemblyInfo=false` are correct and are
+  **preserved**; the deployment procedure is now a deterministic, fail-closed source bundle that
+  never stages assembly metadata. No assembly metadata was removed from the repository.
+
+- **NinjaTrader 8.1.9.0 CS0117 `Currency` does not contain a definition for `Yen`.** Root cause:
+  the real `NinjaTrader.Cbi.Currency` enum has no `Yen` member (JPY is `JapaneseYen`, GBP is
+  `BritishPound`); the offline stub and the generic USD/EUR/JPY/GBP mapping were wrong. The stub
+  now mirrors the reflected NT8 enum names/values, and the identity-validation path uses a single
+  USD-only reduction helper (`Currency.UsDollar` → `USD`) with no generic currency table. An
+  observed non-USD member stays a definite `FAIL` (`CURRENCY_MISMATCH`), an unreadable
+  denomination/product currency stays `INCONCLUSIVE`, and no foreign currency is converted into
+  USD. The fixed ES/USD identity and read-only architecture are unchanged. Tests:
+  `CompilationRegressionTests`, `test_nt8_compilation_regression.py`.
 
 - **SAMPLE findings reported the wrong severity.** The sample generator hardcoded every non-`FAIL`
   finding to `INFO`, so an `INCONCLUSIVE` finding (which production reports as `MEDIUM`) appeared as

@@ -47,10 +47,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         /// <summary>True when a tick value could be derived from the observed economics.</summary>
         public bool TickValueObservable { get; set; }
 
-        /// <summary>Product currency as an ISO code, or empty when it could not be mapped.</summary>
+        /// <summary>
+        /// Product currency: the ISO code "USD" when the approved currency was observed, otherwise
+        /// the raw NT8 Currency member name (a definite mismatch), or empty when unreadable. No
+        /// foreign currency is ever converted into USD here.
+        /// </summary>
         public string Currency { get; set; }
 
-        /// <summary>True when the product currency was readable and mapped to an ISO code.</summary>
+        /// <summary>True when the host reported a product currency member.</summary>
         public bool CurrencyObservable { get; set; }
 
         public EsProductSpecificationObservation()

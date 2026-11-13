@@ -30,6 +30,15 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!--
+      Standalone builds (UseStubs=true AND UseStubs=false) keep their assembly metadata in
+      Properties/AssemblyInfo.cs; SDK-generated assembly info is disabled so this project has
+      exactly one copy. NinjaTrader's NinjaScript Editor does NOT read this .csproj: it compiles
+      every .cs file under bin\Custom into its own NinjaTrader.Custom.dll, which already carries
+      bin\Custom\AssemblyInfo.cs. Staging Properties/AssemblyInfo.cs (or any generated
+      obj/**/*.AssemblyInfo.cs) into that tree causes CS0579 duplicate attributes. NEVER stage it;
+      use tools/nt8-source-package/package_addon_sources.py. See docs/INSTALL.md.
+    -->
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <AssemblyName>RiskPilot.Diagnostics.Nt8</AssemblyName>
     <RootNamespace>RiskPilot.Diagnostics.Nt8</RootNamespace>

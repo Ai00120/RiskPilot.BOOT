@@ -88,12 +88,45 @@ namespace NinjaTrader.Cbi
         CQG
     }
 
+    /// <summary>
+    /// Models NT8 <c>NinjaTrader.Cbi.Currency</c> names and values from a public reflected
+    /// API snapshot (not verified against 8.1.9.0 here; see docs/NT8_COMPILATION_FIXES.md). There is NO
+    /// <c>Yen</c> member: the JPY member is <c>JapaneseYen</c>, and the GBP member is
+    /// <c>BritishPound</c> (not <c>BritishPounds</c>). Only <c>UsDollar</c> is used by the
+    /// approved ES/USD identity path; the rest exist so an offline stub build cannot silently
+    /// diverge from the real API surface.
+    /// </summary>
     public enum Currency
     {
-        UsDollar,
-        Euro,
-        Yen,
-        BritishPound
+        AustralianDollar = 0,
+        BritishPound = 1,
+        CanadianDollar = 2,
+        Euro = 3,
+        HongKongDollar = 4,
+        JapaneseYen = 5,
+        SwissFranc = 6,
+        UsDollar = 7,
+        KoreanWon = 8,
+        IndianRupee = 9,
+        SwedishKrona = 10,
+        MexicanPeso = 11,
+        BrazilianReal = 12,
+        SingaporeDollar = 13,
+        ChinaYuan = 14,
+        MalaysiaRinggit = 15,
+        ThailandBaht = 16,
+        TaiwanNewDollar = 17,
+        NewZealandDollar = 18,
+        SouthAfricanRand = 19,
+        CzechRepublicKoruna = 20,
+        NorwayKrone = 21,
+        DenmarkKrone = 22,
+        HungaryForint = 23,
+        PolandZloty = 24,
+        TurkeyLira = 25,
+        IsraeliShekel = 26,
+        RussiaRuble = 27,
+        SaudiRiyal = 28
     }
 
     public enum Exchange
@@ -310,7 +343,19 @@ namespace NinjaTrader.Cbi
         public string Name { get; set; }
         public Provider Provider { get; set; }
         public Connection Connection { get; set; }
-        public Currency Denomination { get; set; }
+        // Offline-only fault injection; not a NinjaTrader API member.
+        public bool ThrowOnDenominationRead { get; set; }
+        private Currency _denomination;
+        public Currency Denomination
+        {
+            get
+            {
+                if (ThrowOnDenominationRead)
+                    throw new InvalidOperationException("Offline denomination read failure");
+                return _denomination;
+            }
+            set { _denomination = value; }
+        }
         public Collection<Position> Positions { get; } = new Collection<Position>();
         public Collection<Order> Orders { get; } = new Collection<Order>();
     }
