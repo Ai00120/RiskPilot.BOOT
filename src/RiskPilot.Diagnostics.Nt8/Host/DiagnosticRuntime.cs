@@ -123,6 +123,31 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         }
 
         /// <summary>
+        /// Waits (bounded) until the ingest queue has drained, so a caller that just enqueued
+        /// records can read the observation those records produce. Returns true when the queue was
+        /// empty within <paramref name="timeoutMs"/>. It never throws and never blocks a host
+        /// callback thread indefinitely: a timeout simply returns false and the caller proceeds
+        /// with whatever was processed (fail-closed, never fabricated). The bound is measured on
+        /// the wall clock so a deterministic/frozen injected clock cannot make it wait forever.
+        /// </summary>
+        public bool WaitForIngestDrain(int timeoutMs)
+        {
+            var pipeline = _pipeline;
+            if (pipeline == null)
+            {
+                return false;
+            }
+
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs <= 0 ? 0 : timeoutMs);
+            while (pipeline.Queue.Count > 0 && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(2);
+            }
+
+            return pipeline.Queue.Count == 0;
+        }
+
+        /// <summary>
         /// Creates the session, log, ingest pipeline and engine, and registers the
         /// probes. Safe to call more than once; only the first call has an effect.
         /// </summary>

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using RiskPilot.Diagnostics.Nt8.Core.Engine.Consumers;
 using RiskPilot.Diagnostics.Nt8.Core.Models;
 using RiskPilot.Diagnostics.Nt8.Core.Models.Observations;
 using RiskPilot.Diagnostics.Nt8.Core.Session;
@@ -34,7 +35,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
             MergeOrderLifecycle(hostSnapshot, counters);
             MergeDomMarketData(hostSnapshot, session);
             MergeTradeDelta(hostSnapshot, counters);
-            MergeStrategyRiskGate(hostSnapshot, counters);
+            MergeStrategyRiskGate(hostSnapshot, session);
             return hostSnapshot;
         }
 
@@ -261,7 +262,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
             observation.TradeDeltaCompleteness = "COMPLETE";
         }
 
-        private static void MergeStrategyRiskGate(DiagnosticSnapshot snapshot, RuntimeCounters counters)
+        private static void MergeStrategyRiskGate(DiagnosticSnapshot snapshot, SessionContext session)
         {
             var observation = snapshot.StrategyRiskGate;
             if (observation == null)
@@ -270,7 +271,111 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
                 snapshot.StrategyRiskGate = observation;
             }
 
-            observation.AllCandidatesInvalidCount += counters.Get(RuntimeCounterKeys.StrategyAllCandidatesInvalid);
+            var accumulator = session.StrategyEvidence;
+            if (accumulator != null && accumulator.ObservedRecordCount > 0)
+            {
+                // A real read-only source reported strategy records. The accumulator holds the
+                // per-strategy detail and the reason-code distributions, so it is the source of
+                // truth; merge it in rather than the flat counters.
+                MergeAccumulated(observation, accumulator);
+                return;
+            }
+
+            // No source reported strategy records this session. Preserve any per-strategy detail
+            // the host snapshot already carried (for example a host adapter), and fold the flat
+            // reason-code counters into the distributions so a counter-only path is still
+            // reported. The two are combined, never overwritten.
+            MergeReasonCodeDistribution(observation.CandidateRejectionReasons, session.Counters, StrategyReasonCodes.Stage1);
+            MergeReasonCodeDistribution(observation.CandidateRejectionReasons, session.Counters, StrategyReasonCodes.Stage2);
+            MergeReasonCodeDistribution(observation.Stage3ReasonCodes, session.Counters, StrategyReasonCodes.Stage3);
+            MergeReasonCodeDistribution(observation.RiskGateReasonCodes, session.Counters, StrategyReasonCodes.Stage4);
+            MergeUnattributedReasonCodes(observation, session.Counters);
+        }
+
+        private static void MergeAccumulated(StrategyRiskGateObservation observation, StrategyEvidenceAccumulator accumulator)
+        {
+            var accumulated = accumulator.ToObservation();
+
+            foreach (var strategy in accumulated.Strategies)
+            {
+                observation.Strategies.Add(strategy);
+            }
+
+            if (accumulated.ObservedRecordCount > observation.ObservedRecordCount)
+            {
+                observation.ObservedRecordCount = accumulated.ObservedRecordCount;
+            }
+
+            AddDistributions(observation.CandidateRejectionReasons, accumulated.CandidateRejectionReasons);
+            AddDistributions(observation.Stage3ReasonCodes, accumulated.Stage3ReasonCodes);
+            AddDistributions(observation.RiskGateReasonCodes, accumulated.RiskGateReasonCodes);
+            AddDistributions(observation.UnattributedReasonCodes, accumulated.UnattributedReasonCodes);
+
+            if (accumulated.Correlation != null
+                && (accumulated.Correlation.CorrelationObservable || observation.Correlation == null || !observation.Correlation.CorrelationObservable))
+            {
+                observation.Correlation = accumulated.Correlation;
+            }
+        }
+
+        private static void AddDistributions(IDictionary<string, long> target, IDictionary<string, long> source)
+        {
+            if (target == null || source == null)
+            {
+                return;
+            }
+
+            foreach (var pair in source)
+            {
+                target.TryGetValue(pair.Key, out var current);
+                target[pair.Key] = current + pair.Value;
+            }
+        }
+
+        private static void MergeReasonCodeDistribution(
+            IDictionary<string, long> distribution,
+            RuntimeCounters counters,
+            string stage)
+        {
+            if (distribution == null)
+            {
+                return;
+            }
+
+            foreach (var code in StrategyReasonCodes.CodesFor(stage))
+            {
+                var count = counters.Get(M7StrategyConsumer.ReasonCodePrefix + code);
+                if (count <= 0)
+                {
+                    continue;
+                }
+
+                distribution.TryGetValue(code, out var current);
+                distribution[code] = current + count;
+            }
+        }
+
+        private static void MergeUnattributedReasonCodes(StrategyRiskGateObservation observation, RuntimeCounters counters)
+        {
+            foreach (var pair in counters.Snapshot())
+            {
+                if (pair.Value <= 0 || !pair.Key.StartsWith(M7StrategyConsumer.ReasonCodePrefix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var code = pair.Key.Substring(M7StrategyConsumer.ReasonCodePrefix.Length);
+                if (string.IsNullOrEmpty(code) || !string.Equals(StrategyReasonCodes.StageOf(code), StrategyReasonCodes.Unattributed, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                // The code is either absent from the catalog or ambiguous across stages, so it
+                // cannot be attributed to one stage. It is recorded once in the unattributed
+                // bucket so the module reports the exact code rather than silently discarding it.
+                observation.UnattributedReasonCodes.TryGetValue(code, out var current);
+                observation.UnattributedReasonCodes[code] = current + pair.Value;
+            }
         }
     }
 }

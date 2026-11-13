@@ -27,6 +27,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         private DiagnosticViewState _viewState;
         private DiagnosticRunCoordinator _coordinator;
         private MarketDataCapture _marketDataCapture;
+        private StrategyDiagnosticCapture _strategyCapture;
         private bool _started;
         private bool _disposed;
 
@@ -71,6 +72,15 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// or a test may override it before the AddOn initialises.
         /// </summary>
         public string EvidenceOutputRoot { get; set; }
+
+        /// <summary>
+        /// Optional read-only diagnostic source for strategy observations. No public NinjaTrader
+        /// API exposes strategy internals, so M7 can only report real strategy state when a host or
+        /// RiskPilot component supplies a read-only diagnostic source. A host or test may set this
+        /// before the AddOn initialises. When it is null, M7 reports INCONCLUSIVE (never a
+        /// fabricated state).
+        /// </summary>
+        public Core.Contract.IReadOnlyDiagnosticSource StrategyDiagnosticSource { get; set; }
 
         /// <summary>
         /// Live readiness probe for the host data provider. True once the AddOn has advanced past
@@ -118,12 +128,27 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     // pass; a failure leaves M5 INCONCLUSIVE rather than fabricating data.
                     _marketDataCapture = new MarketDataCapture(record => _runtime != null && _runtime.Ingest(record), () => HostIsLive);
 
+                    // The strategy capture pulls read-only strategy observations from the optional
+                    // diagnostic contract before each pass. No public API exposes strategy internals,
+                    // so with no source M7 reports INCONCLUSIVE rather than a fabricated state. It
+                    // is strictly read-only: it never mutates the source or the host.
+                    _strategyCapture = new StrategyDiagnosticCapture(
+                        record =>
+                        {
+                            var runtime = _runtime;
+                            if (runtime != null)
+                            {
+                                runtime.Ingest(record);
+                            }
+                        },
+                        StrategyDiagnosticSource);
+
                     // The run coordinator owns the single-run guarantee and marshals its UI
                     // notifications through the switchable dispatcher. The dispatcher has no
                     // target until a host window exists; until then it applies notifications
                     // inline to the view state, so a run's progress and result are never lost.
                     _viewState = new DiagnosticViewState();
-                    var runner = new RuntimeDiagnosticRunner(_runtime, BuildEvidenceSink(), EnsureMarketDataCapture);
+                    var runner = new RuntimeDiagnosticRunner(_runtime, BuildEvidenceSink(), EnsureMarketDataCapture, CaptureStrategyObservations);
                     _coordinator = new DiagnosticRunCoordinator(runner, _uiDispatcher, _runtime.Log);
                     WireViewState();
 
@@ -135,9 +160,39 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     _coordinator = null;
                     _viewState = null;
                     _marketDataCapture = null;
+                    _strategyCapture = null;
                     Log("RiskPilot Diagnostics initialization failed: " + Core.Errors.ErrorClassifier.Describe(ex),
                         NinjaTrader.Cbi.LogLevel.Error);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Best-effort capture of the read-only strategy observations before a pass. Invoked by
+        /// the runner so M7 evaluates the real strategy state the diagnostic source reported. It
+        /// never throws and never fabricates data: with no source it reports 0 and M7 stays
+        /// INCONCLUSIVE.
+        /// </summary>
+        public int CaptureStrategyObservations()
+        {
+            StrategyDiagnosticCapture capture;
+            lock (_gate)
+            {
+                capture = _strategyCapture;
+            }
+
+            if (capture == null)
+            {
+                return 0;
+            }
+
+            try
+            {
+                return capture.TryCapture();
+            }
+            catch (Exception)
+            {
+                return 0;
             }
         }
 
@@ -272,6 +327,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 _runtime = null;
                 _coordinator = null;
                 _marketDataCapture = null;
+                _strategyCapture = null;
             }
 
             // Detach from the host market-data events before tearing anything down, so no

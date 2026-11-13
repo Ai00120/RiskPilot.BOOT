@@ -293,7 +293,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 InstrumentIdentity = BuildInstrumentIdentityObservation(),
                 DomMarketData = new DomMarketDataObservation(),
                 TradeDelta = new TradeDeltaObservation(),
-                StrategyRiskGate = new StrategyRiskGateObservation { StrategySurfaceObservable = false },
+                StrategyRiskGate = new StrategyRiskGateObservation(),
                 Safety = new SafetyObservation()
             };
         }

@@ -405,6 +405,7 @@ boolean/count + `instrument#<hash>` کاهش می‌دهد. مقایسهٔ ری�
 | `M7.STAGE3_SIZING` | Stage 3 position sizing (Zero Quantity) |
 | `M7.RISK_GATE` | Stage 4 Risk Gate veto (`ANALYTICAL_NO_TRADE`, `MISSING_INSTRUMENT_SPECIFICATION`) |
 | `M7.STAGE_CORRELATION` | ارتباط Decision ↔ Proposal ↔ Evaluation |
+| `M7.REASON_ATTRIBUTION` | Reason codeهای قابل‌نسبت‌دادن به Stage (و کدهای نامشخص = Unattributed) |
 
 **Baseline:** `ALL_CANDIDATES_INVALID` = 311,179؛ Stage 3 Zero Quantity در موارد متعدد؛
 Risk Gate veto با `ANALYTICAL_NO_TRADE` و `MISSING_INSTRUMENT_SPECIFICATION`؛ کنارگذاری
@@ -416,9 +417,13 @@ OrderFlow با `RESET_OPERATION_RECEIVED`؛ کنارگذاری TradeDelta با `
 `CorrelationGapReason` (مثل `PROPOSAL_ID_MISSING`). استراتژی Unavailable هرگز Active فرض نمی‌شود.
 
 **مرجع API:** سطح Strategy/Risk در BOT (مطالعهٔ read-only) + مدل‌های Core.
-**تست‌ها:** `Phase3ModuleTests.M7_*` (۳ تست).
-**محدودیت:** Strategyها داخل BOT اجرا می‌شوند؛ این ابزار فقط شواهد را از قرارداد/تلمتری
-فقط‌خواندنی می‌خواند. بدون آن منبع، `M7.STRATEGY_SURFACE` = `INCONCLUSIVE`.
+**تست‌ها:** `M7StrategyTests` (accumulator + assembler + host capture + runtime integration)
+و `Phase3ModuleTests.M7_*` و `Phase5ScenarioTests.Scenario_MissingStrategyCapability_*`.
+**محدودیت:** Strategyها داخل BOT اجرا می‌شوند؛ این ابزار فقط شواهد را از قرارداد فقط‌خواندنی
+`IReadOnlyDiagnosticSource.ReadStrategies()` می‌خواند. بدون آن منبع، `M7.STRATEGY_SURFACE` و
+همهٔ Checkهای M7 = `INCONCLUSIVE` همراه با Reason Code توضیحی؛ هیچ مقدار ساختگی یا هاردکد
+جایگزین نمی‌شود. یک Strategy مشاهده‌نشده `NOT_OBSERVED` گزارش می‌شود (هرگز Active/Inactive فرض
+نمی‌شود) و Availability فقط وقتی شمرده می‌شود که منبع آن را گزارش کرده باشد.
 
 ---
 
@@ -515,7 +520,7 @@ aggressor side).
 | M4 | `Phase3ModuleTests.M4_*` (4) + `InstrumentIdentityTests` (18) + `HostInstrumentIdentityTests` (10) | 32 | PASS |
 | M5 | `Phase3ModuleTests.M5_*` | 2 | PASS |
 | M6 | `Phase3ModuleTests.M6_*` | 4 | PASS |
-| M7 | `Phase3ModuleTests.M7_*` | 3 | PASS |
+| M7 | `Phase3ModuleTests.M7_*` (11) + `M7StrategyTests` (16) | 27 | PASS |
 | M8 | `Phase3ModuleTests.M8_*` | 4 | PASS |
 | Runtime integration | `Phase3ModuleTests.Runtime_*` | 2 | PASS |
 | Counter/assembler | `Phase3ModuleTests.M6Consumer_*`, `SnapshotAssembler_*` | 2 | PASS |

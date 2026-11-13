@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using RiskPilot.Diagnostics.Nt8.Core.Engine.Consumers;
 using RiskPilot.Diagnostics.Nt8.Core.Models;
 
 namespace RiskPilot.Diagnostics.Nt8.Core.Session
@@ -32,6 +33,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Session
             StartedAtUtc = startedAtUtc;
             SourceTimeBasis = SourceTimeBasis.ServerTimeUnverified;
             Counters = new RuntimeCounters();
+            StrategyEvidence = new StrategyEvidenceAccumulator();
         }
 
         public string SessionId { get; private set; }
@@ -44,6 +46,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Session
         /// session starts from zero.
         /// </summary>
         public RuntimeCounters Counters { get; private set; }
+
+        /// <summary>
+        /// Session-scoped accumulator for the strategy/risk-gate evidence the M7 consumer
+        /// observes on the drain thread. A flat counter cannot hold the per-strategy detail,
+        /// so the observation is derived from this accumulator. It is empty until a read-only
+        /// strategy source actually reports a strategy.
+        /// </summary>
+        public StrategyEvidenceAccumulator StrategyEvidence { get; private set; }
 
         /// <summary>Trust basis asserted for source timestamps in this session.</summary>
         public SourceTimeBasis SourceTimeBasis { get; set; }

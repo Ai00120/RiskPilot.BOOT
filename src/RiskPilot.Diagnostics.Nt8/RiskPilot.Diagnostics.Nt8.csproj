@@ -126,6 +126,7 @@
     <Compile Include="Core\Engine\DiagnosticEngine.cs" />
     <Compile Include="Core\Engine\FindingFactory.cs" />
     <Compile Include="Core\Engine\AttestationReasonCodes.cs" />
+    <Compile Include="Core\Engine\StrategyReasonCodes.cs" />
     <Compile Include="Core\Engine\SnapshotAssembler.cs" />
     <Compile Include="Core\Engine\TradeDirectionClassifier.cs" />
     <Compile Include="Core\Engine\EnrichedDataProvider.cs" />
@@ -142,6 +143,7 @@
     <Compile Include="Core\Engine\Consumers\M5DomMarketDataConsumer.cs" />
     <Compile Include="Core\Engine\Consumers\M6TradeDeltaConsumer.cs" />
     <Compile Include="Core\Engine\Consumers\M7StrategyConsumer.cs" />
+    <Compile Include="Core\Engine\Consumers\StrategyEvidenceAccumulator.cs" />
     <Compile Include="Core\Contract\IReadOnlyDiagnosticSource.cs" />
 
     <!-- Host: the only layer that touches NinjaTrader types -->
@@ -149,6 +151,7 @@
     <Compile Include="Host\FileReportSink.cs" />
     <Compile Include="Host\EvidenceDirectorySink.cs" />
     <Compile Include="Host\MarketDataCapture.cs" />
+    <Compile Include="Host\StrategyDiagnosticCapture.cs" />
     <Compile Include="Host\Nt8HostDataProvider.cs" />
     <Compile Include="Host\DiagnosticRuntime.cs" />
     <Compile Include="Host\RuntimeDiagnosticRunner.cs" />

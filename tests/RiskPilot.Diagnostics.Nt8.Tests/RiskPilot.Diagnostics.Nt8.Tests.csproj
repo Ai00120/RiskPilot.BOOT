@@ -50,6 +50,7 @@
     <Compile Include="HostInstrumentIdentityTests.cs" />
     <Compile Include="M5DomMarketDataTests.cs" />
     <Compile Include="M6TradeDeltaTests.cs" />
+    <Compile Include="M7StrategyTests.cs" />
     <Compile Include="StubHostStateCollection.cs" />
     <Compile Include="Phase3ModuleTests.cs" />
     <Compile Include="Phase4RunCoordinatorTests.cs" />

@@ -277,6 +277,40 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   `M6TradeDeltaTests` (classifier + consumer + assembler + probe + host capture over the offline
   stub surface + runtime integration); a green stub run is **not** real-host proof.
 
+## M7 Strategies / Risk Gate (P6 — data reliability)
+
+- M7 now derives its results from **real ingested strategy records**, not from the probe's own
+  unclassified output (the M6 pattern, commit 785d13c). No public NinjaTrader API exposes strategy
+  internals, so the only source is the read-only `IReadOnlyDiagnosticSource` contract a host or
+  RiskPilot component may implement (`ReadStrategies()`); the AddOn exposes it via the
+  `StrategyDiagnosticSource` property.
+- Flow: `Host/StrategyDiagnosticCapture` (read-only, best-effort, never throws) pulls the records
+  and feeds them through `DiagnosticRuntime.Ingest(StrategyRecord)`; the `M7StrategyConsumer` on the
+  drain thread writes each into the session-scoped `Core/Engine/Consumers/StrategyEvidenceAccumulator`;
+  `SnapshotAssembler.MergeStrategyRiskGate` reads the accumulator (counters fallback) so the live
+  probe and the exported package see the **same** evidence. `RuntimeDiagnosticRunner` waits
+  (bounded, `WaitForIngestDrain(500)`) for the drain thread after a capture that ingested anything.
+- `Core/Engine/StrategyReasonCodes.cs` is the published stage catalog; attribution is delegated to
+  it and a code it cannot place (unknown **or ambiguous across stages**, e.g. `FLAT_DIRECTION`) is
+  reported **unattributed**, never guessed into a stage. Both the accumulator and the counters
+  fallback use `StrategyReasonCodes.StageOf`, so the two paths agree.
+- Correlation is **derived** from the records' own ids (never injected via a setter), so
+  `M7.STAGE_CORRELATION` can only reflect what a real record reported. `RuntimeDiagnosticRunner`
+  waits on the **wall clock** for the drain, so a deterministic/frozen injected clock can never
+  make the host wait unbounded.
+- Fail-closed contract: `M7.STRATEGY_SURFACE` is derived (`StrategySurfaceObservable` is read-only,
+  true only with a real observation); `M7.STRATEGY_EVALUATION` reports each of the five registered
+  strategies as observed/available/unavailable/missing-capability/`NOT_OBSERVED` — availability is
+  only counted when the source reported it; `M7.CANDIDATE_REJECTION`/`STAGE3_SIZING`/`RISK_GATE`
+  stay `INCONCLUSIVE` as raw distributions with no observed reason codes; `M7.STAGE_CORRELATION`
+  needs `CorrelationObservable` (an incomplete observed surface is `INCONCLUSIVE` with the gap
+  reason, a complete one is `PASS`); `M7.REASON_ATTRIBUTION` reports unattributed codes. Every
+  INCONCLUSIVE carries a reason code that explains why.
+- `strategies.json` carries the `riskGate` block (surface flag, observed record count, derived
+  distributions, correlation, per-strategy rows with per-field observability); no raw account/
+  connection identity enters it. Tests: `M7StrategyTests` (accumulator, assembler, host capture,
+  runtime integration); a green stub run is **not** real-host proof.
+
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live

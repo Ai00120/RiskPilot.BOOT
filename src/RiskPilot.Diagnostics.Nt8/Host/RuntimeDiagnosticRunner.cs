@@ -23,9 +23,10 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         private readonly DiagnosticRuntime _runtime;
         private readonly IEvidenceSink _evidenceSink;
         private readonly Func<bool> _ensureMarketDataCapture;
+        private readonly Func<int> _captureStrategyObservations;
 
         public RuntimeDiagnosticRunner(DiagnosticRuntime runtime, IEvidenceSink evidenceSink)
-            : this(runtime, evidenceSink, null)
+            : this(runtime, evidenceSink, null, null)
         {
         }
 
@@ -33,12 +34,28 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// Creates the runner. <paramref name="ensureMarketDataCapture"/>, when supplied, is
         /// invoked (best-effort) just before a pass runs so the host Level I/II capture is
         /// subscribed to the currently-loaded instrument; a failure never aborts the run.
+        /// <para>
+        /// <paramref name="captureStrategyObservations"/>, when supplied, is invoked
+        /// (best-effort) just before a pass runs so the read-only strategy observations are
+        /// ingested before M7 evaluates. It returns the number ingested. A failure never aborts
+        /// the run and leaves M7 INCONCLUSIVE.
+        /// </para>
         /// </summary>
         public RuntimeDiagnosticRunner(DiagnosticRuntime runtime, IEvidenceSink evidenceSink, Func<bool> ensureMarketDataCapture)
+            : this(runtime, evidenceSink, ensureMarketDataCapture, null)
+        {
+        }
+
+        /// <summary>
+        /// Creates the runner with both optional host captures. See
+        /// <see cref="RuntimeDiagnosticRunner(DiagnosticRuntime, IEvidenceSink, Func{bool})"/>.
+        /// </summary>
+        public RuntimeDiagnosticRunner(DiagnosticRuntime runtime, IEvidenceSink evidenceSink, Func<bool> ensureMarketDataCapture, Func<int> captureStrategyObservations)
         {
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             _evidenceSink = evidenceSink;
             _ensureMarketDataCapture = ensureMarketDataCapture;
+            _captureStrategyObservations = captureStrategyObservations;
         }
 
         public DiagnosticRunResult Run(DiagnosticRunContext context)
@@ -60,6 +77,28 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 catch (Exception)
                 {
                     // Best effort only; the run proceeds and M5 fails closed to INCONCLUSIVE.
+                }
+            }
+
+            // Pull the read-only strategy observations before the pass, so M7 reflects real
+            // host/diagnostic-contract strategy state. A failure is not fatal: the capture simply
+            // yields nothing and M7 reports INCONCLUSIVE rather than a fabricated state.
+            if (_captureStrategyObservations != null)
+            {
+                try
+                {
+                    var captured = _captureStrategyObservations();
+                    if (captured > 0)
+                    {
+                        // The capture enqueues records; the drain thread is what folds them into the
+                        // M7 observation. Wait (bounded) so M7 evaluates the state those records
+                        // produced, not a stale or empty one.
+                        _runtime.WaitForIngestDrain(500);
+                    }
+                }
+                catch (Exception)
+                {
+                    // Best effort only; M7 fails closed to INCONCLUSIVE.
                 }
             }
 
