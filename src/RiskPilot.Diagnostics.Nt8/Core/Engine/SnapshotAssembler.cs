@@ -18,20 +18,21 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
     /// </summary>
     public static class SnapshotAssembler
     {
-        public static DiagnosticSnapshot Assemble(DiagnosticSnapshot hostSnapshot, RuntimeCounters counters)
+        public static DiagnosticSnapshot Assemble(DiagnosticSnapshot hostSnapshot, SessionContext session)
         {
             if (hostSnapshot == null)
             {
                 return null;
             }
 
-            if (counters == null)
+            if (session == null || session.Counters == null)
             {
                 return hostSnapshot;
             }
 
+            var counters = session.Counters;
             MergeOrderLifecycle(hostSnapshot, counters);
-            MergeDomMarketData(hostSnapshot, counters);
+            MergeDomMarketData(hostSnapshot, session);
             MergeTradeDelta(hostSnapshot, counters);
             MergeStrategyRiskGate(hostSnapshot, counters);
             return hostSnapshot;
@@ -78,8 +79,9 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
             AddClass(observation.OrderIdClassCounts, OrderIdClass.Unavailable, (int)counters.Get(RuntimeCounterKeys.OrderIdUnavailable));
         }
 
-        private static void MergeDomMarketData(DiagnosticSnapshot snapshot, RuntimeCounters counters)
+        private static void MergeDomMarketData(DiagnosticSnapshot snapshot, SessionContext session)
         {
+            var counters = session.Counters;
             var observation = snapshot.DomMarketData;
             if (observation == null)
             {
@@ -102,12 +104,26 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
             host.InvalidSizeCount += counters.Get(RuntimeCounterKeys.DomHostInvalidSize);
             host.InvalidPositionCount += counters.Get(RuntimeCounterKeys.DomHostInvalidPosition);
 
+            // A malformed depth event is itself evidence the host adapter was reached: the host
+            // delivered an event we could not use. Counting it keeps the loss visible instead of
+            // hiding it behind an "unobservable" surface.
+            observation.MalformedCount += counters.Get(RuntimeCounterKeys.DomHostMalformed);
+
             // The host layer is observable once it reported any DOM activity or declared it so.
             host.Observable = host.Observable
                 || host.InsertCount > 0 || host.UpdateCount > 0 || host.RemoveCount > 0
-                || host.ResetCount > 0 || host.SnapshotSyncCount > 0;
+                || host.ResetCount > 0 || host.SnapshotSyncCount > 0
+                || observation.MalformedCount > 0;
 
             observation.HostAdapter = host;
+
+            // Depth (Level II) is observed only from DOM records; a Level I quote is a
+            // different stream and must never be presented as depth evidence.
+            var depthOperations = host.InsertCount + host.UpdateCount + host.RemoveCount + host.ResetCount;
+            if (depthOperations > 0)
+            {
+                observation.DepthObserved = true;
+            }
 
             if (counters.Get(RuntimeCounterKeys.QuoteObserved) > 0)
             {
@@ -119,7 +135,21 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
                 observation.LastTradeObserved = true;
             }
 
-            observation.MalformedCount += counters.Get(RuntimeCounterKeys.DomHostMalformed);
+            // Freshness is derived from the newest event the ingest path actually observed; it
+            // is never fabricated, and stays absent until an event is seen.
+            var lastEventUtc = session.LastMarketDataEventUtc;
+            if (lastEventUtc.HasValue)
+            {
+                observation.LastEventUtc = lastEventUtc;
+            }
+
+            // A surface is observable only once a stream event was seen or the host adapter
+            // declared its counters. Until then derived checks must stay INCONCLUSIVE.
+            observation.DataSurfaceObservable = observation.DataSurfaceObservable
+                || observation.Level1QuoteObserved
+                || observation.LastTradeObserved
+                || observation.DepthObserved
+                || host.Observable;
 
             // Per-domain ingest integrity for the market-data/DOM domain. The counter is
             // attributed by stream on the ingest path, so it is the DOM/market-data share of

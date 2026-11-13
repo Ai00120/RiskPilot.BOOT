@@ -459,6 +459,23 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 dataset.Snapshot.PostTradeAudit = BuildPostTradeAuditObservation(dataset, dataset.Snapshot, session);
             }
 
+            // Fold the session's observed ingest evidence (counters, gap/drop counts and the
+            // newest market-data/DOM event instant) into the snapshot the package exports, the
+            // same way the live probe path does via ProbeContext. Without this the exported
+            // M5/M6 summaries would ignore the market-data/DOM records the runtime ingested and
+            // could report an unobserved surface even though real data was seen.
+            if (dataset.Snapshot != null && session != null)
+            {
+                try
+                {
+                    SnapshotAssembler.Assemble(dataset.Snapshot, session);
+                }
+                catch (Exception)
+                {
+                    // Leave the raw host snapshot; the package reports what it could observe.
+                }
+            }
+
             return dataset;
         }
 

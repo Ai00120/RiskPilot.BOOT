@@ -124,6 +124,37 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void EvidenceExport_MarketDataSummary_ReflectsRealObservedIngestData()
+        {
+            // The exported market-data/dom summaries must reflect the market-data/DOM events the
+            // runtime actually ingested, not an empty host observation. Without this the package
+            // could show an unobserved surface even though M5 saw real data.
+            var provider = new FakeDataProvider();
+            using var runtime = Runtime(provider, 256, 256);
+            runtime.Start();
+
+            runtime.Ingest(new MarketDataRecord { InstrumentId = "ES 12-26", Kind = MarketDataKind.Quote, Bid = 5000, Ask = 5000.25 });
+            runtime.Ingest(new MarketDataRecord { InstrumentId = "ES 12-26", Kind = MarketDataKind.Trade, Last = 5000.25, Volume = 3 });
+            runtime.Ingest(new DomRecord { InstrumentId = "ES 12-26", Operation = DomOperation.Update, Position = 2, Price = 4999.75, Volume = 7 });
+
+            WaitProcessed(runtime, 3);
+
+            var result = RunFull(runtime);
+            var sink = new InMemoryEvidenceSink();
+            Assert.True(runtime.WriteEvidencePackage(result, sink, out _));
+
+            var marketData = sink.Files[EvidencePackageCatalog.MarketDataSummaryJson];
+            Assert.Contains("\"dataSurfaceObservable\":true", marketData);
+            Assert.Contains("\"level1QuoteObserved\":true", marketData);
+            Assert.Contains("\"lastTradeObserved\":true", marketData);
+            Assert.Contains("\"depthObserved\":true", marketData);
+
+            var dom = sink.Files[EvidencePackageCatalog.DomSummaryJson];
+            Assert.Contains("\"dataSurfaceObservable\":true", dom);
+            Assert.Contains("\"depthObserved\":true", dom);
+        }
+
+        [Fact]
         public void QueueOverflow_IsReportedAsFail_NotSilentlyDropped()
         {
             // Capacity 1 and no drain thread: the second record must be dropped, and the

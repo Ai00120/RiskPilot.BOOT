@@ -517,8 +517,19 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             var dom = dataset.Snapshot != null ? dataset.Snapshot.DomMarketData : null;
             if (dom != null)
             {
+                writer.WriteProperty("dataSurfaceObservable", dom.DataSurfaceObservable);
                 writer.WriteProperty("level1QuoteObserved", dom.Level1QuoteObserved);
                 writer.WriteProperty("lastTradeObserved", dom.LastTradeObserved);
+                writer.WriteProperty("depthObserved", dom.DepthObserved);
+                if (dom.LastEventUtc.HasValue)
+                {
+                    writer.WriteProperty("lastEventUtc", dom.LastEventUtc.Value.ToString("o", System.Globalization.CultureInfo.InvariantCulture));
+                }
+                else
+                {
+                    writer.WriteProperty("lastEventUtc", "UNOBSERVABLE");
+                }
+
                 if (dom.LastDomEventAgeSeconds.HasValue)
                 {
                     writer.WriteProperty("lastDomEventAgeSeconds", dom.LastDomEventAgeSeconds.Value);
@@ -573,6 +584,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             }
 
             writer.WriteProperty("status", AvailableStatus);
+            writer.WriteProperty("dataSurfaceObservable", dom.DataSurfaceObservable);
+            writer.WriteProperty("level1QuoteObserved", dom.Level1QuoteObserved);
+            writer.WriteProperty("lastTradeObserved", dom.LastTradeObserved);
+            writer.WriteProperty("depthObserved", dom.DepthObserved);
+            writer.WriteProperty("lastSnapshotSyncTrigger", SecretRedactor.Redact(dom.LastSnapshotSyncTrigger ?? string.Empty));
             WriteDomBlock(writer, "hostAdapter", dom.HostAdapter);
             WriteDomBlock(writer, "recorder", dom.Recorder);
             writer.WriteProperty("malformedCount", dom.MalformedCount);

@@ -48,6 +48,7 @@
     <Compile Include="HostAccountIdentityTests.cs" />
     <Compile Include="HostTargetAccountConnectionTests.cs" />
     <Compile Include="HostInstrumentIdentityTests.cs" />
+    <Compile Include="M5DomMarketDataTests.cs" />
     <Compile Include="StubHostStateCollection.cs" />
     <Compile Include="Phase3ModuleTests.cs" />
     <Compile Include="Phase4RunCoordinatorTests.cs" />

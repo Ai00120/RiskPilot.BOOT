@@ -202,6 +202,45 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - Tests: `InstrumentIdentityTests` (verifier + probe) and `HostInstrumentIdentityTests` (host
   adapter over the offline stub surface); a green stub run is **not** real-host proof.
 
+## M5 DOM & market data (P4 — data reliability)
+
+- M5 now ingests **real** host data: `Host/MarketDataCapture.cs` subscribes (read-only) to the
+  loaded ES instrument's `Instrument.MarketData` (Level I) and `Instrument.MarketDepth` (Level II)
+  `Update` events and feeds normalized `MarketDataRecord`/`DomRecord`s into `EventIngestPipeline`.
+  The AddOn (re)subscribes before each pass via `EnsureMarketDataCapture` (wired through
+  `RuntimeDiagnosticRunner`'s optional `Func<bool>`), and detaches on dispose.
+- The event types live in `NinjaTrader.Data` (`MarketDataEventArgs`, `MarketDepthEventArgs`,
+  `MarketDataType`, `Operation`); `MarketData`/`MarketDepth` live in `NinjaTrader.Cbi`. The real
+  `Operation` enum has **only** `Add/Update/Remove` (no `Insert`) — the stub mirrors this so the
+  `UseStubs=false` build compiles. `MarketDepthEventArgs.Position` is an `int` (0-based ladder).
+- Subscribe on `instrument.Dispatcher` with `InvokeAsync` (documented pattern); guard with
+  `HasShutdownStarted`/`HasShutdownFinished`. The stub `Instrument.Dispatcher` runs inline.
+- `SnapshotAssembler.Assemble` now takes the whole `SessionContext` (not just counters) so
+  `MergeDomMarketData` can derive freshness from `SessionContext.LastMarketDataEventUtc` (newest
+  event instant, recorded by `M5DomMarketDataConsumer`). `M5DomMarketDataConsumer` also fixed a
+  double-count: `IsReset` on a non-`Reset` operation increments `DomHostReset` once, not twice.
+- Fail-closed contract: `M5.DOM_SURFACE`, `M5.DEPTH`, `M5.LEVEL1`, `M5.DATA_INTEGRITY`,
+  `M5.FRESHNESS` stay `INCONCLUSIVE` with no observed surface; any positive counter (sync failure,
+  out-of-bounds, invalid, gap, drop) is itself evidence → `FAIL`. `M5.FRESHNESS` is always
+  `INCONCLUSIVE` and only labels `FRESH`/`STALE` with the real age; a future-stamped event (negative
+  age) stays unobservable. Depth (Level II) is never inferred from a Level I quote.
+- `M5.VALIDITY` is derived from real ingested records, not a constant: `M5DomMarketDataConsumer`
+  counts a `DomRecord` with a negative/non-finite `Price`, a negative `Volume`, a negative
+  `Position`, or an unknown `Operation`/empty `InstrumentId` (the latter as `DomHostMalformed`, and
+  it contributes no depth-operation evidence). `Reset` is never validated. Only values that can
+  never be legitimate are flagged, so a legitimate host field (e.g. a zero price on a removal) is
+  never a false FAIL. A malformed record also makes the host layer `Observable` so its loss is not
+  hidden behind an "unobservable" surface.
+- `market-data-summary.json` / `dom-summary.json` carry `dataSurfaceObservable`, `depthObserved`,
+  `lastEventUtc` (never fabricated; `UNOBSERVABLE` when absent). Tests: `M5DomMarketDataTests`
+  (valid/missing/stale/invalid + host capture over the offline stub surface).
+- Like M9, the observed M5/M6/M7 evidence must reach **both** paths: the live probe (via
+  `ProbeContext` → `SnapshotAssembler.Assemble(GetSnapshot(), Session)`) and the exported package
+  (`DiagnosticRuntime.BuildEvidenceDataset`, which now also calls `SnapshotAssembler.Assemble` on
+  the session). Setting it only on the live path leaves the exported `market-data-summary.json` /
+  `dom-summary.json` reporting an unobserved surface even though real records were ingested.
+  Regression test: `Phase4RuntimeIntegrationTests.EvidenceExport_MarketDataSummary_ReflectsRealObservedIngestData`.
+
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live

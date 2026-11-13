@@ -22,11 +22,23 @@ namespace RiskPilot.Diagnostics.Nt8.Host
     {
         private readonly DiagnosticRuntime _runtime;
         private readonly IEvidenceSink _evidenceSink;
+        private readonly Func<bool> _ensureMarketDataCapture;
 
         public RuntimeDiagnosticRunner(DiagnosticRuntime runtime, IEvidenceSink evidenceSink)
+            : this(runtime, evidenceSink, null)
+        {
+        }
+
+        /// <summary>
+        /// Creates the runner. <paramref name="ensureMarketDataCapture"/>, when supplied, is
+        /// invoked (best-effort) just before a pass runs so the host Level I/II capture is
+        /// subscribed to the currently-loaded instrument; a failure never aborts the run.
+        /// </summary>
+        public RuntimeDiagnosticRunner(DiagnosticRuntime runtime, IEvidenceSink evidenceSink, Func<bool> ensureMarketDataCapture)
         {
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             _evidenceSink = evidenceSink;
+            _ensureMarketDataCapture = ensureMarketDataCapture;
         }
 
         public DiagnosticRunResult Run(DiagnosticRunContext context)
@@ -34,6 +46,21 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             if (context == null)
             {
                 throw new ArgumentNullException(nameof(context));
+            }
+
+            // Subscribe the market-data capture to the currently-loaded instrument before the
+            // pass, so the counters M5 reads reflect real host data. A failure here is not fatal:
+            // the capture simply stays unsubscribed and M5 reports the surface as unobserved.
+            if (_ensureMarketDataCapture != null)
+            {
+                try
+                {
+                    _ensureMarketDataCapture();
+                }
+                catch (Exception)
+                {
+                    // Best effort only; the run proceeds and M5 fails closed to INCONCLUSIVE.
+                }
             }
 
             var result = new DiagnosticRunResult

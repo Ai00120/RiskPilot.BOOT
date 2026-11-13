@@ -6,7 +6,11 @@ M2,M2.PROVIDER_IDENTITY,M2.PROVIDER_IDENTITY,PASS,INFO,NONE,NinjaTrader Public A
 M3,M3.ACCOUNT_SURFACE,M3.ACCOUNT_SURFACE,PASS,INFO,NONE,NinjaTrader Public API,accounts=1 orderSnapshots=2,Synthetic documentation sample; not a runtime observation.,None (sample).
 M3,M3.F05_ORDER_FILL_CONTINUITY,M3.F05_ORDER_FILL_CONTINUITY,INCONCLUSIVE,MEDIUM,NONE,NinjaTrader Public API,unmatchedTerminalOrders=0 unmatchedExecutions=0,Synthetic documentation sample; not a runtime observation.,None (sample).
 M4,M4.D078_APPROVAL,M4.D078_APPROVAL,FAIL,HIGH,APPROVAL_REQUIRED,NinjaTrader Public API,No D-078 operator field approval is recorded.,Synthetic documentation sample; not a runtime observation.,None (sample).
+M5,M5.DOM_SURFACE,M5.DOM_SURFACE,PASS,INFO,NONE,NinjaTrader Public API,level1Quote=True lastTrade=True depth=True,Synthetic documentation sample; not a runtime observation.,None (sample).
+M5,M5.LEVEL1,M5.LEVEL1,PASS,INFO,NONE,NinjaTrader Public API,quote=True lastTrade=True,Synthetic documentation sample; not a runtime observation.,None (sample).
+M5,M5.DEPTH,M5.DEPTH,PASS,INFO,NONE,NinjaTrader Public API,depthObserved=True depthOperations=42,Synthetic documentation sample; not a runtime observation.,None (sample).
 M5,M5.SNAPSHOT_SYNC,M5.SNAPSHOT_SYNC,FAIL,HIGH,DATA_UNAVAILABLE,NinjaTrader Public API,sync=42 failure=1 outOfBounds=41,Synthetic documentation sample; not a runtime observation.,None (sample).
+M5,M5.FRESHNESS,M5.FRESHNESS,INCONCLUSIVE,MEDIUM,NONE,NinjaTrader Public API,lastDomEventAgeSeconds=0.5 stale=False,Synthetic documentation sample; not a runtime observation.,None (sample).
 M6,M6.DIRECTION_SOURCE,M6.DIRECTION_SOURCE,INCONCLUSIVE,MEDIUM,NONE,NinjaTrader Public API,provenance=ALL_QUOTE_DERIVED,Synthetic documentation sample; not a runtime observation.,None (sample).
 M7,M7.CANDIDATE_REJECTION,M7.CANDIDATE_REJECTION,INCONCLUSIVE,MEDIUM,NONE,NinjaTrader Public API,allCandidatesInvalid=1234,Synthetic documentation sample; not a runtime observation.,None (sample).
 M8,M8.TRADING_DISABLED,M8.TRADING_DISABLED,PASS,INFO,NONE,NinjaTrader Public API,tradingDisabledRuntimeEvidence=true,Synthetic documentation sample; not a runtime observation.,None (sample).
