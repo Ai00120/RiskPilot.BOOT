@@ -195,6 +195,10 @@ findings.json               manifest.json
 - `orders.csv` خالی → فقط سطر header، بدون سطر جعلی؛
 - `market-data-summary.json` → `sourceTimeBasis` از خود رکوردهای مشاهده‌شده مشتق می‌شود
   (ضعیف‌ترین basis)، و بدون رکورد `UNOBSERVABLE` است — هرگز مقدار ثابت/فرضی نوشته نمی‌شود.
+- `environment.json` → بلوک `lifecycle` (حالت‌های مشاهده‌شدهٔ `OnStateChange`، فازها، وضعیت و
+  کدهای دلیل از `LifecycleVerifier`) از خود snapshot ارزیابی می‌شود؛ بدون سطح مشاهده‌پذیر
+  `"lifecycle": "UNOBSERVABLE"` نوشته می‌شود، هرگز مقدار ساختگی. فاز اتصال به‌صراحت
+  `DEFERRED_TO_M2` است.
 
 ### 5.2 Manifest
 

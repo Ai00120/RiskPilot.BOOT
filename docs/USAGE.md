@@ -46,7 +46,7 @@ package.
 
 | Module | Focus |
 | --- | --- |
-| **M1** | Environment & API compatibility (host version is unobservable — no public API). |
+| **M1** | Environment, API & lifecycle compatibility (host version is unobservable — no public API). Sole owner of the AddOn lifecycle surface; the connection phase is deferred to M2. |
 | **M2** | Connection & provider identity (price feed and order channel are tracked separately). |
 | **M3** | Account & order lifecycle (F-05): order-id classification, correlation, fill continuity. |
 | **M4** | Instrument attestation / D-078 field approval. |

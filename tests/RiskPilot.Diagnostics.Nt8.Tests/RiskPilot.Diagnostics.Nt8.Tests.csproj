@@ -40,6 +40,7 @@
     <Compile Include="ManifestTests.cs" />
     <Compile Include="SecretRedactionTests.cs" />
     <Compile Include="LifecycleTests.cs" />
+    <Compile Include="LifecycleDiagnosticsTests.cs" />
     <Compile Include="ErrorClassificationTests.cs" />
     <Compile Include="StatusPropagationTests.cs" />
     <Compile Include="ProbeTests.cs" />

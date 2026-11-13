@@ -11,7 +11,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
     {
         private static readonly Dictionary<string, string> Titles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            { "M1", "Environment & API Compatibility" },
+            { "M1", "Environment, API & Lifecycle Compatibility" },
             { "M2", "Connection & Provider Identity" },
             { "M3", "Account & Order Lifecycle (F-05)" },
             { "M4", "Instrument Attestation / D-078" },

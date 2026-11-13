@@ -29,7 +29,7 @@
 
 | # | ماژول | لایهٔ جدید اصلی |
 |---|---|---|
-| M1 | Environment / API Compatibility | `Probes/M1EnvironmentProbe.cs` |
+| M1 | Environment / API / Lifecycle Compatibility | `Probes/M1EnvironmentProbe.cs` + `Core/Identity/LifecycleVerifier.cs` + `Core/Models/Observations/LifecycleObservation.cs` |
 | M2 | Connection / Provider Identity | `Probes/M2ConnectionProbe.cs` |
 | M3 | Account / Order Lifecycle (F-05) | `Probes/M3AccountOrderProbe.cs` + `Consumers/M3OrderLifecycleConsumer.cs` |
 | M4 | Instrument Attestation / D-078 | `Probes/M4InstrumentAttestationProbe.cs` + `Instruments/CanonicalInstrumentId.cs` + `Core/Identity/InstrumentIdentityVerifier.cs` |
@@ -81,10 +81,17 @@ NormalizedRecord ─────────────────────
 
 ---
 
-## 3. ماژول ۱ — Environment / API Compatibility
+## 3. ماژول ۱ — Environment / API / Lifecycle Compatibility
 
 **پیاده‌سازی:** `Core/Engine/Probes/M1EnvironmentProbe.cs`، `Host/Nt8HostDataProvider.GetEnvironment()`،
-`BuildRuntimeObservation()`، `Host/DiagnosticAddOn.cs` (ثبت lifecycle).
+`BuildRuntimeObservation()`، `BuildLifecycleObservation()`، `Host/DiagnosticAddOn.cs` (ثبت lifecycle و
+پروب زندهٔ `() => LifecycleStates`)، `Core/Identity/LifecycleVerifier.cs` (تصمیم host-free)،
+`Core/Models/Observations/LifecycleObservation.cs`.
+
+**مالکیت lifecycle:** M1 **تنها** مالک سطح lifecycle افزونه است. دنبالهٔ `OnStateChange` میزبان به‌صورت
+زنده خوانده می‌شود و به فازهای INITIALIZATION / STARTUP / RUNTIME / SHUTDOWN نگاشت می‌شود. فاز
+CONNECTION یک عضو `State` نیست و به‌صراحت به **M2** واگذار می‌شود (`connectionPhase=DEFERRED_TO_M2`) تا
+گزارش تکراری در ماژول‌های دیگر نداشته باشیم.
 
 | Check | معنا |
 |---|---|
@@ -92,15 +99,23 @@ NormalizedRecord ─────────────────────
 | `M1.PROCESS_ARCHITECTURE` | ۳۲/۶۴-bit از `Environment.Is64BitProcess` |
 | `M1.CLR_RUNTIME` | نسخهٔ CLR از `Environment.Version` |
 | `M1.CAPABILITY_MATRIX` | Available / Unavailable / Unobservable برای هر قابلیت |
-| `M1.LIFECYCLE` | توالی حالت‌ها: `SetDefaults → Active → Terminated` |
+| `M1.LIFECYCLE` | دنبالهٔ حالت‌های مشاهده‌شده و اعتبارسنجی ترتیب آن‌ها |
+| `M1.LIFECYCLE_PHASES` | فازهای مشاهده‌شده (INITIALIZATION/STARTUP/RUNTIME/SHUTDOWN)؛ CONNECTION به M2 واگذار |
 | `M1.BUILD_MODE` | `UseStubs` و `TargetFramework` |
 | `M1.ENVIRONMENT_CLASS` | Live / Simulation / Unknown |
 | `M1.HOST_VERSION` | همیشه `INCONCLUSIVE` (Unobservable) |
 
+**قرارداد fail-closed (`LifecycleVerifier`):** سطح نامشاهده‌پذیر یا مقدار stub/mock ⇒ `INCONCLUSIVE`؛
+عضو `State` ناشناخته ⇒ `INCONCLUSIVE`؛ گذارِ معکوس (rank نزولی) یا حالت بعد از `Terminated` ⇒ `FAIL`؛
+نبود INITIALIZATION یا STARTUP ⇒ `INCONCLUSIVE`؛ فقط دنبالهٔ مرتبی که به startup رسیده `PASS` است.
+Shutdown اختیاری است (ابزار معمولاً در حین اجرا فعال است) اما اگر مشاهده شود باید آخرین حالت باشد.
+
 **مرجع API:** `NinjaTrader.NinjaScript.AddOnBase`, `State`/`OnStateChange`, `System.Environment`.
-**تست‌ها:** `Phase3ModuleTests.M1_*` (۵ تست) + `ProbeTests.M1_*`.
+**تست‌ها:** `LifecycleDiagnosticsTests` (verifier + M1 probe + host adapter)، `Phase3ModuleTests.M1_*`،
+`ProbeTests.M1_*`.
 **محدودیت:** نسخهٔ دقیق Runtime میزبان و نسخهٔ provider با API عمومی **قابل مشاهده نیست**؛ از روی
-نام فایل یا BuildId **حدس زده نمی‌شود**.
+نام فایل یا BuildId **حدس زده نمی‌شود**. فقط گذارهای مشاهده‌شده گزارش می‌شوند؛ حالت ثبت‌نشده
+«مشاهده‌نشده» گزارش می‌شود و هرگز استنتاج نمی‌شود.
 
 ---
 
@@ -536,7 +551,7 @@ aggressor side).
 
 | ماژول | فایل تست | تعداد تست | نتیجه |
 |---|---|---|---|
-| M1 | `Phase3ModuleTests.M1_*` (4) + `ProbeTests.M1_*` (4) | 8 | PASS |
+| M1 | `Phase3ModuleTests.M1_*` (4) + `ProbeTests.M1_*` (4) + `LifecycleDiagnosticsTests` (25) | 33 | PASS |
 | M2 | `Phase3ModuleTests.M2_*` (3) + `ProbeTests.M2_*` (3) | 6 | PASS |
 | M3 | `Phase3ModuleTests.M3_*` | 5 | PASS |
 | M4 | `Phase3ModuleTests.M4_*` (4) + `InstrumentIdentityTests` (18) + `HostInstrumentIdentityTests` (10) | 32 | PASS |

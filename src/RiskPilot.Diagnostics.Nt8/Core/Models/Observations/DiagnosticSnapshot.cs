@@ -106,6 +106,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
     {
         public RuntimeObservation Runtime { get; set; }
 
+        /// <summary>
+        /// AddOn/host lifecycle observation for M1. It carries the raw <c>State</c> transitions the
+        /// host reported; the host-free <see cref="Core.Identity.LifecycleVerifier"/> classifies
+        /// them. A null member means the lifecycle surface could not be observed, which M1 reports
+        /// as INCONCLUSIVE.
+        /// </summary>
+        public LifecycleObservation Lifecycle { get; set; }
+
         public ProviderEvidence Provider { get; set; }
 
         public IList<AccountConnectionAssociation> AccountAssociations { get; set; }

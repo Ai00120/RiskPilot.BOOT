@@ -67,9 +67,6 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         /// <summary>True only when <see cref="HostVersion"/> came from a public API.</summary>
         public bool HostVersionObservable { get; set; }
 
-        /// <summary>AddOn lifecycle states observed in this session, in order.</summary>
-        public IList<string> LifecycleStates { get; set; }
-
         /// <summary>Capability matrix entries (present/absent/unobservable APIs).</summary>
         public IList<RuntimeCapability> Capabilities { get; set; }
 
@@ -78,7 +75,6 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
             ClrVersion = string.Empty;
             OperatingSystem = string.Empty;
             HostVersion = string.Empty;
-            LifecycleStates = new List<string>();
             Capabilities = new List<RuntimeCapability>();
         }
     }

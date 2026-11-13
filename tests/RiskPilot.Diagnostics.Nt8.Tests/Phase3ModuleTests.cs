@@ -83,15 +83,15 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         [Fact]
         public void M1_Lifecycle_RecordsObservedStates()
         {
-            var runtime = new RuntimeObservation();
-            runtime.LifecycleStates.Add("SetDefaults");
-            runtime.LifecycleStates.Add("Active");
-            var provider = new FakeDataProvider { Snapshot = new DiagnosticSnapshot { Runtime = runtime } };
+            var lifecycle = new LifecycleObservation { LifecycleSurfaceObservable = true };
+            lifecycle.ObservedStates.Add("SetDefaults");
+            lifecycle.ObservedStates.Add("Active");
+            var provider = new FakeDataProvider { Snapshot = new DiagnosticSnapshot { Lifecycle = lifecycle } };
 
             var results = new M1EnvironmentProbe().Evaluate(Context(provider));
-            var lifecycle = Find(results, "M1.LIFECYCLE");
-            Assert.Equal(DiagnosticStatus.PASS, lifecycle.Status);
-            Assert.Contains("SetDefaults -> Active", lifecycle.Observation);
+            var check = Find(results, "M1.LIFECYCLE");
+            Assert.Equal(DiagnosticStatus.PASS, check.Status);
+            Assert.Contains("SetDefaults -> Active", check.Observation);
         }
 
         // ---------------- M2 ----------------
