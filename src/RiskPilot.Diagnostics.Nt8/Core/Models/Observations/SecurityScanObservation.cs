@@ -44,6 +44,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         /// <summary>True when the read-only source was readable and at least one file was scanned.</summary>
         public bool SourceAvailable { get; set; }
 
+        /// <summary>
+        /// True only when the whole permitted source set was covered: the source reported itself
+        /// complete and every file in the set was read. A partial or incomplete scan is never
+        /// reported as a clean PASS.
+        /// </summary>
+        public bool SourceComplete { get; set; }
+
         /// <summary>Why the scan could not run, when <see cref="Executed"/> is false.</summary>
         public string UnavailableReason { get; set; }
 

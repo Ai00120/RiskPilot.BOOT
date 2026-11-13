@@ -17,9 +17,16 @@ namespace RiskPilot.Diagnostics.Nt8.Tests.Fakes
         public FakeSecurityScanSource()
         {
             IsAvailable = true;
+            IsComplete = true;
         }
 
         public bool IsAvailable { get; set; }
+
+        /// <summary>
+        /// Whether the in-memory set is fully covered. Defaults to true; a test sets it false to
+        /// simulate a partially enumerated / skipped-file source set.
+        /// </summary>
+        public bool IsComplete { get; set; }
 
         public FakeSecurityScanSource Add(string relativePath, string text)
         {

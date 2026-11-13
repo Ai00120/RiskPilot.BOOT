@@ -328,6 +328,8 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
             public bool IsAvailable { get { return true; } }
 
+            public bool IsComplete { get { return true; } }
+
             public IReadOnlyList<string> GetSourceFiles() { return _inner.GetSourceFiles(); }
 
             public string ReadFile(string relativePath)

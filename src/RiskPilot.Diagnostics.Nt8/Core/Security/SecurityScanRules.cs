@@ -57,6 +57,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Security
         public const string TradingDisabledMissing = "SECURITY_SCAN_TRADING_DISABLED_MISSING";
         public const string DefinitionMissing = "SECURITY_SCAN_IDENTITY_DEFINITION_MISSING";
         public const string DefinitionLiteralMissing = "SECURITY_SCAN_IDENTITY_DEFINITION_LITERAL_MISSING";
+        public const string Incomplete = "SECURITY_SCAN_INCOMPLETE";
         public const string Exception = "SECURITY_SCAN_EXCEPTION";
     }
 
