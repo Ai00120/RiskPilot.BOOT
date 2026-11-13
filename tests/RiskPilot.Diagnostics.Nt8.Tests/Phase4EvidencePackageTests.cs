@@ -68,6 +68,24 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             };
         }
 
+        private static StrategyRiskGateObservation BuildObservedStrategyRiskGate()
+        {
+            var observation = new StrategyRiskGateObservation();
+            observation.Strategies.Add(new StrategyEvaluationObservation
+            {
+                StrategyId = "STRAT_SCALPING_CANDIDATE_01",
+                RecordObserved = true,
+                AvailableObservable = true,
+                Available = true,
+                CandidateCountsObservable = true,
+                CandidateCount = 4,
+                ValidCandidateCount = 1,
+                InvalidCandidateCount = 3
+            });
+            observation.CandidateRejectionReasons["ALL_CANDIDATES_INVALID"] = 1;
+            return observation;
+        }
+
         private static EvidenceDataset FullDataset()
         {
             var dataset = new EvidenceDataset
@@ -179,10 +197,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     TradeDeltaCompleteness = "COMPLETE",
                     SourceTimeBasis = SourceTimeBasis.ServerTimeUnverified
                 },
-                StrategyRiskGate = new StrategyRiskGateObservation
-                {
-                    StrategySurfaceObservable = true
-                },
+                StrategyRiskGate = BuildObservedStrategyRiskGate(),
                 Safety = new SafetyObservation
                 {
                     TradingDisabledRuntimeEvidence = true,

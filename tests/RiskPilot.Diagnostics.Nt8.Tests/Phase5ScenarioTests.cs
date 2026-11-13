@@ -418,11 +418,14 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         [Fact]
         public void Scenario_MissingStrategyCapability_IsReportedNotAssumedActive()
         {
-            var observation = new StrategyRiskGateObservation { StrategySurfaceObservable = true };
+            var observation = new StrategyRiskGateObservation();
             observation.Strategies.Add(new StrategyEvaluationObservation
             {
                 StrategyId = "STRAT_ORDER_FLOW_INTRADAY_01",
+                RecordObserved = true,
+                AvailableObservable = true,
                 Available = false,
+                MissingCapabilityObservable = true,
                 MissingCapability = true,
                 UnavailableReason = "ORDERFLOW_UNAVAILABLE"
             });

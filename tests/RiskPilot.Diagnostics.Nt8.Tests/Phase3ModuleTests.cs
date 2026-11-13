@@ -511,74 +511,237 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         // ---------------- M7 ----------------
 
         [Fact]
-        public void M7_ReportsAllFiveRegisteredStrategies()
+        public void M7_NoObservation_AllChecksInconclusiveWithReasons()
         {
-            var observation = new StrategyRiskGateObservation { StrategySurfaceObservable = true };
-            observation.Strategies.Add(new StrategyEvaluationObservation
-            {
-                StrategyId = "STRAT_SCALPING_CANDIDATE_01",
-                Available = true,
-                CandidateCount = 10,
-                ValidCandidateCount = 2
-            });
-
-            var provider = new FakeDataProvider
-            {
-                Snapshot = new DiagnosticSnapshot { StrategyRiskGate = observation }
-            };
+            var provider = new FakeDataProvider { Snapshot = new DiagnosticSnapshot() };
 
             var results = new M7StrategyRiskGateProbe().Evaluate(Context(provider));
+
+            var surface = Find(results, "M7.STRATEGY_SURFACE");
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, surface.Status);
+            Assert.Contains("STRATEGY_SURFACE_UNOBSERVABLE", surface.ReasonCodes);
+
             var evaluation = Find(results, "M7.STRATEGY_EVALUATION");
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, evaluation.Status);
+            Assert.Contains("STRATEGY_EVALUATION_UNOBSERVABLE", evaluation.ReasonCodes);
             Assert.Contains("REGISTERED=5", evaluation.ReasonCodes);
-            Assert.Equal(5, M7StrategyRiskGateProbe.RegisteredStrategies.Length);
+
+            Assert.Contains("CANDIDATE_REJECTION_UNOBSERVABLE", Find(results, "M7.CANDIDATE_REJECTION").ReasonCodes);
+            Assert.Contains("STAGE3_SIZING_UNOBSERVABLE", Find(results, "M7.STAGE3_SIZING").ReasonCodes);
+            Assert.Contains("RISK_GATE_UNOBSERVABLE", Find(results, "M7.RISK_GATE").ReasonCodes);
+            Assert.Contains("CORRELATION_UNOBSERVABLE", Find(results, "M7.STAGE_CORRELATION").ReasonCodes);
+            Assert.Contains("REASON_ATTRIBUTION_UNOBSERVABLE", Find(results, "M7.REASON_ATTRIBUTION").ReasonCodes);
+
+            // A null snapshot must never make the surface observable.
+            Assert.False(new StrategyRiskGateObservation().StrategySurfaceObservable);
         }
 
         [Fact]
-        public void M7_UnavailableStrategy_IsReportedNotAssumedActive()
+        public void M7_ReportsRegisteredStrategies_FromObservedRecordsOnly()
         {
-            var observation = new StrategyRiskGateObservation { StrategySurfaceObservable = true };
+            var observation = new StrategyRiskGateObservation();
+            observation.Strategies.Add(new StrategyEvaluationObservation
+            {
+                StrategyId = "STRAT_SCALPING_CANDIDATE_01",
+                RecordObserved = true,
+                AvailableObservable = true,
+                Available = true,
+                CandidateCountsObservable = true,
+                CandidateCount = 10,
+                ValidCandidateCount = 2,
+                InvalidCandidateCount = 8
+            });
+
+            var provider = new FakeDataProvider { Snapshot = new DiagnosticSnapshot { StrategyRiskGate = observation } };
+            var results = new M7StrategyRiskGateProbe().Evaluate(Context(provider));
+
+            Assert.True(observation.StrategySurfaceObservable);
+
+            var surface = Find(results, "M7.STRATEGY_SURFACE");
+            Assert.Equal(DiagnosticStatus.PASS, surface.Status);
+            Assert.Contains("STRATEGIES=1", surface.ReasonCodes);
+
+            var evaluation = Find(results, "M7.STRATEGY_EVALUATION");
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, evaluation.Status);
+            Assert.Contains("REGISTERED=5", evaluation.ReasonCodes);
+            Assert.Contains("AVAILABLE=1", evaluation.ReasonCodes);
+            Assert.Contains("UNAVAILABLE=0", evaluation.ReasonCodes);
+            Assert.Contains("NOT_OBSERVED=4", evaluation.ReasonCodes);
+            Assert.Contains(evaluation.Evidence, e => e.ObservedValue.Contains("STRAT_SCALPING_CANDIDATE_01") && e.ObservedValue.Contains("candidates=10"));
+        }
+
+        [Fact]
+        public void M7_UnavailableStrategy_IsReportedNotAssumedInactive()
+        {
+            var observation = new StrategyRiskGateObservation();
             observation.Strategies.Add(new StrategyEvaluationObservation
             {
                 StrategyId = "STRAT_ORDER_FLOW_INTRADAY_01",
+                RecordObserved = true,
+                AvailableObservable = true,
                 Available = false,
-                UnavailableReason = "RESET_OPERATION_RECEIVED"
+                MissingCapabilityObservable = true,
+                MissingCapability = true,
+                UnavailableReason = "ORDERFLOW_UNAVAILABLE"
             });
 
-            var provider = new FakeDataProvider
-            {
-                Snapshot = new DiagnosticSnapshot { StrategyRiskGate = observation }
-            };
+            var provider = new FakeDataProvider { Snapshot = new DiagnosticSnapshot { StrategyRiskGate = observation } };
+            var results = new M7StrategyRiskGateProbe().Evaluate(Context(provider));
 
+            var evaluation = Find(results, "M7.STRATEGY_EVALUATION");
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, evaluation.Status);
+            Assert.Contains("UNAVAILABLE=1", evaluation.ReasonCodes);
+            Assert.Contains("MISSING_CAPABILITY=1", evaluation.ReasonCodes);
+            Assert.Contains("NOT_OBSERVED=4", evaluation.ReasonCodes);
+            Assert.Contains(evaluation.Evidence, e => e.ObservedValue.Contains("STRAT_ORDER_FLOW_INTRADAY_01") && e.ObservedValue.Contains("ORDERFLOW_UNAVAILABLE"));
+        }
+
+        [Fact]
+        public void M7_StrategyPresentButAvailabilityUnreported_IsNotCounted()
+        {
+            // The strategy was observed but the source did not report availability. It must be
+            // reported UNOBSERVABLE, never counted as available or unavailable.
+            var observation = new StrategyRiskGateObservation();
+            observation.Strategies.Add(new StrategyEvaluationObservation
+            {
+                StrategyId = "STRAT_TREND_PULLBACK_01",
+                RecordObserved = true,
+                ActivityObservable = true,
+                Activity = StrategyActivity.Active
+            });
+
+            var provider = new FakeDataProvider { Snapshot = new DiagnosticSnapshot { StrategyRiskGate = observation } };
             var results = new M7StrategyRiskGateProbe().Evaluate(Context(provider));
             var evaluation = Find(results, "M7.STRATEGY_EVALUATION");
-            Assert.Contains("UNAVAILABLE=1", evaluation.ReasonCodes);
+
+            Assert.Contains("AVAILABLE=0", evaluation.ReasonCodes);
+            Assert.Contains("UNAVAILABLE=0", evaluation.ReasonCodes);
+            Assert.Contains(evaluation.Evidence, e => e.ObservedValue.Contains("available=UNOBSERVABLE"));
+        }
+
+        [Fact]
+        public void M7_CandidateRejection_ReportsDistributionNotListed()
+        {
+            var observation = new StrategyRiskGateObservation();
+            observation.CandidateRejectionReasons["ALL_CANDIDATES_INVALID"] = 3;
+            observation.CandidateRejectionReasons["INSTRUMENT_IDENTITY_MISMATCH"] = 1;
+
+            var provider = new FakeDataProvider { Snapshot = new DiagnosticSnapshot { StrategyRiskGate = observation } };
+            var results = new M7StrategyRiskGateProbe().Evaluate(Context(provider));
+
+            var rejection = Find(results, "M7.CANDIDATE_REJECTION");
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, rejection.Status);
+            Assert.Contains("CANDIDATE_REJECTIONS=4", rejection.ReasonCodes);
+            Assert.Contains("ALL_CANDIDATES_INVALID=3", rejection.ReasonCodes);
+            Assert.Contains(rejection.Evidence, e => e.ObservedValue.Contains("INSTRUMENT_IDENTITY_MISMATCH=1"));
+        }
+
+        [Fact]
+        public void M7_Stage3_SizingDistribution_DerivesZeroQuantity()
+        {
+            var observation = new StrategyRiskGateObservation();
+            observation.Stage3ReasonCodes["SIZED_SUCCESSFULLY"] = 2;
+            observation.Stage3ReasonCodes["MISSING_INSTRUMENT_SPECIFICATION"] = 5;
+
+            var provider = new FakeDataProvider { Snapshot = new DiagnosticSnapshot { StrategyRiskGate = observation } };
+            var results = new M7StrategyRiskGateProbe().Evaluate(Context(provider));
+
+            var stage3 = Find(results, "M7.STAGE3_SIZING");
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, stage3.Status);
+            Assert.Contains("STAGE3_OUTCOMES=7", stage3.ReasonCodes);
+            Assert.Contains("STAGE3_ZERO_QUANTITY=5", stage3.ReasonCodes);
+        }
+
+        [Fact]
+        public void M7_RiskGate_VetoDistribution_DerivesVetoes()
+        {
+            var observation = new StrategyRiskGateObservation();
+            observation.RiskGateReasonCodes["RISK_APPROVED"] = 1;
+            observation.RiskGateReasonCodes["MAX_DAILY_LOSS_EXCEEDED"] = 2;
+
+            var provider = new FakeDataProvider { Snapshot = new DiagnosticSnapshot { StrategyRiskGate = observation } };
+            var results = new M7StrategyRiskGateProbe().Evaluate(Context(provider));
+
+            var gate = Find(results, "M7.RISK_GATE");
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, gate.Status);
+            Assert.Contains("RISK_GATE_EVALUATIONS=3", gate.ReasonCodes);
+            Assert.Contains("VETOES=2", gate.ReasonCodes);
+            Assert.Contains(gate.Evidence, e => e.ObservedValue.Contains("MAX_DAILY_LOSS_EXCEEDED=2"));
+            Assert.DoesNotContain(gate.Evidence, e => e.ObservedValue.Contains("RISK_APPROVED"));
+        }
+
+        [Fact]
+        public void M7_Correlation_Unobservable_IsInconclusive()
+        {
+            var observation = new StrategyRiskGateObservation();
+            observation.CandidateRejectionReasons["ALL_CANDIDATES_INVALID"] = 1;
+
+            var provider = new FakeDataProvider { Snapshot = new DiagnosticSnapshot { StrategyRiskGate = observation } };
+            var results = new M7StrategyRiskGateProbe().Evaluate(Context(provider));
+
+            var correlation = Find(results, "M7.STAGE_CORRELATION");
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, correlation.Status);
+            Assert.Contains("CORRELATION_UNOBSERVABLE", correlation.ReasonCodes);
         }
 
         [Fact]
         public void M7_StageCorrelation_IncompleteIsInconclusive()
         {
-            var observation = new StrategyRiskGateObservation
+            var observation = new StrategyRiskGateObservation();
+            observation.Correlation = new StageCorrelationObservation
             {
-                StrategySurfaceObservable = true,
-                Correlation = new StageCorrelationObservation
-                {
-                    DecisionId = "d1",
-                    ProposalId = string.Empty,
-                    RiskEvaluationId = "r1",
-                    CorrelationComplete = false,
-                    CorrelationGapReason = "PROPOSAL_ID_MISSING"
-                }
+                DecisionId = "d1",
+                ProposalId = string.Empty,
+                RiskEvaluationId = "r1",
+                CorrelationObservable = true,
+                CorrelationComplete = false,
+                CorrelationGapReason = "PROPOSAL_ID_MISSING"
             };
 
-            var provider = new FakeDataProvider
-            {
-                Snapshot = new DiagnosticSnapshot { StrategyRiskGate = observation }
-            };
-
+            var provider = new FakeDataProvider { Snapshot = new DiagnosticSnapshot { StrategyRiskGate = observation } };
             var results = new M7StrategyRiskGateProbe().Evaluate(Context(provider));
+
             var correlation = Find(results, "M7.STAGE_CORRELATION");
             Assert.Equal(DiagnosticStatus.INCONCLUSIVE, correlation.Status);
+            Assert.Contains("CORRELATION_INCOMPLETE", correlation.ReasonCodes);
             Assert.Contains("PROPOSAL_ID_MISSING", correlation.ReasonCodes);
+        }
+
+        [Fact]
+        public void M7_StageCorrelation_Complete_IsPass()
+        {
+            var observation = new StrategyRiskGateObservation();
+            observation.Correlation = new StageCorrelationObservation
+            {
+                DecisionId = "d1",
+                ProposalId = "p1",
+                RiskEvaluationId = "r1",
+                CorrelationObservable = true,
+                CorrelationComplete = true
+            };
+
+            var provider = new FakeDataProvider { Snapshot = new DiagnosticSnapshot { StrategyRiskGate = observation } };
+            var results = new M7StrategyRiskGateProbe().Evaluate(Context(provider));
+
+            var correlation = Find(results, "M7.STAGE_CORRELATION");
+            Assert.Equal(DiagnosticStatus.PASS, correlation.Status);
+            Assert.Contains("CORRELATION_COMPLETE", correlation.ReasonCodes);
+        }
+
+        [Fact]
+        public void M7_UnattributedReasonCode_IsReportedNotDropped()
+        {
+            var observation = new StrategyRiskGateObservation();
+            observation.UnattributedReasonCodes["SOME_FUTURE_CODE"] = 2;
+
+            var provider = new FakeDataProvider { Snapshot = new DiagnosticSnapshot { StrategyRiskGate = observation } };
+            var results = new M7StrategyRiskGateProbe().Evaluate(Context(provider));
+
+            var attribution = Find(results, "M7.REASON_ATTRIBUTION");
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, attribution.Status);
+            Assert.Contains("UNATTRIBUTED=2", attribution.ReasonCodes);
+            Assert.Contains("REASON_ATTRIBUTION_UNATTRIBUTED", attribution.ReasonCodes);
+            Assert.Contains(attribution.Evidence, e => e.ObservedValue.Contains("SOME_FUTURE_CODE=2"));
         }
 
         // ---------------- M8 ----------------

@@ -686,19 +686,47 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             {
                 writer.BeginObject("riskGate");
                 writer.WriteProperty("strategySurfaceObservable", sr.StrategySurfaceObservable);
-                writer.WriteProperty("allCandidatesInvalidCount", sr.AllCandidatesInvalidCount);
-                writer.WriteProperty("stage3ZeroQuantityCount", sr.Stage3ZeroQuantityCount);
-                writer.WriteProperty("riskGateVetoCount", sr.RiskGateVetoCount);
+                writer.WriteProperty("observedRecordCount", sr.ObservedRecordCount);
+                writer.WriteProperty("strategyObservationCount", sr.StrategyObservationCount());
+                writer.WriteProperty("candidateRejectionsObserved", sr.CandidateRejectionsObserved());
+                writer.WriteProperty("allCandidatesInvalidCount", sr.AllCandidatesInvalidCount());
+                writer.WriteProperty("stage3OutcomesObserved", sr.Stage3OutcomesObserved());
+                writer.WriteProperty("stage3ZeroQuantityCount", sr.Stage3ZeroQuantityCount());
+                writer.WriteProperty("stage4EvaluationsObserved", sr.Stage4EvaluationsObserved());
+                writer.WriteProperty("riskGateVetoCount", sr.RiskGateVetoCount());
+                writer.WriteProperty("unattributedReasonCodeCount", sr.UnattributedCount());
+
+                WriteDistribution(writer, "candidateRejectionReasons", sr.CandidateRejectionReasons);
+                WriteDistribution(writer, "stage3ReasonCodes", sr.Stage3ReasonCodes);
+                WriteDistribution(writer, "riskGateVetoReasons", sr.RiskGateVetoReasons());
+                WriteDistribution(writer, "unattributedReasonCodes", sr.UnattributedReasonCodes);
+
+                var stage = sr.Correlation;
+                writer.BeginObject("correlation");
+                writer.WriteProperty("correlationObservable", stage != null && stage.CorrelationObservable);
+                writer.WriteProperty("correlationComplete", stage != null && stage.CorrelationComplete);
+                writer.WriteProperty("decisionId", SecretRedactor.Redact(stage != null ? stage.DecisionId : string.Empty));
+                writer.WriteProperty("proposalId", SecretRedactor.Redact(stage != null ? stage.ProposalId : string.Empty));
+                writer.WriteProperty("riskEvaluationId", SecretRedactor.Redact(stage != null ? stage.RiskEvaluationId : string.Empty));
+                writer.WriteProperty("correlationGapReason", SecretRedactor.Redact(stage != null ? stage.CorrelationGapReason : string.Empty));
+                writer.EndObject();
+
                 writer.BeginArray("strategies");
                 foreach (var strategy in sr.Strategies)
                 {
                     writer.BeginObject();
                     writer.WriteProperty("strategyId", SecretRedactor.Redact(strategy.StrategyId));
-                    writer.WriteProperty("available", strategy.Available);
-                    writer.WriteProperty("missingCapability", strategy.MissingCapability);
-                    writer.WriteProperty("candidateCount", strategy.CandidateCount);
-                    writer.WriteProperty("validCandidateCount", strategy.ValidCandidateCount);
-                    writer.WriteProperty("invalidCandidateCount", strategy.InvalidCandidateCount);
+                    writer.WriteProperty("observed", strategy.Observed);
+                    writer.WriteProperty("activityObservable", strategy.ActivityObservable);
+                    writer.WriteProperty("activity", strategy.ActivityObservable ? strategy.Activity.ToWire() : "UNOBSERVABLE");
+                    writer.WriteProperty("availableObservable", strategy.AvailableObservable);
+                    writer.WriteProperty("available", strategy.AvailableObservable ? strategy.Available.ToString() : "UNOBSERVABLE");
+                    writer.WriteProperty("missingCapabilityObservable", strategy.MissingCapabilityObservable);
+                    writer.WriteProperty("missingCapability", strategy.MissingCapabilityObservable ? strategy.MissingCapability.ToString() : "UNOBSERVABLE");
+                    writer.WriteProperty("candidateCountsObservable", strategy.CandidateCountsObservable);
+                    writer.WriteProperty("candidateCount", strategy.CandidateCountsObservable ? strategy.CandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture) : "UNOBSERVABLE");
+                    writer.WriteProperty("validCandidateCount", strategy.CandidateCountsObservable ? strategy.ValidCandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture) : "UNOBSERVABLE");
+                    writer.WriteProperty("invalidCandidateCount", strategy.CandidateCountsObservable ? strategy.InvalidCandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture) : "UNOBSERVABLE");
                     writer.WriteProperty("unavailableReason", SecretRedactor.Redact(strategy.UnavailableReason));
                     writer.EndObject();
                 }
@@ -713,6 +741,20 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
 
             writer.EndObject();
             return writer.ToString();
+        }
+
+        private static void WriteDistribution(JsonWriter writer, string name, IDictionary<string, long> distribution)
+        {
+            writer.BeginObject(name);
+            if (distribution != null)
+            {
+                foreach (var pair in distribution)
+                {
+                    writer.WriteProperty(pair.Key, pair.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
+            }
+
+            writer.EndObject();
         }
 
         private static string BuildSafetyAuditJson(EvidenceDataset dataset)
