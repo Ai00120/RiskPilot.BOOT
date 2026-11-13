@@ -341,31 +341,47 @@ boolean/count + `instrument#<hash>` کاهش می‌دهد. مقایسهٔ ری�
 
 | Check | معنا |
 |---|---|
+| `M6.TRADE_STREAM` | آیا جریان معاملات اصلاً دیده شد (سطح order-flow قابل‌دسترس بود) |
 | `M6.DIRECTION_SOURCE` | منبع جهت (Provider-supplied vs Quote-derived) |
 | `M6.UNKNOWN_DIRECTION` | Unknown و علتش (INSIDE_SPREAD / NO_BBO / ...) |
-| `M6.TRADEDELTA_COMPLETENESS` | کامل‌بودن TradeDelta |
-| `M6.RESET_HANDLING` | مدیریت Reset |
-| `M6.SEQUENCE_CONTINUITY` | پیوستگی توالی |
+| `M6.TRADEDELTA_COMPLETENESS` | کامل‌بودن TradeDelta (تنها با شاهد جریان تأیید می‌شود) |
+| `M6.RESET_HANDLING` | مدیریت Reset (Level I و Level II جدا) |
+| `M6.SEQUENCE_CONTINUITY` | پیوستگی توالی (فقط با توالی منبع مشاهده‌شده) |
 | `M6.ORDERFLOW_READINESS_VS_STRATEGY_SKIP` | بررسی اختلاف ظاهری |
 
 **Baseline:** BUY derived = 12,074؛ SELL derived = 12,414؛ Unknown/INSIDE_SPREAD = 96.
 تمام Source Timestampها `SERVER_TIME_UNVERIFIED` بوده‌اند.
+
+**دادهٔ واقعی میزبان (اصلاح‌شده):** سطح عمومی Level I هیچ aggressor side ندارد، بنابراین چاپ‌هایی
+که بدون طبقه‌بندی می‌رسند در `TradeDirectionClassifier` با مقایسهٔ قیمت با بهترین Bid/Ask همان
+رویداد (یا آخرین Quote مشاهده‌شده) مشتق می‌شوند. نتیجه همیشه `DerivedFromQuote` شمرده می‌شود و
+هیچ‌وقت به‌عنوان provider-confirmed گزارش نمی‌شود. یک چاپ که قابل طبقه‌بندی نیست دلیل صریح
+خود را نگه می‌دارد (هرگز حدس زده نمی‌شود)، و یک چاپ که خودش طبقه‌بندی/دلیل دارد دوباره مشتق نمی‌شود.
+
+**Fail-closed:** `M6.TRADE_STREAM`، `M6.SEQUENCE_CONTINUITY` و `M6.TRADEDELTA_COMPLETENESS`
+بدون مشاهدهٔ جریان معاملات هرگز `PASS` نمی‌دهند. NT8 هیچ توالی منبع روی Level I ندارد، پس
+`M6.SEQUENCE_CONTINUITY` بدون توالی مشاهده‌شده `INCONCLUSIVE` می‌ماند (شمارش صفر به‌تنهایی
+چیزی را اثبات نمی‌کند)؛ یک شمارش Gap مثبت مستقل از مشاهده، `FAIL` است. یک `COMPLETE` که با شاهد
+مشاهده‌شده تناقض دارد (بدون جریان، یا با Gap، یا با جهت طبقه‌بندی‌نشده) `FAIL` می‌شود.
 
 **تحلیل اختلاف ظاهری OrderFlow (بدون اعلام تناقض/رفع):** در لاگ، OrderFlow در آخرین Heartbeat
 `Available` گزارش شده، اما استراتژی OrderFlow به علت `RESET_OPERATION_RECEIVED` کنار گذاشته شده
 است. این دو **دو Scope متفاوت** هستند (readiness در سطح دادهٔ بازار vs کنارگذاری در سطح
 تصمیم استراتژی). ابزار آن‌ها را در یک Check با reason code
 `NOT_DECLARED_CONTRADICTION` گزارش می‌کند و **بدون مدرک، تناقض یا رفع اعلام نمی‌کند** →
-`INCONCLUSIVE`.
+`INCONCLUSIVE`. هیچ API عمومی‌ای readiness موتور OrderFlow را افشا نمی‌کند؛ وقتی عرضه نشود
+`UNOBSERVABLE` گزارش می‌شود.
 
 **نکتهٔ مهم:** جهت‌های Quote-derived به‌عنوان **تأییدشده** گزارش نمی‌شوند. وقتی
 `AllDirectionsQuoteDerived=true`، `M6.DIRECTION_SOURCE` = `INCONCLUSIVE` با reason
 `PROVENANCE=ALL_QUOTE_DERIVED` (زیرا aggressor side از Level I قابل استخراج قطعی نیست).
 
 **مرجع API:** `MarketDataEventArgs` (`Price`, `Volume`, Bid/Ask), رویدادهای `MarketData`.
-**تست‌ها:** `Phase3ModuleTests.M6_*` (۴ تست) + `M6Consumer_*`.
+**تست‌ها:** `M6TradeDeltaTests` (کلاسیفایر + مصرف‌کننده + assembler + probe + capture میزبان +
+انتگراسیون runtime) و `Phase3ModuleTests.M6_*` / `Phase5ScenarioTests` (سناریوهای M6).
 **محدودیت:** aggressor side از API عمومی Level I **قابل استخراج قطعی نیست**؛ بنابراین Unknown
-یک حالت معتبر است، نه خطا.
+یک حالت معتبر است، نه خطا. عرضهٔ TradeDelta (شمارش خرید/فروش تجمعی) و OrderFlow readiness
+داخل runtime معامله‌گر است و از بیرون قابل مشاهده نیست.
 
 ---
 

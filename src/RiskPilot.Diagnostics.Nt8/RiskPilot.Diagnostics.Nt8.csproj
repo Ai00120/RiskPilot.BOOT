@@ -127,6 +127,7 @@
     <Compile Include="Core\Engine\FindingFactory.cs" />
     <Compile Include="Core\Engine\AttestationReasonCodes.cs" />
     <Compile Include="Core\Engine\SnapshotAssembler.cs" />
+    <Compile Include="Core\Engine\TradeDirectionClassifier.cs" />
     <Compile Include="Core\Engine\EnrichedDataProvider.cs" />
     <Compile Include="Core\Engine\Probes\M1EnvironmentProbe.cs" />
     <Compile Include="Core\Engine\Probes\M2ConnectionProbe.cs" />

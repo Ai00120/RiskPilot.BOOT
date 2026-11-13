@@ -39,6 +39,43 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Session
             return !string.IsNullOrEmpty(key) && _values.TryGetValue(key, out var value) ? value : 0;
         }
 
+        /// <summary>
+        /// Lowers the named counter to <paramref name="value"/> when the current value is higher
+        /// (or absent). Used for "weakest observed" evidence, such as the most conservative
+        /// source-time basis seen on a stream: the value only ever moves toward the weakest
+        /// observation and is never fabricated. A non-positive key or value is ignored.
+        /// </summary>
+        public void ObserveMin(string key, long value)
+        {
+            if (string.IsNullOrEmpty(key) || value <= 0)
+            {
+                return;
+            }
+
+            while (true)
+            {
+                if (!_values.TryGetValue(key, out var current))
+                {
+                    if (_values.TryAdd(key, value))
+                    {
+                        return;
+                    }
+
+                    continue;
+                }
+
+                if (current <= value)
+                {
+                    return;
+                }
+
+                if (_values.TryUpdate(key, value, current))
+                {
+                    return;
+                }
+            }
+        }
+
         /// <summary>Returns an immutable snapshot of every counter.</summary>
         public IReadOnlyDictionary<string, long> Snapshot()
         {
@@ -111,8 +148,32 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Session
         public const string TradeDirectionBboIncomplete = "td.unknown.bboIncomplete";
         public const string TradeDirectionBboInvalid = "td.unknown.bboInvalid";
         public const string TradeDirectionProviderUnknown = "td.unknown.providerReported";
+        public const string TradeDirectionUnclassified = "td.unknown.unclassified";
         public const string TradeDirectionProviderSupplied = "td.providerSupplied";
-        public const string TradeDeltaResetObserved = "td.reset.observed";
+
+        /// <summary>Trade prints observed on the trade stream (the M6 order-flow surface).</summary>
+        public const string TradeStreamObserved = "td.trades.observed";
+
+        /// <summary>
+        /// Trade prints that carried a source-reported sequence number, so per-stream continuity
+        /// was actually measurable. Without one, a zero gap count proves nothing.
+        /// </summary>
+        public const string TradeDeltaSequenceObserved = "td.sequence.observed";
+
+        /// <summary>
+        /// Weakest (most conservative) source-time basis observed across the trade stream, encoded
+        /// as the numeric <c>SourceTimeBasis</c> value. Absent when no trade record was observed.
+        /// </summary>
+        public const string TradeDeltaSourceTimeBasisWorst = "td.sourceTimeBasis.worst";
+
+        /// <summary>Stream resets observed on the Level I market-data feed.</summary>
+        public const string TradeDeltaResetMarketData = "td.reset.marketData";
+
+        /// <summary>
+        /// Stream resets observed on the Level II depth feed. A depth reset is what invalidates the
+        /// derived order-flow/DOM mirror, so it is tracked separately from a Level I reset.
+        /// </summary>
+        public const string TradeDeltaResetDepth = "td.reset.depth";
 
         public const string StrategyCandidate = "strategy.candidate";
         public const string StrategyValidCandidate = "strategy.candidate.valid";

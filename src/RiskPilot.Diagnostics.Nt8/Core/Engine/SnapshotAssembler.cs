@@ -175,6 +175,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
             observation.UnknownBboIncompleteCount += counters.Get(RuntimeCounterKeys.TradeDirectionBboIncomplete);
             observation.UnknownBboInvalidCount += counters.Get(RuntimeCounterKeys.TradeDirectionBboInvalid);
             observation.UnknownProviderReportedCount += counters.Get(RuntimeCounterKeys.TradeDirectionProviderUnknown);
+            observation.UnknownUnclassifiedCount += counters.Get(RuntimeCounterKeys.TradeDirectionUnclassified);
 
             var providerSupplied = counters.Get(RuntimeCounterKeys.TradeDirectionProviderSupplied);
             if (providerSupplied > 0)
@@ -185,15 +186,79 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
             var classified = observation.BuyDerivedCount + observation.SellDerivedCount;
             observation.AllDirectionsQuoteDerived = !observation.AnyProviderSuppliedDirection && classified > 0;
 
-            var resets = counters.Get(RuntimeCounterKeys.TradeDeltaResetObserved);
-            if (resets > 0)
+            // The trade stream is observable only once a print was actually seen; until then a zero
+            // unknown/gap count proves nothing.
+            if (counters.Get(RuntimeCounterKeys.TradeStreamObserved) > 0)
+            {
+                observation.TradeStreamObservable = true;
+            }
+
+            if (counters.Get(RuntimeCounterKeys.TradeDeltaSequenceObserved) > 0)
+            {
+                observation.SequenceObservable = true;
+            }
+
+            var resetsMarketData = counters.Get(RuntimeCounterKeys.TradeDeltaResetMarketData);
+            var resetsDepth = counters.Get(RuntimeCounterKeys.TradeDeltaResetDepth);
+            observation.MarketDataResetCount += resetsMarketData;
+            observation.DepthResetCount += resetsDepth;
+            observation.ResetCount += resetsMarketData + resetsDepth;
+            if (observation.ResetCount > 0)
             {
                 observation.ResetObserved = true;
-                observation.ResetCount += resets;
+            }
+
+            // The source-time basis is the weakest basis actually observed on the trade stream,
+            // never assumed. The counter is basis+1 so an explicit Unknown (0) stays distinct from
+            // "no observation"; with no observed trade record the basis is left UNKNOWN.
+            var basisWorst = counters.Get(RuntimeCounterKeys.TradeDeltaSourceTimeBasisWorst);
+            if (basisWorst > 0)
+            {
+                observation.SourceTimeBasis = (SourceTimeBasis)(basisWorst - 1);
             }
 
             // Per-domain ingest integrity for the order-flow trade stream.
             observation.SequenceGapCount += counters.Get(RuntimeCounterKeys.TradeDeltaSequenceGaps);
+
+            DeriveTradeDeltaCompleteness(observation);
+        }
+
+        /// <summary>
+        /// Derives the TradeDelta completeness from the observed trade stream when the host layer
+        /// did not supply one. No public NinjaTrader API exposes TradeDelta completeness, so this is
+        /// derived evidence, never a fabricated PASS: a sequence gap or any unclassified print makes
+        /// it INCOMPLETE, and with no observed print it stays UNOBSERVABLE.
+        /// </summary>
+        private static void DeriveTradeDeltaCompleteness(TradeDeltaObservation observation)
+        {
+            if (!string.IsNullOrEmpty(observation.TradeDeltaCompleteness)
+                && observation.TradeDeltaCompleteness != "UNOBSERVABLE")
+            {
+                // A value supplied by the caller is preserved verbatim; the probe corroborates it.
+                return;
+            }
+
+            if (!observation.TradeStreamObservable)
+            {
+                observation.TradeDeltaCompleteness = "UNOBSERVABLE";
+                return;
+            }
+
+            if (observation.SequenceGapCount > 0)
+            {
+                observation.TradeDeltaCompleteness = "INCOMPLETE";
+                observation.TradeDeltaUnavailableReason = "SEQUENCE_GAP_DETECTED";
+                return;
+            }
+
+            if (observation.UnknownUnclassifiedCount > 0)
+            {
+                observation.TradeDeltaCompleteness = "INCOMPLETE";
+                observation.TradeDeltaUnavailableReason = "UNCLASSIFIED_TRADE_DIRECTION";
+                return;
+            }
+
+            observation.TradeDeltaCompleteness = "COMPLETE";
         }
 
         private static void MergeStrategyRiskGate(DiagnosticSnapshot snapshot, RuntimeCounters counters)

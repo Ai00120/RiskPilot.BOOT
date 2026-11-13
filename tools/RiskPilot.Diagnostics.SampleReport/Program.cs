@@ -142,7 +142,13 @@ namespace RiskPilot.Diagnostics.SampleReport
             Add("M5", "M5.DEPTH", DiagnosticStatus.PASS, "depthObserved=True depthOperations=42", ErrorClass.None, "DEPTH_OBSERVED", "DEPTH_OPERATIONS=42");
             Add("M5", "M5.SNAPSHOT_SYNC", DiagnosticStatus.FAIL, "sync=42 failure=1 outOfBounds=41", ErrorClass.DataUnavailable, "SNAPSHOT_SYNC_FAILURE", "SYNC=42", "SYNC_FAILURE=1", "OUT_OF_BOUNDS_TOTAL=41");
             Add("M5", "M5.FRESHNESS", DiagnosticStatus.INCONCLUSIVE, "lastDomEventAgeSeconds=0.5 stale=False", ErrorClass.None, "FRESH", "LAST_EVENT_AGE_SECONDS=0.5");
+            Add("M6", "M6.TRADE_STREAM", DiagnosticStatus.PASS, "tradeStreamObservable=true buyDerived=118 sellDerived=122 unknown=4", ErrorClass.None, "TRADE_STREAM_OBSERVED");
             Add("M6", "M6.DIRECTION_SOURCE", DiagnosticStatus.INCONCLUSIVE, "provenance=ALL_QUOTE_DERIVED", ErrorClass.None, "PROVENANCE=ALL_QUOTE_DERIVED");
+            Add("M6", "M6.UNKNOWN_DIRECTION", DiagnosticStatus.INCONCLUSIVE, "unknown=4 insideSpread=4", ErrorClass.None, "UNKNOWN_INSIDE_SPREAD=4");
+            Add("M6", "M6.TRADEDELTA_COMPLETENESS", DiagnosticStatus.INCONCLUSIVE, "completeness=INCOMPLETE reason=UNAVAILABLE_TRADE_DELTA", ErrorClass.None, "COMPLETENESS=INCOMPLETE", "UNAVAILABLE_TRADE_DELTA");
+            Add("M6", "M6.RESET_HANDLING", DiagnosticStatus.INCONCLUSIVE, "resetObserved=false resetCount=0", ErrorClass.None, "NO_RESET_OBSERVED", "RESET_COUNT=0");
+            Add("M6", "M6.SEQUENCE_CONTINUITY", DiagnosticStatus.PASS, "sequenceGaps=0 sequenceObservable=true sourceTimeBasis=SERVER_TIME_UNVERIFIED", ErrorClass.None, "SEQUENCE_GAPS=0", "SOURCE_SEQUENCE_OBSERVABLE=true");
+            Add("M6", "M6.ORDERFLOW_READINESS_VS_STRATEGY_SKIP", DiagnosticStatus.INCONCLUSIVE, "orderFlowReadiness=AVAILABLE resetObserved=false", ErrorClass.None, "ORDERFLOW_READINESS=AVAILABLE", "NO_RESET_OBSERVED", "NOT_DECLARED_CONTRADICTION");
             Add("M7", "M7.CANDIDATE_REJECTION", DiagnosticStatus.INCONCLUSIVE, "allCandidatesInvalid=1234", ErrorClass.None, "ALL_CANDIDATES_INVALID=1234");
             Add("M8", "M8.TRADING_DISABLED", DiagnosticStatus.PASS, "tradingDisabledRuntimeEvidence=true", ErrorClass.None, "TRADING_DISABLED_RUNTIME_EVIDENCE_PRESENT");
             Add("M9", "M9.AUDIT_SURFACE", DiagnosticStatus.PASS, "accounts=1 orderSnapshots=2", ErrorClass.None, "AUDIT_SURFACE_OBSERVED");
@@ -154,7 +160,7 @@ namespace RiskPilot.Diagnostics.SampleReport
                 new ModuleStatusView { ModuleId = "M3", Title = "Account & Order Lifecycle (F-05)", Status = DiagnosticStatus.INCONCLUSIVE, CheckCount = 2, Executed = true },
                 new ModuleStatusView { ModuleId = "M4", Title = "Instrument Attestation / D-078", Status = DiagnosticStatus.FAIL, CheckCount = 1, Executed = true },
                 new ModuleStatusView { ModuleId = "M5", Title = "DOM & Market Data", Status = DiagnosticStatus.FAIL, CheckCount = 5, Executed = true },
-                new ModuleStatusView { ModuleId = "M6", Title = "TradeDelta / OrderFlow", Status = DiagnosticStatus.INCONCLUSIVE, CheckCount = 1, Executed = true },
+                new ModuleStatusView { ModuleId = "M6", Title = "TradeDelta / OrderFlow", Status = DiagnosticStatus.INCONCLUSIVE, CheckCount = 7, Executed = true },
                 new ModuleStatusView { ModuleId = "M7", Title = "Strategies / Risk Gate", Status = DiagnosticStatus.INCONCLUSIVE, CheckCount = 1, Executed = true },
                 new ModuleStatusView { ModuleId = "M8", Title = "Safety / Acceptance", Status = DiagnosticStatus.PASS, CheckCount = 1, Executed = true },
                 new ModuleStatusView { ModuleId = "M9", Title = "Post-Trade Audit", Status = DiagnosticStatus.PASS, CheckCount = 1, Executed = true }
@@ -305,10 +311,13 @@ namespace RiskPilot.Diagnostics.SampleReport
                     SellDerivedCount = 122,
                     UnknownCount = 4,
                     UnknownInsideSpreadCount = 4,
+                    TradeStreamObservable = true,
+                    SequenceObservable = true,
                     AllDirectionsQuoteDerived = true,
                     TradeDeltaCompleteness = "INCOMPLETE",
                     TradeDeltaUnavailableReason = "UNAVAILABLE_TRADE_DELTA",
-                    OrderFlowReadiness = "AVAILABLE"
+                    OrderFlowReadiness = "AVAILABLE",
+                    SourceTimeBasis = SourceTimeBasis.ServerTimeUnverified
                 },
                 StrategyRiskGate = new StrategyRiskGateObservation
                 {
