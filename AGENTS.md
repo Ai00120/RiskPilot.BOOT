@@ -213,6 +213,15 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 
 ## M3 active-order counting
 
+- M3 Portfolio access is **target-only**: `Positions`/`Orders` are read from the single account
+  M2 verified (`Nt8HostDataProvider.TryGetVerifiedTargetAccount` → exactly one exact name match
+  AND a passing `AccountIdentityVerifier` verdict), never enumerated across `Account.All`. With
+  no verified target (missing/ambiguous/duplicated/unverified) no Portfolio collection is read
+  at all; `OrderLifecycleObservation.TargetAccountVerified` records that, and `M3.ACCOUNT_SURFACE`
+  / `M3.ACTIVE_ORDERS` report `TARGET_ACCOUNT_NOT_VERIFIED` (INCONCLUSIVE, never a misleading
+  zero). `GetAccounts()` returns the target's single `AccountRecord` (or none). `BuildAccountAssociations`,
+  `BuildAccountIdentityObservation` and `BuildTargetAccountConnectionObservation` still enumerate
+  `Account.All` metadata only (no Portfolio collections) for the M2 verification.
 - `M3.ACTIVE_ORDERS` reports the **exact** number of live orders, derived from each account's real
   `Account.Orders` collection. `Core/Engine/OrderStateClassifier.cs` is the host-free single source
   of truth: `Initialized`/`Submitted`/`Accepted`/`Working`/`PartFilled`/`ChangeSubmitted` are

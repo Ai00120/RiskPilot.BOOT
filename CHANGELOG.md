@@ -80,6 +80,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ### Fixed
 
+- **M3 read Portfolio collections across every visible account.** Root cause:
+  `Nt8HostDataProvider.GetAccounts()` and `BuildOrderLifecycleObservation()` iterated the whole
+  `Account.All` collection and read each account's `Account.Positions` / `Account.Orders`, so a
+  second visible NinjaTrader account's positions or working orders could enter the target
+  account's diagnostic evidence. Portfolio access is now target-only: both paths read the
+  collections from the single account M2 verified
+  (`Nt8HostDataProvider.TryGetVerifiedTargetAccount` — exactly one exact name match AND a passing
+  `AccountIdentityVerifier` verdict), never enumerating `Account.All`. With no verified target
+  (missing, ambiguous, duplicated or unverified) **no** Portfolio collection is read and
+  `GetAccounts()` returns nothing; `OrderLifecycleObservation.TargetAccountVerified` records the
+  state and `M3.ACCOUNT_SURFACE` / `M3.ACTIVE_ORDERS` report `TARGET_ACCOUNT_NOT_VERIFIED`
+  (INCONCLUSIVE, never a misleading zero PASS). Account *metadata* enumeration for the M2
+  identity/association checks is unchanged (it never touched a Portfolio collection).
+
 - **NinjaTrader 8.1.9.0 CS0579 duplicate assembly attributes.** Root cause: NT8 compiles every
   `.cs` file under `bin\Custom` into one `NinjaTrader.Custom.dll` that already has its own
   `bin\Custom\AssemblyInfo.cs`. Copying `Properties/AssemblyInfo.cs` (or VS-generated

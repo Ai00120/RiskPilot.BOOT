@@ -51,6 +51,15 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         /// <summary>Number of accounts observed (identities are hashed, never raw).</summary>
         public int AccountCount { get; set; }
 
+        /// <summary>
+        /// True when M2 established exactly one verified target account for this pass, so the
+        /// order/position collections below were read from that account alone. False means no
+        /// Portfolio collection was read (the target was missing, ambiguous, duplicated or
+        /// unverified), so the module must stay fail-closed rather than reporting a misleading
+        /// zero.
+        /// </summary>
+        public bool TargetAccountVerified { get; set; }
+
         /// <summary>Number of order snapshots observed from <c>Account.Orders</c>.</summary>
         public int OrderSnapshotCount { get; set; }
 

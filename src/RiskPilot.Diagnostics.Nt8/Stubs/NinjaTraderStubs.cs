@@ -356,8 +356,30 @@ namespace NinjaTrader.Cbi
             }
             set { _denomination = value; }
         }
-        public Collection<Position> Positions { get; } = new Collection<Position>();
-        public Collection<Order> Orders { get; } = new Collection<Order>();
+        // Offline-only fault injection; not NinjaTrader API members. They let an offline test
+        // prove a Portfolio collection was never read (the getter throws on access).
+        public bool ThrowOnPositionsRead { get; set; }
+        public bool ThrowOnOrdersRead { get; set; }
+        private readonly Collection<Position> _positions = new Collection<Position>();
+        public Collection<Position> Positions
+        {
+            get
+            {
+                if (ThrowOnPositionsRead)
+                    throw new InvalidOperationException("Offline positions read failure");
+                return _positions;
+            }
+        }
+        private readonly Collection<Order> _orders = new Collection<Order>();
+        public Collection<Order> Orders
+        {
+            get
+            {
+                if (ThrowOnOrdersRead)
+                    throw new InvalidOperationException("Offline orders read failure");
+                return _orders;
+            }
+        }
     }
 }
 
