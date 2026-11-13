@@ -217,7 +217,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     + (string.IsNullOrEmpty(observation.TradeDeltaUnavailableReason) ? string.Empty : " reason=" + observation.TradeDeltaUnavailableReason))
                 .WithSource(FindingFactory.SourcePublicApi)
                 .WithMethod("Read the TradeDelta completeness state; when the runtime did not supply one it is derived from the observed trade stream.")
-                .WithLimitation("An incomplete TradeDelta cannot be used as if it were complete; the tool never repairs it. A COMPLETE is only trusted when the observed trade stream corroborates it.")
+                .WithLimitation("An incomplete TradeDelta cannot be used as if it were complete; the tool never repairs it. A derived COMPLETE means every print observed on the trade stream was classified and no ingest gap was detected; it does not cover loss upstream of the ingest path, which M6.SEQUENCE_CONTINUITY reports separately.")
                 .WithNextAction(completeness == "COMPLETE" && !contradicted
                     ? "None."
                     : "Investigate the reported incompleteness reason before relying on TradeDelta.")

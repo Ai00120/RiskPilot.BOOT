@@ -97,14 +97,20 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Consumers
                 && source == TradeDirectionSource.Unspecified
                 && reason == TradeDirectionUnknownReason.NotApplicable)
             {
-                var bid = TradeDirectionClassifier.ToPositiveOrNull(marketData.Bid) ?? _lastBid;
-                var ask = TradeDirectionClassifier.ToPositiveOrNull(marketData.Ask) ?? _lastAsk;
-
-                TradeDirectionClassifier.Classify(marketData.Last, bid, ask, out var derived, out reason);
-                if (derived.HasValue)
+                // A zero or non-finite print price is not a classifiable print: comparing it to the
+                // BBO would produce a confident but wrong direction (e.g. 0 <= bid => Sell). Leave
+                // it unknown so the invalid print is reported, never silently mis-classified.
+                if (!double.IsNaN(marketData.Last) && !double.IsInfinity(marketData.Last) && marketData.Last > 0.0)
                 {
-                    direction = derived.Value;
-                    source = TradeDirectionSource.DerivedFromQuote;
+                    var bid = TradeDirectionClassifier.ToPositiveOrNull(marketData.Bid) ?? _lastBid;
+                    var ask = TradeDirectionClassifier.ToPositiveOrNull(marketData.Ask) ?? _lastAsk;
+
+                    TradeDirectionClassifier.Classify(marketData.Last, bid, ask, out var derived, out reason);
+                    if (derived.HasValue)
+                    {
+                        direction = derived.Value;
+                        source = TradeDirectionSource.DerivedFromQuote;
+                    }
                 }
             }
 

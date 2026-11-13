@@ -220,6 +220,37 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void Consumer_InvalidPrintPrice_IsNotMisClassifiedFromQuote()
+        {
+            var session = Session();
+            var consumer = new M6TradeDeltaConsumer(session);
+
+            // A print with a zero/non-finite price must never be compared to the BBO: 0 <= bid
+            // would otherwise produce a confident, wrong Sell. It stays unknown (no cause).
+            consumer.Consume(new MarketDataRecord
+            {
+                InstrumentId = "ES 12-26",
+                Kind = MarketDataKind.Trade,
+                Last = 0.0,
+                Bid = 5000.25,
+                Ask = 5000.50
+            });
+            consumer.Consume(new MarketDataRecord
+            {
+                InstrumentId = "ES 12-26",
+                Kind = MarketDataKind.Trade,
+                Last = double.NaN,
+                Bid = 5000.25,
+                Ask = 5000.50
+            });
+
+            Assert.Equal(0, session.Counters.Get(RuntimeCounterKeys.TradeDirectionBuy));
+            Assert.Equal(0, session.Counters.Get(RuntimeCounterKeys.TradeDirectionSell));
+            Assert.Equal(2, session.Counters.Get(RuntimeCounterKeys.TradeDirectionUnknown));
+            Assert.Equal(2, session.Counters.Get(RuntimeCounterKeys.TradeDirectionUnclassified));
+        }
+
+        [Fact]
         public void Consumer_CountsSequenceObservation_AndWeakestSourceTimeBasis()
         {
             var session = Session();
@@ -335,6 +366,20 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
             Assert.DoesNotContain(results, r => r.Status == DiagnosticStatus.PASS);
             Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M6.TRADE_STREAM").Status);
+        }
+
+        [Fact]
+        public void Probe_NullTradeDeltaObservation_ReportsEveryCheckAndNeverPasses()
+        {
+            var provider = new FakeDataProvider { Snapshot = new DiagnosticSnapshot { TradeDelta = null } };
+
+            var results = new M6TradeDeltaProbe().Evaluate(Context(provider));
+
+            Assert.DoesNotContain(results, r => r.Status == DiagnosticStatus.PASS);
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M6.TRADE_STREAM").Status);
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M6.SEQUENCE_CONTINUITY").Status);
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M6.TRADEDELTA_COMPLETENESS").Status);
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M6.DIRECTION_SOURCE").Status);
         }
 
         [Fact]

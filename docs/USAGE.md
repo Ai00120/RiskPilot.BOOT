@@ -51,7 +51,7 @@ package.
 | **M3** | Account & order lifecycle (F-05): order-id classification, correlation, fill continuity. |
 | **M4** | Instrument attestation / D-078 field approval. |
 | **M5** | DOM & market data: snapshot sync, out-of-bounds updates, data integrity. |
-| **M6** | TradeDelta / OrderFlow: direction provenance, completeness, readiness. |
+| **M6** | TradeDelta / OrderFlow: trade-stream observability, direction provenance, completeness, readiness. |
 | **M7** | Strategies / risk gate: strategy surface and candidate rejection. |
 | **M8** | Safety / acceptance: trading-disabled evidence, read-only posture, static safety scan. |
 | **M9** | Post-trade audit: order/execution/position surface and correlation timing. |

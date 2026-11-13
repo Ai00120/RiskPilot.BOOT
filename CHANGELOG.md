@@ -22,7 +22,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   classification or an explicit unknown reason is counted exactly as reported (never
   re-derived); and a print that cannot be classified keeps its precise cause
   (`NO_BBO`/`BBO_INCOMPLETE`/`BBO_INVALID`/`INSIDE_SPREAD`/`PROVIDER_REPORTED`), with an
-  `unclassified` bucket so the unknown total is always fully attributed.
+  `unclassified` bucket so the unknown total is always fully attributed. A zero or non-finite
+  print price is never compared to the BBO (which would make `0 <= bid` a confident, wrong
+  `Sell`); it stays unknown and is reported, never silently mis-classified.
 - **`M6.SEQUENCE_CONTINUITY` could still pass on a stream whose continuity was never measured
   (fail-open).** NT8's public Level I surface exposes no source sequence, so a zero gap count
   proves nothing. The check now requires an *observed* trade stream **and** an observed source
