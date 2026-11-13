@@ -45,6 +45,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
 
         public IReadOnlyList<string> GetMissingApis() { return _inner.GetMissingApis(); }
 
+        public Core.Contract.ISecurityScanSource GetSecurityScanSource() { return _inner.GetSecurityScanSource(); }
+
         public DiagnosticSnapshot GetSnapshot()
         {
             var snapshot = _inner.GetSnapshot();

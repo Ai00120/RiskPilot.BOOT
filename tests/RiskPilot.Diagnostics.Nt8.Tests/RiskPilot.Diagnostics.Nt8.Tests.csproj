@@ -26,6 +26,7 @@
   <ItemGroup>
     <Compile Include="Fakes\FakeClock.cs" />
     <Compile Include="Fakes\FakeDataProvider.cs" />
+    <Compile Include="Fakes\FakeSecurityScanSource.cs" />
     <Compile Include="Fakes\FakeUiDispatcher.cs" />
     <Compile Include="Fakes\FakeDiagnosticRunner.cs" />
     <Compile Include="ThreadSafetyTests.cs" />
@@ -53,6 +54,7 @@
     <Compile Include="M7StrategyTests.cs" />
     <Compile Include="StubHostStateCollection.cs" />
     <Compile Include="Phase3ModuleTests.cs" />
+    <Compile Include="SecurityScanTests.cs" />
     <Compile Include="Phase4RunCoordinatorTests.cs" />
     <Compile Include="Phase4EvidencePackageTests.cs" />
     <Compile Include="Phase4PostTradeAuditTests.cs" />

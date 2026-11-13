@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NinjaTrader.Cbi;
+using RiskPilot.Diagnostics.Nt8.Core.Contract;
 using RiskPilot.Diagnostics.Nt8.Core.Engine;
 using RiskPilot.Diagnostics.Nt8.Core.Identity;
 using RiskPilot.Diagnostics.Nt8.Core.Instruments;
@@ -32,6 +33,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
         private readonly Func<bool> _masterMetadataReady;
         private readonly string _requestedInstrumentId;
+        private readonly ISecurityScanSource _securityScanSource;
 
         public Nt8HostDataProvider(bool masterMetadataReady, string requestedInstrumentId = null)
             : this(() => masterMetadataReady, requestedInstrumentId)
@@ -48,6 +50,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         {
             _masterMetadataReady = masterMetadataReady ?? (() => false);
             _requestedInstrumentId = requestedInstrumentId;
+            _securityScanSource = new FileSystemSecurityScanSource();
         }
 
         /// <summary>
@@ -268,9 +271,16 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             return new List<string>(RequiredApis);
         }
 
-        public IReadOnlyList<string> GetMissingApis()
+        public IReadOnlyList<string> GetMissingApis() { return new List<string>(); }
+
+        /// <summary>
+        /// Read-only production-source view for the M8 security scan. It only reads files; it never
+        /// writes and never touches, mutates or reloads any NinjaTrader configuration. When the
+        /// source cannot be located the scan reports UNOBSERVABLE (fail-closed), never PASS.
+        /// </summary>
+        public ISecurityScanSource GetSecurityScanSource()
         {
-            return new List<string>();
+            return _securityScanSource;
         }
 
         /// <summary>

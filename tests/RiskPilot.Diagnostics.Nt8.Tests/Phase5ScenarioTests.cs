@@ -544,15 +544,14 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         [Fact]
         public void Scenario_TradingDisabled_IsReportedFromRuntimeEvidence()
         {
-            var provider = new FakeDataProvider();
+            var provider = new FakeDataProvider { SecurityScanSource = FakeSecurityScanSource.Clean() };
             using var runtime = Runtime(provider, 64);
-            runtime.StaticSafetyScan = new SafetyScanEvidence { Passed = true, ForbiddenApiHits = 0, FilesScanned = 103 };
             runtime.Start();
 
             var report = runtime.RunDiagnosticPass();
             Assert.Equal(DiagnosticStatus.PASS, Find(report.Results, "M8.TRADING_DISABLED").Status);
             Assert.Equal(DiagnosticStatus.PASS, Find(report.Results, "M8.READ_ONLY_POSTURE").Status);
-            Assert.Equal(DiagnosticStatus.PASS, Find(report.Results, "M8.STATIC_SAFETY_SCAN").Status);
+            Assert.Equal(DiagnosticStatus.PASS, Find(report.Results, "M8.SECURITY_SCAN").Status);
         }
 
         // ---------------- Report integrity + redaction do not corrupt counters ----------------

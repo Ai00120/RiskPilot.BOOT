@@ -40,5 +40,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
         /// read-only and must never throw for a normal "not available" condition.
         /// </summary>
         DiagnosticSnapshot GetSnapshot();
+
+        /// <summary>
+        /// Read-only source the M8 security scan reads production source through. It resolves the
+        /// source file list and text but never writes and never touches host configuration. A
+        /// provider that cannot supply one returns null (or an unavailable source), which M8
+        /// reports as INCONCLUSIVE, never PASS.
+        /// </summary>
+        Core.Contract.ISecurityScanSource GetSecurityScanSource();
     }
 }

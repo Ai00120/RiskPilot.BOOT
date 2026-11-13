@@ -55,6 +55,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Session
         /// </summary>
         public StrategyEvidenceAccumulator StrategyEvidence { get; private set; }
 
+        /// <summary>
+        /// Session-scoped result of the read-only security scan M8 owns and executes. It is set
+        /// by M8 during a pass and read back by the evidence export, so the live probe and the
+        /// exported package report the same single scan result without a duplicate execution. It
+        /// is null until M8 has actually run the scan.
+        /// </summary>
+        public Models.Observations.SecurityScanObservation SecurityScan { get; set; }
+
         /// <summary>Trust basis asserted for source timestamps in this session.</summary>
         public SourceTimeBasis SourceTimeBasis { get; set; }
 

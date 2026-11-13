@@ -53,14 +53,12 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         /// </summary>
         public bool ReadOnlyPostureObserved { get; set; }
 
-        /// <summary>Number of forbidden order/account APIs found by the static scan, when supplied.</summary>
-        public int StaticScanForbiddenApiCount { get; set; }
-
-        /// <summary>Number of production source files covered by the static scan, when supplied.</summary>
-        public int StaticScanFileCount { get; set; }
-
-        /// <summary>True when the static scan was executed and passed.</summary>
-        public bool StaticScanPassed { get; set; }
+        /// <summary>
+        /// Raw result of the read-only security scan owned and executed by M8. It is the single
+        /// source of truth for the scan checks; a null value means the scan did not run, which M8
+        /// reports as INCONCLUSIVE rather than PASS.
+        /// </summary>
+        public SecurityScanObservation SecurityScan { get; set; }
 
         /// <summary>True when the report artifacts were confirmed secret-free.</summary>
         public bool ReportSecretFree { get; set; }

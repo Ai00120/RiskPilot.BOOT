@@ -82,6 +82,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ### Added
 
+- **M8 now owns and executes the read-only security scan** (`M8.SECURITY_SCAN`, replacing the
+  out-of-band `M8.STATIC_SAFETY_SCAN`). The scan logic lives host-free in
+  `Core/Security/SecurityScanner.cs` + `Core/Security/SecurityScanRules.cs` and runs inside M8
+  against a strictly read-only source (`Core/Contract/ISecurityScanSource.cs`, host adapter
+  `Host/FileSystemSecurityScanSource.cs`). It preserves every rule the offline
+  `verification/addon-smoke` scan applied, so no check is lost and no module executes it twice.
+  The previous injected-boolean API (`DiagnosticRuntime.StaticSafetyScan` / `SafetyScanEvidence`)
+  was removed; the single scan result is published to `SessionContext.SecurityScan` and merged by
+  `SnapshotAssembler` so the live probe and the exported `safety-audit.json` agree without a
+  second run. Fail-closed: an unavailable/unreadable source or an unreadable file ⇒ `INCONCLUSIVE`
+  (never `PASS`); a forbidden hit / leaked identity literal / missing trading-disabled declaration
+  ⇒ `FAIL`. Identity literals are drawn from `ExpectedAccountIdentity`, never hardcoded in the
+  scanner. `safety-audit.json` now carries a `securityScan` block.
 - `TargetAccountConnectionObservation` (host-free; booleans/counts + synthetic account ref only)
   and `TargetAccountConnectionVerifier`, which decide the target account→connection→provider
   association with no raw identity in the result.

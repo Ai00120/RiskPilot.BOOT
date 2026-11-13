@@ -202,9 +202,18 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 {
                     TradingDisabledRuntimeEvidence = true,
                     ReadOnlyPostureObserved = true,
-                    StaticScanPassed = true,
-                    StaticScanForbiddenApiCount = 0,
-                    StaticScanFileCount = 103,
+                    SecurityScan = new SecurityScanObservation
+                    {
+                        Executed = true,
+                        SourceAvailable = true,
+                        FilesScanned = 103,
+                        RuleCount = RiskPilot.Diagnostics.Nt8.Core.Security.SecurityScanCatalog.RuleCount,
+                        TradingDisabledObservable = true,
+                        TradingDisabledDeclared = true,
+                        IdentityDefinitionPresent = true,
+                        IdentityDefinitionReviewed = true,
+                        ReasonCodes = new List<string> { RiskPilot.Diagnostics.Nt8.Core.Security.SecurityScanReasonCodes.Passed }
+                    },
                     ReportSecretFree = true
                 },
                 Attestation = new InstrumentAttestationObservation
@@ -268,6 +277,20 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             var masked = package.Manifest.AccountsObserved[0].MaskedRef;
             Assert.NotEqual("ACC-0001", masked);
             Assert.StartsWith("account#", masked);
+        }
+
+        [Fact]
+        public void SafetyAudit_ExportsSecurityScanBlock_WithoutCodeFragments()
+        {
+            var package = EvidencePackageBuilder.Build(RunResult(), FullDataset());
+            var safety = package.Read(EvidencePackageCatalog.SafetyAuditJson);
+
+            Assert.Contains("securityScan", safety);
+            Assert.Contains("SECURITY_SCAN_PASSED", safety);
+            Assert.Contains("\"executed\":true", safety);
+
+            // A hit, when present, is reported by rule id + file + line only — never a code fragment.
+            Assert.DoesNotContain("SubmitOrder(", safety);
         }
 
         [Fact]

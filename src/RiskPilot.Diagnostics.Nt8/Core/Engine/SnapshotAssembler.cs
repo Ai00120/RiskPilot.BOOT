@@ -36,7 +36,32 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
             MergeDomMarketData(hostSnapshot, session);
             MergeTradeDelta(hostSnapshot, counters);
             MergeStrategyRiskGate(hostSnapshot, session);
+            MergeSecurityScan(hostSnapshot, session);
             return hostSnapshot;
+        }
+
+        /// <summary>
+        /// Copies the session's security-scan result (owned and executed by M8) into the snapshot's
+        /// safety observation, so the exported evidence reports the same single scan the live probe
+        /// produced. It never re-runs the scan and never fabricates a result: with no scan on the
+        /// session the safety observation is left as-is (M8 reports it INCONCLUSIVE).
+        /// </summary>
+        private static void MergeSecurityScan(DiagnosticSnapshot snapshot, SessionContext session)
+        {
+            var scan = session.SecurityScan;
+            if (scan == null)
+            {
+                return;
+            }
+
+            var safety = snapshot.Safety;
+            if (safety == null)
+            {
+                safety = new SafetyObservation();
+                snapshot.Safety = safety;
+            }
+
+            safety.SecurityScan = scan;
         }
 
         private static void AddClass(IDictionary<OrderIdClass, int> counts, OrderIdClass key, int delta)

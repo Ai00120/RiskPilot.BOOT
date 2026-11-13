@@ -328,9 +328,18 @@ namespace RiskPilot.Diagnostics.SampleReport
                 {
                     TradingDisabledRuntimeEvidence = true,
                     ReadOnlyPostureObserved = true,
-                    StaticScanPassed = true,
-                    StaticScanForbiddenApiCount = 0,
-                    StaticScanFileCount = 103,
+                    SecurityScan = new SecurityScanObservation
+                    {
+                        Executed = true,
+                        SourceAvailable = true,
+                        FilesScanned = 103,
+                        RuleCount = RiskPilot.Diagnostics.Nt8.Core.Security.SecurityScanCatalog.RuleCount,
+                        TradingDisabledObservable = true,
+                        TradingDisabledDeclared = true,
+                        IdentityDefinitionPresent = true,
+                        IdentityDefinitionReviewed = true,
+                        ReasonCodes = new List<string> { RiskPilot.Diagnostics.Nt8.Core.Security.SecurityScanReasonCodes.Passed }
+                    },
                     ReportSecretFree = true
                 },
                 Attestation = new InstrumentAttestationObservation
