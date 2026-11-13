@@ -252,7 +252,7 @@ capability; queue overflow; shutdown mid-capture; report integrity; and trading 
 
 ### 4.2 Sample evidence package
 
-`tools/RiskPilot.Diagnostics.SampleReport` builds a complete 17-artifact package using the real
+`tools/RiskPilot.Diagnostics.SampleReport` builds a complete 18-artifact package using the real
 production `EvidencePackageBuilder`, so the package shape and SHA-256 manifest match a real run.
 The committed sample is at `docs/samples/sample-evidence-package/` and is **labelled `SAMPLE`**.
 Its numeric values are deliberately different from the historical 11 Nov 2026 baseline (§7) so the
@@ -295,6 +295,47 @@ account's own** connection instead of inspecting the first available connection:
   exact match, missing account/connection, wrong/unrelated connection, wrong provider, multiple
   connections and ambiguous associations. The host adapter tests run over the offline stub surface
   and are **not** a substitute for real-host validation (§9).
+
+### 4.6 Stage 3 / Stage 4 coverage audit (Prompt 11)
+
+A final integration audit traced the important Stage 3 (Position Sizing) and Stage 4 (Independent
+Risk Gate) requirements defined in RiskPilot.BOT to the BOOT modules and checks that can provide
+evidence for them. The readable matrix is `docs/STAGE34_COVERAGE.md`; the machine-readable matrix is
+exported with every run as `stage34-coverage.json` (the 18th artifact), defined by
+`Core/Run/Stage34Coverage.cs` and evaluated per run by `Stage34CoverageEvaluator` from the results
+the run actually produced.
+
+- **New read-only check `M4.ES_PRODUCT_SPEC`.** `M4.INSTRUMENT_IDENTITY` proves *which* instrument
+  is loaded; the new check proves the loaded instrument's **economics** — point value 50, tick size
+  0.25, derived tick value 12.50, currency USD — which Owner Decision D-095 §4 makes part of the one
+  immutable canonical ES specification. The host reads `MasterInstrument.*` of the already-loaded
+  instrument (after the live readiness probe) and reduces it to numbers plus a synthetic
+  `instrument#<hash>`; the raw symbol never leaves the host layer. A wrong value is `FAIL`, a
+  missing value is `INCONCLUSIVE` (never `PASS`), and a stub/mock value is `INCONCLUSIVE`.
+- **Honest coverage boundary.** Each requirement carries an evidence class (`RUNTIME_HOST` /
+  `SOURCE_LEVEL`), a verification scope (`FULL` / `PARTIAL` / `NONE`), two prerequisites
+  (`requiresRealHost`, `requiresRithmicSimAccount`) and the BOOT test(s) that exercise its backing
+  checks. Six requirements that live entirely inside RiskPilot.BOT (no invented data invariant 4,
+  structured invalidation provenance OD-1, the compiled `RiskPolicyLimits` + hash D-036/D-073,
+  non-zero-defaulted portfolio state OD-2, drawdown/high-water-mark continuity D-031-2/R1, and
+  thread-safety/subscriber isolation invariant 8) are reported `SOURCE_ONLY` — the existence of a
+  BOT feature in source is **not** runtime evidence and is never `VERIFIED`.
+- **Reconciled against RiskPilot.BOT `main`.** The matrix was reconciled against the authoritative
+  BOT Stage 3/4 records (`G3_STAGE3_STAGE4_ARCHITECTURE_CONTRACT.md`, `DECISION_LOG.md`, and the
+  D-031-2/R1, D-036/D-073, D-078/D-080, D-085, D-095 and D-096 owner decisions), which added seven
+  requirements a first pass had overlooked: policy/configuration versioning and snapshot correlation
+  (D-022 condition 6), the non-bypassable verified-account enforcement / setter-visibility trust
+  boundary (OD-3 §6), drawdown continuity (D-031-2/R1), thread safety (invariant 8), the
+  contract-expiry pin and manual-rollover governance (D-085/D-095 §5), the NinjaTrader 8 platform
+  identity, and the no-invented-data invariant.
+- **Fail-closed.** A requirement is only `VERIFIED` when **every** backing check ran and PASSed in
+  the run; a missing backing check leaves it `INCONCLUSIVE`, and an unobserved requirement is never
+  `PASS`. Every `stage34-coverage.json` carries an explicit `statement` that BOOT does **not** fully
+  validate Stage 3 or Stage 4.
+- **Regression tests.** `EsProductSpecificationTests` (verifier + M4 probe), the M4 cases in
+  `HostInstrumentIdentityTests` (host adapter over the offline stub surface) and
+  `Stage34CoverageTests` (matrix derivation + the exported artifact). A green stub run is **not**
+  real-host proof (§9).
 
 ---
 
@@ -341,8 +382,8 @@ is complete; the stub build is unaffected.
 | --- | --- | --- |
 | Stub build | `dotnet build ... -p:UseStubs=true -c Release` | **succeeded** |
 | Solution build (incl. tool) | `dotnet build RiskPilot.Diagnostics.Nt8.sln -c Release` | **succeeded** |
-| Unit + integration tests | `dotnet test ... -c Release` | **417 passed / 0 failed** |
-| Static safety scan | `python3 verification/addon-smoke/test_diagnostic_safety.py` | **PASS** (111 files, 34 patterns) |
+| Unit + integration tests | `dotnet test ... -c Release` | **572 passed / 0 failed** |
+| Static safety scan | `python3 verification/addon-smoke/test_diagnostic_safety.py` | **PASS** (126 files, 34 patterns) |
 | Real-host build | `dotnet build ... -p:UseStubs=false -c Release` | **FAILED** — NT8 DLLs absent (see §5) |
 
 Test files (21) and their focus include queue/backpressure (`EventQueueTests`,
@@ -400,7 +441,7 @@ result of running this tool in this environment, and no definitive root cause is
 1. Complete the real-host build (§5) and record the exact result.
 2. Run Quick / Full / Post-Trade Audit against a live Rithmic connection and export a package.
 3. Confirm the window opens from the Control Center menu and that Cancel behaves as documented.
-4. Confirm the evidence directory is created outside the Git tree and contains 17 artifacts.
+4. Confirm the evidence directory is created outside the Git tree and contains 18 artifacts.
 5. Confirm `Trading=Disabled` is reported and that no account/connection/position changes occur.
 
 ---

@@ -82,7 +82,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
-        public void EvidenceExport_WritesAll17Artifacts_AndVerifies()
+        public void EvidenceExport_WritesAll18Artifacts_AndVerifies()
         {
             var provider = new FakeDataProvider();
             using var runtime = Runtime(provider, 256, 256);
@@ -104,7 +104,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
             Assert.True(ok);
             Assert.False(string.IsNullOrEmpty(directory));
-            Assert.Equal(17, sink.Files.Count);
+            Assert.Equal(18, sink.Files.Count);
             foreach (var name in EvidencePackageCatalog.All)
             {
                 Assert.True(sink.Files.ContainsKey(name), "missing artifact: " + name);
@@ -120,7 +120,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             var result = new DiagnosticRunResult { SessionId = runtime.Session.SessionId, ModeId = "quick" };
             var sink = new InMemoryEvidenceSink();
             Assert.True(runtime.WriteEvidencePackage(result, sink, out _));
-            Assert.Equal(17, sink.Files.Count);
+            Assert.Equal(18, sink.Files.Count);
         }
 
         [Fact]

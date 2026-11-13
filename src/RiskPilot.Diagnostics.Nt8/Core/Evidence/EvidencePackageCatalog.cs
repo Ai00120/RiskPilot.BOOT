@@ -24,10 +24,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
         public const string OrderFlowSummaryJson = "orderflow-summary.json";
         public const string StrategiesJson = "strategies.json";
         public const string SafetyAuditJson = "safety-audit.json";
+        public const string Stage34CoverageJson = "stage34-coverage.json";
         public const string FindingsJson = "findings.json";
         public const string ManifestJson = "manifest.json";
 
-        /// <summary>The 17 artifacts, in the order they are listed in the manifest.</summary>
+        /// <summary>The 18 artifacts, in the order they are listed in the manifest.</summary>
         public static readonly IReadOnlyList<string> All = new[]
         {
             SummaryHtml,
@@ -45,6 +46,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             OrderFlowSummaryJson,
             StrategiesJson,
             SafetyAuditJson,
+            Stage34CoverageJson,
             FindingsJson,
             ManifestJson
         };

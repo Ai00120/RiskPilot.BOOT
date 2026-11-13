@@ -64,18 +64,25 @@ package.
 %USERPROFILE%\Documents\RiskPilot.Diagnostics.Evidence\<session-id>\
 ```
 
-The package contains 17 artifacts:
+The package contains 18 artifacts:
 
 ```
 summary.html  full-report.html  acceptance-matrix.csv
 environment.json  connections.json  accounts.json  instruments.json
 orders.csv  executions.csv  positions.csv
 market-data-summary.json  dom-summary.json  orderflow-summary.json
-strategies.json  safety-audit.json  findings.json  manifest.json
+strategies.json  safety-audit.json  stage34-coverage.json  findings.json  manifest.json
 ```
 
 - `summary.html` — the human-readable one-page summary.
 - `full-report.html` — the complete report with every check and its evidence.
+- `stage34-coverage.json` — the Stage 3 / Stage 4 traceability matrix: each RiskPilot.BOT Stage 3/4
+  requirement mapped to the BOOT module(s) and check(s) that provide evidence, the host data and
+  verification method, the evidence class (runtime vs. source-level), the verification scope, and
+  the coverage status **derived from this run** (`VERIFIED` / `FAILED` / `INCONCLUSIVE` /
+  `NOT_EXECUTED` / `SOURCE_ONLY`). The requirement text is defined in
+  `Core/Run/Stage34Coverage.cs`; the exported artifact re-evaluates it from the run's own results.
+  See `docs/STAGE34_COVERAGE.md` for the readable matrix.
 - `manifest.json` — session, start/end UTC, versions, provider, instrument, **masked** accounts,
   record and dropped counts, truncation status, `evidenceProvenance`, every file with its SHA-256,
   and the overall run status.
@@ -109,7 +116,7 @@ The repository ships one sample package at
    carries its observation, source, collection method, limitation, recommended next action and an
    evidence reference.
 3. Verify integrity: `manifest.json` lists a SHA-256 for every artifact. Re-hash the files and
-   compare. The tool already verifies all 17 artifacts and their hashes before it writes anything.
+   compare. The tool already verifies all 18 artifacts and their hashes before it writes anything.
 
 ## The three acceptance subjects
 

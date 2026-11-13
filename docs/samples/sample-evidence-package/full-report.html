@@ -6,7 +6,7 @@
 <table>
   <tr>
     <th>Session ID</th>
-    <td>diag_20261112_080000_3c35bc4b40724aabbd6714a3ebf20a74</td>
+    <td>diag_20261112_080000_17d8f189021f401fb75e6dd35e390449</td>
   </tr>
   <tr>
     <th>Correlation ID</th>
@@ -608,6 +608,404 @@
       <td>SAMPLE data (synthetic).</td>
       <td>Synthetic documentation sample; not a runtime observation.</td>
       <td>None (sample).</td>
+    </tr>
+  </tbody>
+</table>
+<h2>Stage 3 / Stage 4 coverage (traceability matrix)</h2>
+<div class="note">BOOT does NOT fully validate Stage 3 or Stage 4: of 25 traced requirement(s): 0 verified, 0 failed, 6 inconclusive, 12 not executed, 7 source-level only and 0 not covered. 7 are fully runtime-observable, 11 partially, and 7 not verifiable at runtime. 17 need a real NinjaTrader installation and 9 need an actual connected Rithmic simulation account.</div>
+<table>
+  <thead>
+    <tr>
+      <th>Requirement</th>
+      <th>Stage</th>
+      <th>Title</th>
+      <th>BOT ref</th>
+      <th>BOOT modules</th>
+      <th>BOOT checks</th>
+      <th>Status</th>
+      <th>Scope</th>
+      <th>Evidence class</th>
+      <th>Needs real host</th>
+      <th>Needs Rithmic SIM</th>
+      <th>Test coverage</th>
+      <th>Current limitation</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>S3-D022-DUAL-POLICY</td>
+      <td>Stage 3</td>
+      <td>Dual-policy sizing architecture</td>
+      <td>D-022 (conditions 1-4)</td>
+      <td>M7</td>
+      <td>M7.STAGE3_SIZING, M7.REASON_ATTRIBUTION</td>
+      <td>NOT_EXECUTED</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+      <td>no</td>
+      <td>no</td>
+      <td>M7StrategyTests</td>
+      <td>BOOT can observe the sizing reason codes only when RiskPilot.BOT exposes its read-only diagnostics; the policy-selection logic itself is BOT-internal and is not re-derived here.</td>
+    </tr>
+    <tr>
+      <td>S3-D022-FAILCLOSED</td>
+      <td>Stage 3</td>
+      <td>Fail-closed sizing on missing inputs</td>
+      <td>D-022 (condition 5)</td>
+      <td>M7</td>
+      <td>M7.STAGE3_SIZING</td>
+      <td>NOT_EXECUTED</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>no</td>
+      <td>M7StrategyTests</td>
+      <td>A zero-quantity outcome is reported only as a raw distribution; BOOT does not re-evaluate the sizing math, so it cannot prove a specific input caused a specific reason.</td>
+    </tr>
+    <tr>
+      <td>S3-D022-QUANTITY-LATTICE</td>
+      <td>Stage 3</td>
+      <td>Quantity rounding / min / cap rules</td>
+      <td>D-022 (condition 7)</td>
+      <td>M7</td>
+      <td>M7.STAGE3_SIZING</td>
+      <td>NOT_EXECUTED</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>no</td>
+      <td>M7StrategyTests</td>
+      <td>BOOT reports the lattice reason codes as a distribution; it does not independently recompute the quantity lattice.</td>
+    </tr>
+    <tr>
+      <td>S3-D022-VERSION-CORRELATION</td>
+      <td>Stage 3</td>
+      <td>Policy / configuration versioning and snapshot correlation</td>
+      <td>D-022 (condition 6)</td>
+      <td>M7</td>
+      <td>M7.STAGE_CORRELATION, M7.STAGE3_SIZING</td>
+      <td>NOT_EXECUTED</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>no</td>
+      <td>M7StrategyTests</td>
+      <td>No public host API exposes the sizing policy version; BOOT can only report the correlation the source supplies, and stays INCONCLUSIVE without it.</td>
+    </tr>
+    <tr>
+      <td>S3-ANALYTICAL-NONEXECUTABLE</td>
+      <td>Stage 3</td>
+      <td>Stage 3 output is analytical and non-executable</td>
+      <td>D-022 / cross-stage invariants 1-2</td>
+      <td>M8</td>
+      <td>M8.SECURITY_SCAN, M8.READ_ONLY_POSTURE, M8.TRADING_DISABLED</td>
+      <td>INCONCLUSIVE</td>
+      <td>FULL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>no</td>
+      <td>SecurityScanTests, Phase3ModuleTests</td>
+      <td>The scan proves the absence of forbidden patterns in the scanned source; it is a source-level guarantee, not a proof about RiskPilot.BOT&#39;s own source.</td>
+    </tr>
+    <tr>
+      <td>S3-NO-INVENTED-DATA</td>
+      <td>Stage 3</td>
+      <td>No invented data (cross-stage invariant 4)</td>
+      <td>cross-stage invariant 4</td>
+      <td></td>
+      <td></td>
+      <td>SOURCE_ONLY</td>
+      <td>NONE</td>
+      <td>SOURCE_LEVEL</td>
+      <td>no</td>
+      <td>no</td>
+      <td></td>
+      <td>BOOT observes the fail-closed outcomes but cannot prove the absence of fabricated data; it reports this as SOURCE_ONLY.</td>
+    </tr>
+    <tr>
+      <td>S3-OD1-INVALIDATION</td>
+      <td>Stage 3</td>
+      <td>Structured InvalidationLevel provenance (OD-1)</td>
+      <td>OD-1 / D-074 / D-075</td>
+      <td></td>
+      <td></td>
+      <td>SOURCE_ONLY</td>
+      <td>NONE</td>
+      <td>SOURCE_LEVEL</td>
+      <td>no</td>
+      <td>no</td>
+      <td></td>
+      <td>No public host API exposes the invalidation producer; BOOT cannot verify it at runtime and reports it as SOURCE_ONLY.</td>
+    </tr>
+    <tr>
+      <td>S4-MONOTONIC-QUANTITY</td>
+      <td>Stage 4</td>
+      <td>Monotonic quantity invariant</td>
+      <td>D-022 / cross-stage invariant 6 / G3-c</td>
+      <td>M7</td>
+      <td>M7.RISK_GATE</td>
+      <td>NOT_EXECUTED</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>no</td>
+      <td>M7StrategyTests</td>
+      <td>BOOT observes the risk-gate outcome distribution, not the internal quantity arithmetic; the invariant itself is BOT-internal.</td>
+    </tr>
+    <tr>
+      <td>S4-FAILCLOSED</td>
+      <td>Stage 4</td>
+      <td>Fail-closed risk gate on missing inputs</td>
+      <td>D-022 / D-032 / G3-c</td>
+      <td>M7</td>
+      <td>M7.RISK_GATE, M7.REASON_ATTRIBUTION</td>
+      <td>NOT_EXECUTED</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>no</td>
+      <td>M7StrategyTests</td>
+      <td>BOOT reports the veto reasons it observes; it does not reproduce the gate&#39;s decision logic.</td>
+    </tr>
+    <tr>
+      <td>S4-ACCOUNT-STATE-GATE</td>
+      <td>Stage 4</td>
+      <td>Verified account state gates Stage 4 (D-032)</td>
+      <td>D-032 / OD-3</td>
+      <td>M2, M7</td>
+      <td>M2.ACCOUNT_IDENTITY, M7.RISK_GATE</td>
+      <td>NOT_EXECUTED</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>yes</td>
+      <td>M7StrategyTests, AccountIdentityTests, TargetAccountConnectionTests, HostTargetAccountConnectionTests</td>
+      <td>BOOT proves the account identity and observes account-state vetoes; it cannot read RiskPilot.BOT&#39;s in-memory AccountStateSnapshot.</td>
+    </tr>
+    <tr>
+      <td>S4-ACCOUNT-STATE-UNBYPASSABLE</td>
+      <td>Stage 4</td>
+      <td>Non-bypassable verified-account enforcement (OD-3)</td>
+      <td>D-032 / OD-3 (contract §6)</td>
+      <td>M2</td>
+      <td>M2.ACCOUNT_IDENTITY, M2.ACCOUNT_CONNECTION_ASSOCIATION</td>
+      <td>NOT_EXECUTED</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>yes</td>
+      <td>AccountIdentityTests, TargetAccountConnectionTests, HostTargetAccountConnectionTests</td>
+      <td>BOOT can confirm the account identity but cannot read RiskPilot.BOT&#39;s RequireVerifiedAccountState flag or prove setter visibility at runtime; those stay a source-level fact.</td>
+    </tr>
+    <tr>
+      <td>S4-RISK-POLICY</td>
+      <td>Stage 4</td>
+      <td>Compiled immutable RiskPolicyLimits with verified hash (D-036 / D-073)</td>
+      <td>D-036 / D-073 / OD-6</td>
+      <td></td>
+      <td></td>
+      <td>SOURCE_ONLY</td>
+      <td>NONE</td>
+      <td>SOURCE_LEVEL</td>
+      <td>no</td>
+      <td>no</td>
+      <td></td>
+      <td>The compiled policy profile and its SHA-256 are RiskPilot.BOT source facts; BOOT cannot verify them at runtime and reports this as SOURCE_ONLY.</td>
+    </tr>
+    <tr>
+      <td>S4-PORTFOLIO-STATE</td>
+      <td>Stage 4</td>
+      <td>Dynamic portfolio state is not zero-defaulted (OD-2)</td>
+      <td>OD-2 / D-031</td>
+      <td></td>
+      <td></td>
+      <td>SOURCE_ONLY</td>
+      <td>NONE</td>
+      <td>SOURCE_LEVEL</td>
+      <td>no</td>
+      <td>no</td>
+      <td></td>
+      <td>The zero-default hazard is a RiskPilot.BOT source property; BOOT cannot verify it at runtime and reports this as SOURCE_ONLY.</td>
+    </tr>
+    <tr>
+      <td>S4-DRAWDOWN-CONTINUITY</td>
+      <td>Stage 4</td>
+      <td>Drawdown continuity is not falsely reset (D-031-2 / R1)</td>
+      <td>D-031-2 / Owner-approved R1 remediation 2026-11-11</td>
+      <td></td>
+      <td></td>
+      <td>SOURCE_ONLY</td>
+      <td>NONE</td>
+      <td>SOURCE_LEVEL</td>
+      <td>no</td>
+      <td>no</td>
+      <td></td>
+      <td>Drawdown continuity is a RiskPilot.BOT-internal lifecycle property; BOOT cannot verify it at runtime and reports this as SOURCE_ONLY.</td>
+    </tr>
+    <tr>
+      <td>S34-CORRELATION</td>
+      <td>Stage 4</td>
+      <td>Decision→proposal→risk linkage preserved</td>
+      <td>D-022 invariant 7 / G3-b / G3-c</td>
+      <td>M7</td>
+      <td>M7.STAGE_CORRELATION</td>
+      <td>NOT_EXECUTED</td>
+      <td>FULL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>no</td>
+      <td>M7StrategyTests</td>
+      <td>The correlation is only PASS when the read-only source actually supplies the three ids; without them it stays INCONCLUSIVE.</td>
+    </tr>
+    <tr>
+      <td>S34-THREAD-SAFETY</td>
+      <td>Stage 4</td>
+      <td>Thread-safety / subscriber isolation (cross-stage invariant 8)</td>
+      <td>cross-stage invariant 8</td>
+      <td></td>
+      <td></td>
+      <td>SOURCE_ONLY</td>
+      <td>NONE</td>
+      <td>SOURCE_LEVEL</td>
+      <td>no</td>
+      <td>no</td>
+      <td></td>
+      <td>Thread-safety and subscriber isolation are RiskPilot.BOT-internal; BOOT cannot verify them at runtime and reports this as SOURCE_ONLY.</td>
+    </tr>
+    <tr>
+      <td>ID-ACCOUNT</td>
+      <td>Identity</td>
+      <td>Exact account identity (D-095 / D-096)</td>
+      <td>D-095 / D-096</td>
+      <td>M2</td>
+      <td>M2.ACCOUNT_IDENTITY, M2.ACCOUNT_CONNECTION_ASSOCIATION</td>
+      <td>NOT_EXECUTED</td>
+      <td>FULL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>yes</td>
+      <td>AccountIdentityTests, TargetAccountConnectionTests, HostTargetAccountConnectionTests</td>
+      <td>Requires the real Rithmic SIM account to be connected; with no account surface the check is INCONCLUSIVE, never PASS.</td>
+    </tr>
+    <tr>
+      <td>ID-CONNECTION-PROVIDER</td>
+      <td>Identity</td>
+      <td>Exact connection / provider identity (D-096)</td>
+      <td>D-096</td>
+      <td>M2</td>
+      <td>M2.PROVIDER_IDENTITY, M2.ACCOUNT_CONNECTION_ASSOCIATION, M2.CONNECTIONS</td>
+      <td>INCONCLUSIVE</td>
+      <td>FULL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>yes</td>
+      <td>TargetAccountConnectionTests, HostTargetAccountConnectionTests</td>
+      <td>Provider identity is resolved by string comparison (no guaranteed Rithmic enum member); the provider build is unobservable and never reported as PASS.</td>
+    </tr>
+    <tr>
+      <td>ID-INSTRUMENT</td>
+      <td>Identity</td>
+      <td>Canonical ES/CME instrument identity (D-078 / D-096)</td>
+      <td>D-078 / D-096 / D-095 §4</td>
+      <td>M4</td>
+      <td>M4.INSTRUMENT_IDENTITY, M4.D096_ROUTE_CANDIDATE, M4.REGISTRY_MATCH</td>
+      <td>NOT_EXECUTED</td>
+      <td>FULL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>yes</td>
+      <td>InstrumentIdentityTests, HostInstrumentIdentityTests</td>
+      <td>The venue is a configured-route mapping (Owner-authorized D-096), not an independent exchange-issued listing-venue attestation; the raw symbol is never reported.</td>
+    </tr>
+    <tr>
+      <td>ID-ES-ECONOMICS</td>
+      <td>Identity</td>
+      <td>Canonical ES economic specification (D-095 §4)</td>
+      <td>D-095 §4 / D-096 §3</td>
+      <td>M4</td>
+      <td>M4.ES_PRODUCT_SPEC</td>
+      <td>NOT_EXECUTED</td>
+      <td>FULL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>yes</td>
+      <td>EsProductSpecificationTests, HostInstrumentIdentityTests</td>
+      <td>The canonical economics are published CME contract facts used as reference expectations, not an independent exchange attestation; the raw symbol is never reported.</td>
+    </tr>
+    <tr>
+      <td>ID-CONTRACT-EXPIRY</td>
+      <td>Identity</td>
+      <td>Contract expiry pin and manual rollover (D-085 / D-095 §5)</td>
+      <td>D-085 / D-095 §5</td>
+      <td></td>
+      <td></td>
+      <td>SOURCE_ONLY</td>
+      <td>NONE</td>
+      <td>SOURCE_LEVEL</td>
+      <td>no</td>
+      <td>no</td>
+      <td></td>
+      <td>BOOT verifies the canonical ES root/venue form (any expiry) but not the pinned expiry or the governed manual-rollover process; it reports this as SOURCE_ONLY and never claims the pin was changed only through the approved process.</td>
+    </tr>
+    <tr>
+      <td>ID-PLATFORM</td>
+      <td>Identity</td>
+      <td>NinjaTrader 8 platform identity and compatibility</td>
+      <td>D-096 / NinjaTraderCompatibility declaration</td>
+      <td>M1</td>
+      <td>M1.HOST_COMPATIBILITY, M1.HOST_VERSION, M1.ENVIRONMENT_CLASS</td>
+      <td>INCONCLUSIVE</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>no</td>
+      <td>NinjaTraderCompatibilityTests, LifecycleDiagnosticsTests</td>
+      <td>No public NinjaTrader API exposes the exact installed host build, so M1.HOST_COMPATIBILITY is always INCONCLUSIVE (never PASS) until a real-host run is recorded in TestedVersions.</td>
+    </tr>
+    <tr>
+      <td>DEP-DOM-MARKETDATA</td>
+      <td>Data</td>
+      <td>DOM / Level II and Level I market-data surface</td>
+      <td>D-073 / data contract</td>
+      <td>M5</td>
+      <td>M5.DOM_SURFACE, M5.DEPTH, M5.LEVEL1, M5.DATA_INTEGRITY, M5.FRESHNESS, M5.VALIDITY</td>
+      <td>INCONCLUSIVE</td>
+      <td>FULL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>yes</td>
+      <td>M5DomMarketDataTests</td>
+      <td>Freshness is always INCONCLUSIVE and only labelled FRESH/STALE; depth is never inferred from a Level I quote.</td>
+    </tr>
+    <tr>
+      <td>DEP-TRADEDELTA</td>
+      <td>Data</td>
+      <td>TradeDelta / OrderFlow inputs</td>
+      <td>PHASE4_ORDER_FLOW_SPEC</td>
+      <td>M6</td>
+      <td>M6.TRADE_STREAM, M6.SEQUENCE_CONTINUITY, M6.DIRECTION_SOURCE, M6.TRADEDELTA_COMPLETENESS</td>
+      <td>INCONCLUSIVE</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>yes</td>
+      <td>M6TradeDeltaTests</td>
+      <td>NT8&#39;s public Level I surface exposes no aggressor side, so direction is always derived; sequence continuity stays INCONCLUSIVE without an observed source sequence.</td>
+    </tr>
+    <tr>
+      <td>DEP-POSTTRADE-AUDIT</td>
+      <td>Data</td>
+      <td>Order / execution / position lifecycle audit</td>
+      <td>PHASE3_RECORDING_SPECIFICATION / M9</td>
+      <td>M9</td>
+      <td>M9.ORDER_LIFECYCLE, M9.EXECUTION_LIFECYCLE, M9.CORRELATION_TIMING, M9.MISSING_OR_DUPLICATE, M9.AUDIT_SURFACE</td>
+      <td>INCONCLUSIVE</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+      <td>yes</td>
+      <td>yes</td>
+      <td>Phase4PostTradeAuditTests, Phase4RuntimeIntegrationTests</td>
+      <td>The audit only covers events recorded while the tool ran; execution coverage is derived (the host reads only Account.Orders), never assumed.</td>
     </tr>
   </tbody>
 </table>

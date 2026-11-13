@@ -51,6 +51,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             files[EvidencePackageCatalog.OrderFlowSummaryJson] = BuildOrderFlowSummaryJson(dataset);
             files[EvidencePackageCatalog.StrategiesJson] = BuildStrategiesJson(dataset);
             files[EvidencePackageCatalog.SafetyAuditJson] = BuildSafetyAuditJson(dataset);
+            files[EvidencePackageCatalog.Stage34CoverageJson] = BuildStage34CoverageJson(result);
             files[EvidencePackageCatalog.FindingsJson] = BuildFindingsJson(findings);
             files[EvidencePackageCatalog.SummaryHtml] = BuildSummaryHtml(result, dataset);
             files[EvidencePackageCatalog.FullReportHtml] = BuildFullReportHtml(result, dataset);
@@ -888,6 +889,69 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             return writer.ToString();
         }
 
+        /// <summary>
+        /// Writes the Stage 3 / Stage 4 traceability and coverage artifact. It maps each
+        /// RiskPilot.BOT Stage 3/4 requirement to the BOOT module(s) and check(s) that provide
+        /// evidence, states the host data and verification method, and derives the per-run
+        /// coverage status from the results this run actually produced. A requirement BOOT cannot
+        /// verify at runtime is written as <c>SOURCE_ONLY</c>; a requirement whose backing checks
+        /// did not run is <c>NOT_EXECUTED</c>; an unobserved requirement is <c>INCONCLUSIVE</c>,
+        /// never <c>VERIFIED</c>. The artifact never carries a raw account, connection or
+        /// instrument identity.
+        /// </summary>
+        private static string BuildStage34CoverageJson(DiagnosticRunResult result)
+        {
+            var report = Stage34CoverageEvaluator.Evaluate(result);
+            var writer = new JsonWriter();
+            writer.BeginObject();
+            writer.WriteProperty("totalRequirements", report.TotalRequirements);
+            writer.WriteProperty("verifiedCount", report.VerifiedCount);
+            writer.WriteProperty("failedCount", report.FailedCount);
+            writer.WriteProperty("inconclusiveCount", report.InconclusiveCount);
+            writer.WriteProperty("notExecutedCount", report.NotExecutedCount);
+            writer.WriteProperty("sourceOnlyCount", report.SourceOnlyCount);
+            writer.WriteProperty("notCoveredCount", report.NotCoveredCount);
+            writer.WriteProperty("fullyVerifiableCount", report.FullyVerifiableCount);
+            writer.WriteProperty("partiallyVerifiableCount", report.PartiallyVerifiableCount);
+            writer.WriteProperty("notRuntimeVerifiableCount", report.NotRuntimeVerifiableCount);
+            writer.WriteProperty("requiresRealHostCount", report.RequiresRealHostCount);
+            writer.WriteProperty("requiresRithmicSimAccountCount", report.RequiresRithmicSimAccountCount);
+            writer.WriteProperty("statement", SecretRedactor.Redact(report.Statement));
+
+            writer.BeginArray("requirements");
+            foreach (var coverage in report.Requirements)
+            {
+                var requirement = coverage.Requirement;
+                writer.BeginObject();
+                writer.WriteProperty("id", requirement.Id);
+                writer.WriteProperty("stage", requirement.Stage);
+                writer.WriteProperty("title", requirement.Title);
+                writer.WriteProperty("requirement", requirement.Requirement);
+                writer.WriteProperty("botReference", requirement.BotReference);
+                writer.WriteStringArrayProperty("bootModules", ToArray(requirement.BootModules));
+                writer.WriteStringArrayProperty("bootChecks", ToArray(requirement.BootChecks));
+                writer.WriteProperty("hostData", requirement.HostData);
+                writer.WriteProperty("verificationMethod", requirement.VerificationMethod);
+                writer.WriteProperty("evidenceClass", requirement.EvidenceClass);
+                writer.WriteProperty("verificationScope", requirement.VerificationScope);
+                writer.WriteProperty("requiresRealHost", requirement.RequiresRealHost);
+                writer.WriteProperty("requiresRithmicSimAccount", requirement.RequiresRithmicSimAccount);
+                writer.WriteProperty("currentLimitation", requirement.CurrentLimitation);
+                writer.WriteProperty("testCoverage", requirement.TestCoverage);
+                writer.WriteProperty("status", coverage.Status);
+                writer.WriteProperty("observedChecks", coverage.ObservedChecks);
+                writer.WriteProperty("verifiedChecks", coverage.VerifiedChecks);
+                writer.WriteProperty("failedChecks", coverage.FailedChecks);
+                writer.WriteProperty("inconclusiveChecks", coverage.InconclusiveChecks);
+                writer.WriteStringArrayProperty("observedCheckIds", ToArray(coverage.ObservedCheckIds));
+                writer.EndObject();
+            }
+
+            writer.EndArray();
+            writer.EndObject();
+            return writer.ToString();
+        }
+
         private static string BuildFindingsJson(IList<DiagnosticFinding> findings)
         {
             var writer = new JsonWriter();
@@ -989,6 +1053,25 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             }
 
             html.Table(new[] { "Subject", "Status", "Summary" }, acceptanceRows);
+
+            html.Element("h2", "Stage 3 / Stage 4 coverage");
+            var coverage = Stage34CoverageEvaluator.Evaluate(result);
+            html.Element("div", coverage.Statement, "note");
+            var coverageRows = new List<IReadOnlyList<string>>();
+            foreach (var item in coverage.Requirements)
+            {
+                coverageRows.Add(new[]
+                {
+                    item.Requirement.Id,
+                    item.Requirement.Stage,
+                    item.Requirement.Title,
+                    item.Status,
+                    item.Requirement.VerificationScope,
+                    item.Requirement.EvidenceClass
+                });
+            }
+
+            html.Table(new[] { "Requirement", "Stage", "Title", "Status", "Scope", "Evidence" }, coverageRows);
 
             html.Element("h2", "Top findings");
             var findingRows = new List<IReadOnlyList<string>>();
@@ -1094,6 +1177,36 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             }
 
             html.Table(new[] { "Finding", "Module", "Status", "Severity", "Observation", "Source", "Collection method", "Limitation", "Recommended next action" }, findingRows);
+
+            html.Element("h2", "Stage 3 / Stage 4 coverage (traceability matrix)");
+            var fullCoverage = Stage34CoverageEvaluator.Evaluate(result);
+            html.Element("div", fullCoverage.Statement, "note");
+            var fullCoverageRows = new List<IReadOnlyList<string>>();
+            foreach (var item in fullCoverage.Requirements)
+            {
+                fullCoverageRows.Add(new[]
+                {
+                    item.Requirement.Id,
+                    item.Requirement.Stage,
+                    item.Requirement.Title,
+                    item.Requirement.BotReference,
+                    string.Join(", ", item.Requirement.BootModules),
+                    string.Join(", ", item.Requirement.BootChecks),
+                    item.Status,
+                    item.Requirement.VerificationScope,
+                    item.Requirement.EvidenceClass,
+                    item.Requirement.RequiresRealHost ? "yes" : "no",
+                    item.Requirement.RequiresRithmicSimAccount ? "yes" : "no",
+                    item.Requirement.TestCoverage,
+                    item.Requirement.CurrentLimitation
+                });
+            }
+
+            html.Table(new[]
+            {
+                "Requirement", "Stage", "Title", "BOT ref", "BOOT modules", "BOOT checks", "Status",
+                "Scope", "Evidence class", "Needs real host", "Needs Rithmic SIM", "Test coverage", "Current limitation"
+            }, fullCoverageRows);
 
             html.Element("h2", "Counters");
             html.Open("table");

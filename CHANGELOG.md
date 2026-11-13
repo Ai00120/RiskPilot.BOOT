@@ -9,7 +9,48 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+### Added
+
+- **Stage 3 / Stage 4 diagnostic coverage audit (Prompt 11).** A final integration audit traced the
+  important Stage 3 (Position Sizing) and Stage 4 (Independent Risk Gate) requirements defined in
+  RiskPilot.BOT to the BOOT modules and checks that can provide evidence for them. The matrix is
+  defined once in `Core/Run/Stage34Coverage.cs` (`Stage34CoverageCatalog`) and evaluated per run by
+  `Stage34CoverageEvaluator` from the results the run actually produced; it is exported with every
+  run as the new **18th artifact** `stage34-coverage.json` and shown in `summary.html` (short table)
+  and `full-report.html` (full matrix). The readable form is `docs/STAGE34_COVERAGE.md`.
+  - Each requirement records its BOT reference, the BOOT module(s) and exact check id(s), the host
+    data and verification method, an evidence class (`RUNTIME_HOST` / `SOURCE_LEVEL`), a verification
+    scope (`FULL` / `PARTIAL` / `NONE`), whether it needs a real host / a connected Rithmic SIM
+    account, and the BOOT test(s) that exercise its backing checks. The per-run status is **derived,
+    never asserted**: `VERIFIED` only when every backing check ran and PASSed; a missing backing
+    check leaves it `INCONCLUSIVE` (never `PASS`); a requirement with no runtime host API is
+    `SOURCE_ONLY`. The artifact always carries an explicit `statement` that BOOT does **not** fully
+    validate Stage 3 or Stage 4.
+  - The catalog was reconciled against the authoritative RiskPilot.BOT Stage 3/4 records on `main`
+    (`G3_STAGE3_STAGE4_ARCHITECTURE_CONTRACT.md`, `DECISION_LOG.md`, the D-031-2/R1, D-036/D-073,
+    D-078/D-080, D-085, D-095 and D-096 owner decisions). That added seven requirements the first
+    pass had overlooked: policy/configuration versioning and snapshot correlation (D-022 condition 6),
+    the non-bypassable verified-account enforcement / setter-visibility trust boundary (OD-3 §6),
+    drawdown / high-water-mark continuity (D-031-2 / R1), thread-safety and subscriber isolation
+    (cross-stage invariant 8), the contract-expiry pin and manual-rollover governance (D-085 /
+    D-095 §5), the NinjaTrader 8 platform identity, and the no-invented-data invariant (invariant 4).
+    `Stage34CoverageTests` fails if a runtime requirement loses its test coverage or if one of these
+    traced requirements is dropped.
+  - New read-only check **`M4.ES_PRODUCT_SPEC`** (M4): proves the loaded ES instrument's *economics*
+    — point value 50, tick size 0.25, derived tick value 12.50, currency USD — which Owner Decision
+    D-095 §4 makes part of the one immutable canonical ES specification. `M4.INSTRUMENT_IDENTITY`
+    proves *which* instrument is loaded; this proves *its economics*. The host reads the loaded
+    instrument's `MasterInstrument.*` (after the live readiness probe) and reduces it to numbers plus
+    a synthetic `instrument#<hash>`; a wrong value is `FAIL`, a missing value is `INCONCLUSIVE`
+    (never `PASS`), a stub/mock value is `INCONCLUSIVE`. Tests: `EsProductSpecificationTests`, the M4
+    ES-economics cases in `HostInstrumentIdentityTests` (host adapter over the offline stub surface)
+    and `Stage34CoverageTests`.
+
 ### Changed
+
+- The evidence package now contains **18 artifacts** (was 17): `stage34-coverage.json` was added.
+  `EvidencePackageCatalog` remains the single source of truth; the manifest lists the other 17 files.
+  The committed SAMPLE package and `SHA256SUMS.txt` were regenerated.
 
 - **NinjaTrader version documentation aligned to the declared target 8.1.9.0.** The documented
   target host was 8.1.8.4; the reported target environment is 8.1.9.0. The minimum supported

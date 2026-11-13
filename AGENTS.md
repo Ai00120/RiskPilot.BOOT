@@ -25,7 +25,7 @@ any source change.
 
 - `src/RiskPilot.Diagnostics.Nt8/Core/` — pure domain, **no NinjaTrader types**.
 - `src/RiskPilot.Diagnostics.Nt8/Core/Run/` — modes, run coordinator, view state (host-free).
-- `src/RiskPilot.Diagnostics.Nt8/Core/Evidence/` — 17-artifact evidence package builder.
+- `src/RiskPilot.Diagnostics.Nt8/Core/Evidence/` — 18-artifact evidence package builder.
 - `src/RiskPilot.Diagnostics.Nt8/Host/` — the **only** layer that touches NinjaTrader types.
 - `src/RiskPilot.Diagnostics.Nt8/Stubs/` — offline compile-time stubs (`#if USE_STUBS` only).
 - `tests/RiskPilot.Diagnostics.Nt8.Tests/` — xUnit tests.
@@ -80,7 +80,7 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   window opens is still reflected.
 - Cancel is polled by the engine between modules via `Func<bool> shouldStop`; a cancelled run
   never writes an evidence package.
-- `EvidencePackageBuilder.Build` is pure (no host/FS/clock). `VerifyIntegrity` checks all 17
+- `EvidencePackageBuilder.Build` is pure (no host/FS/clock). `VerifyIntegrity` checks all 18
   artifacts + SHA-256 before `WriteEvidencePackage` writes anything.
 - In the manifest, `MaskedRef` is **always** a synthetic `account#<hash>` token, never a raw ref.
 - `EvidencePackage.IsSecretFree` skips `manifest.json` (dates/hashes trip the digit-run rule);
@@ -424,6 +424,40 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   machine check that stops a future doc/probe edit from silently re-introducing version drift.
 - The SAMPLE generator derives each finding's severity from the real `DiagnosticResult` (matching
   `DiagnosticEngine`), so a sample `INCONCLUSIVE` is `MEDIUM`, not a hardcoded `INFO`.
+
+## Stage 3 / Stage 4 coverage audit (Prompt 11)
+
+- The Stage 3/4 traceability matrix lives in `Core/Run/Stage34Coverage.cs`: `Stage34CoverageCatalog.All()`
+  is the single source of truth (requirement id, stage, BOT ref, BOOT module(s) + exact check id(s),
+  host data, method, evidence class, scope, `requiresRealHost`/`requiresRithmicSimAccount`, test
+  coverage, limitation). `Stage34CoverageEvaluator.Evaluate(result)` derives the per-run status from
+  the results the run actually produced; the readable form is `docs/STAGE34_COVERAGE.md`.
+- The catalog was reconciled against the authoritative RiskPilot.BOT Stage 3/4 records on `main`
+  (`G3_STAGE3_STAGE4_ARCHITECTURE_CONTRACT.md`, `DECISION_LOG.md`, the D-031-2/R1, D-036/D-073,
+  D-078/D-080, D-085, D-095 and D-096 owner decisions). Every runtime requirement names the BOOT
+  test(s) that exercise its backing check(s) (`TestCoverage`); a source-only requirement has none.
+  `Stage34CoverageTests` fails if a runtime requirement loses its test coverage or if one of the
+  traced requirements (S3-D022-VERSION-CORRELATION, S3-NO-INVENTED-DATA, S4-ACCOUNT-STATE-UNBYPASSABLE,
+  S4-DRAWDOWN-CONTINUITY, S34-THREAD-SAFETY, ID-CONTRACT-EXPIRY, ID-PLATFORM) is dropped.
+- Coverage status is **derived, never asserted**: `VERIFIED` only when **every** backing check ran and
+  PASSed; a missing backing check ⇒ `INCONCLUSIVE` (never PASS); a requirement with no runtime host API
+  ⇒ `SOURCE_ONLY`. The artifact always carries a `statement` that BOOT does **not** fully validate
+  Stage 3 or Stage 4.
+- The matrix is exported as the **18th artifact** `stage34-coverage.json` (was 17). `EvidencePackageCatalog`
+  is still the single source of truth for the artifact list; the manifest lists 17 files (all but
+  `manifest.json`). `summary.html` gets a short coverage table, `full-report.html` the full matrix.
+- **Never put a raw identity literal in `Stage34Coverage.cs`** (or any production source outside
+  `Core/Identity/AccountIdentityVerifier.cs`): the static safety scan fails on a leaked `SimRP.BOT`.
+  Describe the identity generically instead.
+- `M4.ES_PRODUCT_SPEC` is the new check. It proves the loaded ES instrument's **economics**
+  (point value 50 / tick size 0.25 / derived tick value 12.50 / USD) against
+  `ExpectedEsProductSpecification` (published CME contract facts with explicit provenance).
+  `M4.INSTRUMENT_IDENTITY` proves *which* instrument; this proves *its economics* (D-095 §4). Wrong
+  ⇒ `FAIL`; missing ⇒ `INCONCLUSIVE`; the host adapter reads `MasterInstrument.*` after the live
+  readiness probe and emits only a synthetic `instrument#<hash>`. The tick value is derived from
+  point value × tick size; a host that exposes no tick value is not failed for it.
+- Tests: `EsProductSpecificationTests`, the M4 ES-economics cases in `HostInstrumentIdentityTests`, and
+  `Stage34CoverageTests`. A green stub run is **not** real-host proof.
 
 ## Reference repo
 

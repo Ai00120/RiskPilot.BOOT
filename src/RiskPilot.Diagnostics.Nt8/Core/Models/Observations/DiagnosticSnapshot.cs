@@ -150,6 +150,15 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         /// </summary>
         public InstrumentIdentityObservation InstrumentIdentity { get; set; }
 
+        /// <summary>
+        /// Observation of the loaded ES instrument's canonical economic specification for M4. It
+        /// carries only the observed economics plus a synthetic instrument reference; a null member
+        /// means the economics could not be observed, which M4 reports as INCONCLUSIVE. This is
+        /// distinct from <see cref="InstrumentIdentity"/>: that proves which instrument, this proves
+        /// its CME ES economics (point value, tick size, derived tick value, currency).
+        /// </summary>
+        public EsProductSpecificationObservation EsProductSpecification { get; set; }
+
         public DomMarketDataObservation DomMarketData { get; set; }
 
         public TradeDeltaObservation TradeDelta { get; set; }

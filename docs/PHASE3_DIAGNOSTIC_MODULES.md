@@ -244,6 +244,7 @@ mode `Simulation`، currency `USD`.
 | Check | معنا |
 |---|---|
 | `M4.INSTRUMENT_IDENTITY` | تطابق هویت واقعی instrument انتخاب‌شده با ES/CME (PASS/FAIL/INCONCLUSIVE) |
+| `M4.ES_PRODUCT_SPEC` | تطابق اقتصاد محصول ES با مشخصات کانونیکال CME (PointValue=50، TickSize=0.25، TickValue=12.50، USD) — D-095 §4 |
 | `M4.HOST_METADATA` | Name, Contract/Expiry, Exchange, Tick Size/Value, Currency |
 | `M4.FIELD_METADATA` | کامل‌بودن فیلدهای Master Instrument |
 | `M4.D096_ROUTE_CANDIDATE` | کاندید مسیر Globex + Rithmic-only |
