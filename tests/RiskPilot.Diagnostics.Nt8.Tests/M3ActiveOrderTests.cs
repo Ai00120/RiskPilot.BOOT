@@ -101,6 +101,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             var result = ActiveCheck(new OrderLifecycleObservation
             {
                 OrderCollectionObservable = true,
+                TargetAccountVerified = true,
                 AccountCount = 1,
                 OrderSnapshotCount = 0
             });
@@ -118,6 +119,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             var result = ActiveCheck(new OrderLifecycleObservation
             {
                 OrderCollectionObservable = true,
+                TargetAccountVerified = true,
                 AccountCount = 1,
                 OrderSnapshotCount = 1,
                 ActiveOrderCount = 1
@@ -135,6 +137,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             var result = ActiveCheck(new OrderLifecycleObservation
             {
                 OrderCollectionObservable = true,
+                TargetAccountVerified = true,
                 AccountCount = 2,
                 OrderSnapshotCount = 4,
                 ActiveOrderCount = 4
@@ -152,6 +155,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             var result = ActiveCheck(new OrderLifecycleObservation
             {
                 OrderCollectionObservable = true,
+                TargetAccountVerified = true,
                 AccountCount = 1,
                 OrderSnapshotCount = 3,
                 ActiveOrderCount = 0,
@@ -171,6 +175,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             var result = ActiveCheck(new OrderLifecycleObservation
             {
                 OrderCollectionObservable = true,
+                TargetAccountVerified = true,
                 AccountCount = 1,
                 OrderSnapshotCount = 2,
                 ActiveOrderCount = 0,
@@ -190,6 +195,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             var result = ActiveCheck(new OrderLifecycleObservation
             {
                 OrderCollectionObservable = true,
+                TargetAccountVerified = true,
                 AccountCount = 1,
                 OrderSnapshotCount = 1,
                 ActiveOrderCount = 0,
@@ -209,6 +215,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             var result = ActiveCheck(new OrderLifecycleObservation
             {
                 OrderCollectionObservable = true,
+                TargetAccountVerified = true,
                 AccountCount = 1,
                 OrderSnapshotCount = 6,
                 ActiveOrderCount = 2,
@@ -233,6 +240,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             var result = ActiveCheck(new OrderLifecycleObservation
             {
                 OrderCollectionObservable = false,
+                TargetAccountVerified = true,
                 AccountCount = 1
             });
 
@@ -246,6 +254,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             var result = ActiveCheck(new OrderLifecycleObservation
             {
                 OrderCollectionObservable = true,
+                TargetAccountVerified = true,
                 AccountCount = 1,
                 OrderSnapshotCount = 1,
                 ActiveOrderCount = 1,
@@ -262,6 +271,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             var result = ActiveCheck(new OrderLifecycleObservation
             {
                 OrderCollectionObservable = true,
+                TargetAccountVerified = true,
                 AccountCount = 1,
                 OrderSnapshotCount = 1,
                 UnclassifiedOrderCount = 1
@@ -322,7 +332,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
             var host = new DiagnosticSnapshot
             {
-                OrderLifecycle = new OrderLifecycleObservation { OrderCollectionObservable = true, AccountCount = 1 }
+                OrderLifecycle = new OrderLifecycleObservation { OrderCollectionObservable = true, AccountCount = 1, TargetAccountVerified = true }
             };
             var merged = SnapshotAssembler.Assemble(host, session);
 
@@ -347,13 +357,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
             private static Account AccountWithOrders(params OrderState[] states)
             {
-                var account = new Account
-                {
-                    Name = "SimTest",
-                    Provider = Provider.Rithmic,
-                    Denomination = Currency.UsDollar
-                };
-
+                var account = VerifiedTargetAccount();
                 var index = 0;
                 foreach (var state in states)
                 {
@@ -366,6 +370,31 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 }
 
                 return account;
+            }
+
+            /// <summary>
+            /// A fully observed, fully matching target account identity, so the M2 identity
+            /// verification passes and the target-only Portfolio access is permitted.
+            /// </summary>
+            private static Account VerifiedTargetAccount()
+            {
+                return new Account
+                {
+                    Name = RiskPilot.Diagnostics.Nt8.Core.Identity.ExpectedAccountIdentity.AccountName,
+                    Provider = Provider.Rithmic,
+                    Denomination = Currency.UsDollar,
+                    Connection = new Connection
+                    {
+                        Status = ConnectionStatus.Connected,
+                        PriceStatus = ConnectionStatus.Connected,
+                        Options = new ConnectOptions
+                        {
+                            Name = RiskPilot.Diagnostics.Nt8.Core.Identity.ExpectedAccountIdentity.ConnectionName,
+                            Provider = Provider.Rithmic,
+                            Mode = Mode.Simulation
+                        }
+                    }
+                };
             }
 
             [Fact]
@@ -549,6 +578,141 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
                     Assert.Single(accounts);
                     Assert.Equal(0, accounts[0].WorkingOrderCount);
+                }
+                finally
+                {
+                    Reset();
+                }
+            }
+
+            // ---------------- Target-only Portfolio access ----------------
+
+            /// <summary>
+            /// A visible account whose Portfolio collections throw on read. Any Portfolio read
+            /// against it fails the test, so it proves the non-target account was never touched.
+            /// </summary>
+            private static Account NonTargetAccount(string name)
+            {
+                var account = VerifiedTargetAccount();
+                account.Name = name;
+                account.ThrowOnOrdersRead = true;
+                account.ThrowOnPositionsRead = true;
+                return account;
+            }
+
+            [Fact]
+            public void Host_MultipleAccounts_ReadsOnlyVerifiedTargetPortfolio()
+            {
+                Reset();
+                try
+                {
+                    // A non-target account first: it throws if its Portfolio is ever read.
+                    Account.All.Add(NonTargetAccount("SimOther"));
+                    Account.All.Add(AccountWithOrders(OrderState.Working, OrderState.PartFilled, OrderState.Filled));
+
+                    var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+
+                    // No throw means the non-target's Positions/Orders were never accessed.
+                    var observation = provider.GetSnapshot().OrderLifecycle;
+                    var accounts = provider.GetAccounts();
+
+                    Assert.True(observation.TargetAccountVerified);
+                    Assert.Equal(1, observation.AccountCount);
+                    Assert.Equal(0, observation.OrderReadFailureCount);
+                    Assert.Equal(2, observation.ActiveOrderCount);
+                    Assert.Equal(3, observation.OrderSnapshotCount);
+
+                    Assert.Single(accounts);
+                    Assert.Equal(2, accounts[0].WorkingOrderCount);
+                }
+                finally
+                {
+                    Reset();
+                }
+            }
+
+            [Fact]
+            public void Host_NoTargetAccount_ReadsNoPortfolioCollection()
+            {
+                Reset();
+                try
+                {
+                    // Only a non-target account is visible; its Portfolio throws if read.
+                    Account.All.Add(NonTargetAccount("SimOther"));
+
+                    var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+
+                    var observation = provider.GetSnapshot().OrderLifecycle;
+                    var accounts = provider.GetAccounts();
+
+                    Assert.False(observation.TargetAccountVerified);
+                    Assert.False(observation.OrderCollectionObservable);
+                    Assert.Equal(0, observation.AccountCount);
+                    Assert.Empty(accounts);
+
+                    // The probe reports the missing verification, never a misleading zero PASS.
+                    var result = ActiveCheck(observation);
+                    Assert.Equal(DiagnosticStatus.INCONCLUSIVE, result.Status);
+                    Assert.Contains("TARGET_ACCOUNT_NOT_VERIFIED", result.ReasonCodes);
+                }
+                finally
+                {
+                    Reset();
+                }
+            }
+
+            [Fact]
+            public void Host_AmbiguousTargetIdentity_ReadsNoPortfolioCollection()
+            {
+                Reset();
+                try
+                {
+                    // Two exact name matches: the identity is ambiguous, so neither is the target.
+                    Account.All.Add(NonTargetAccount("SimOther"));
+                    Account.All.Add(AccountWithOrders(OrderState.Working));
+                    Account.All.Add(AccountWithOrders(OrderState.Working));
+
+                    var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+
+                    var observation = provider.GetSnapshot().OrderLifecycle;
+                    var accounts = provider.GetAccounts();
+
+                    Assert.False(observation.TargetAccountVerified);
+                    Assert.False(observation.OrderCollectionObservable);
+                    Assert.Empty(accounts);
+
+                    var result = ActiveCheck(observation);
+                    Assert.Equal(DiagnosticStatus.INCONCLUSIVE, result.Status);
+                    Assert.Contains("TARGET_ACCOUNT_NOT_VERIFIED", result.ReasonCodes);
+                }
+                finally
+                {
+                    Reset();
+                }
+            }
+
+            [Fact]
+            public void Host_UnverifiedTargetIdentity_ReadsNoPortfolioCollection()
+            {
+                Reset();
+                try
+                {
+                    // The name matches but the identity is not fully verified (wrong connection
+                    // name), so the target is unverified and its Portfolio must not be read.
+                    var account = AccountWithOrders(OrderState.Working);
+                    account.Connection.Options.Name = "Other Rithmic";
+                    account.ThrowOnOrdersRead = true;
+                    account.ThrowOnPositionsRead = true;
+                    Account.All.Add(account);
+
+                    var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+
+                    var observation = provider.GetSnapshot().OrderLifecycle;
+                    var accounts = provider.GetAccounts();
+
+                    Assert.False(observation.TargetAccountVerified);
+                    Assert.False(observation.OrderCollectionObservable);
+                    Assert.Empty(accounts);
                 }
                 finally
                 {

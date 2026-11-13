@@ -9,6 +9,7 @@ using RiskPilot.Diagnostics.Nt8.Core.Instruments;
 using RiskPilot.Diagnostics.Nt8.Core.Models;
 using RiskPilot.Diagnostics.Nt8.Core.Models.Observations;
 using RiskPilot.Diagnostics.Nt8.Core.Security;
+using RiskPilot.Diagnostics.Nt8.Core.Status;
 
 namespace RiskPilot.Diagnostics.Nt8.Host
 {
@@ -201,37 +202,37 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             };
         }
 
+        /// <summary>
+        /// Read-only snapshot of the verified target account. The Portfolio collections
+        /// (<c>Account.Positions</c> and <c>Account.Orders</c>) are read ONLY from the single
+        /// account the M2 identity verification proved to be the target, so another visible
+        /// account's positions or working orders can never enter the target's evidence.
+        /// <para>
+        /// When no target is verified (missing, ambiguous, duplicated or unobservable) no
+        /// Portfolio collection is read at all and the snapshot is empty — never a fabricated
+        /// zero for an account the tool was not authorized to inspect.
+        /// </para>
+        /// </summary>
         public IReadOnlyList<AccountRecord> GetAccounts()
         {
             var list = new List<AccountRecord>();
-            var accounts = Account.All;
-            if (accounts == null)
+
+            if (!TryGetVerifiedTargetAccount(out var target) || target == null)
             {
                 return list;
             }
 
-            lock (accounts)
+            list.Add(new AccountRecord
             {
-                foreach (var account in accounts)
-                {
-                    if (account == null)
-                    {
-                        continue;
-                    }
-
-                    list.Add(new AccountRecord
-                    {
-                        AccountRef = SyntheticRef.For("account", account.Name),
-                        AccountClass = ClassifyAccount(account.Name),
-                        Denomination = SafeString(() => account.Denomination.ToString()),
-                        ProviderName = SafeString(() => account.Provider.ToString()),
-                        PositionCount = account.Positions == null ? 0 : account.Positions.Count,
-                        WorkingOrderCount = CountActiveOrders(account),
-                        ExecutionsInScope = false,
-                        IngestedAtUtc = DateTime.UtcNow
-                    });
-                }
-            }
+                AccountRef = SyntheticRef.For("account", target.Name),
+                AccountClass = ClassifyAccount(target.Name),
+                Denomination = SafeString(() => target.Denomination.ToString()),
+                ProviderName = SafeString(() => target.Provider.ToString()),
+                PositionCount = ReadPositionCount(target),
+                WorkingOrderCount = CountActiveOrders(target),
+                ExecutionsInScope = false,
+                IngestedAtUtc = DateTime.UtcNow
+            });
 
             return list;
         }
@@ -579,6 +580,33 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         }
 
         /// <summary>
+        /// Resolves the single account whose full identity M2 has verified: exactly one exact
+        /// name match AND a passing <see cref="AccountIdentityVerifier"/> verdict (account
+        /// provider, connection, provider, mode, currency and connection status all observed and
+        /// matching). This reuses the existing M2 verification result rather than introducing a
+        /// second selection mechanism. Returns false — and no account — when the target is
+        /// missing, ambiguous, duplicated or not verified, so callers never read a Portfolio
+        /// collection from an unverified account.
+        /// </summary>
+        private bool TryGetVerifiedTargetAccount(out Account target)
+        {
+            target = null;
+            if (!TryGetUniqueTargetAccount(out var candidate) || candidate == null)
+            {
+                return false;
+            }
+
+            var verdict = AccountIdentityVerifier.Evaluate(BuildAccountIdentityObservation());
+            if (verdict.Status != DiagnosticStatus.PASS)
+            {
+                return false;
+            }
+
+            target = candidate;
+            return true;
+        }
+
+        /// <summary>
         /// Builds the privacy-preserving observation that proves the target account is bound to
         /// the required connection and provider. It reads the target account's own
         /// <c>Account.Connection</c> (never the first entry of <c>Connection.Connections</c>) and
@@ -725,81 +753,93 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             return list;
         }
 
+        /// <summary>
+        /// Reads the order-lifecycle surface from the SINGLE verified target account only. The
+        /// target is the account M2's identity verification proved (exact name plus provider,
+        /// connection, provider, mode, currency and connection status all observed and matching);
+        /// it is never chosen here. No other visible account's <c>Account.Orders</c> collection is
+        /// enumerated, so another account's orders can never enter the target's evidence.
+        /// <para>
+        /// When no target is verified (missing, ambiguous, duplicated or unobservable) no order
+        /// collection is read: the observation records that the target was not verified so the
+        /// module reports INCONCLUSIVE, never a misleading zero.
+        /// </para>
+        /// </summary>
         private OrderLifecycleObservation BuildOrderLifecycleObservation()
         {
             var observation = new OrderLifecycleObservation();
-            var accounts = Account.All;
-            if (accounts == null)
+
+            if (Account.All == null)
             {
                 observation.OrderSurfaceObservable = false;
                 return observation;
             }
 
-            lock (accounts)
+            if (!TryGetVerifiedTargetAccount(out var target) || target == null)
             {
-                foreach (var account in accounts)
+                // No verified target account: read no Portfolio collection at all. The module
+                // stays fail-closed on the missing verification rather than on an empty surface.
+                observation.TargetAccountVerified = false;
+                observation.OrderSurfaceObservable = false;
+                observation.OrderCollectionObservable = false;
+                return observation;
+            }
+
+            observation.TargetAccountVerified = true;
+            observation.AccountCount = 1;
+
+            // Read the target account's own order collection, never a global one. A collection
+            // that could not be read is recorded as a failure rather than silently
+            // treated as empty: an unreadable collection could hide an active order, so
+            // the active-order total must stay untrustworthy (fail closed).
+            Collection<Order> orders;
+            try
+            {
+                orders = target.Orders;
+            }
+            catch (Exception)
+            {
+                observation.OrderReadFailureCount++;
+                return observation;
+            }
+
+            if (orders == null)
+            {
+                observation.OrderReadFailureCount++;
+                return observation;
+            }
+
+            // The collection was readable this pass, even when it is empty. An empty
+            // readable collection is a real observation ("no active orders"), not an
+            // unobservable surface.
+            observation.OrderCollectionObservable = true;
+
+            try
+            {
+                foreach (var order in orders)
                 {
-                    if (account == null)
-                    {
-                        continue;
-                    }
-
-                    observation.AccountCount++;
-
-                    // Read the account's own order collection, never a global one. A collection
-                    // that could not be read is recorded as a failure rather than silently
-                    // treated as empty: an unreadable collection could hide an active order, so
-                    // the active-order total must stay untrustworthy (fail closed).
-                    Collection<Order> orders;
-                    try
-                    {
-                        orders = account.Orders;
-                    }
-                    catch (Exception)
+                    if (order == null)
                     {
                         observation.OrderReadFailureCount++;
                         continue;
                     }
 
-                    if (orders == null)
-                    {
-                        observation.OrderReadFailureCount++;
-                        continue;
-                    }
-
-                    // The collection was readable this pass, even when it is empty. An empty
-                    // readable collection is a real observation ("no active orders"), not an
-                    // unobservable surface.
-                    observation.OrderCollectionObservable = true;
-
                     try
                     {
-                        foreach (var order in orders)
-                        {
-                            if (order == null)
-                            {
-                                observation.OrderReadFailureCount++;
-                                continue;
-                            }
-
-                            try
-                            {
-                                CountOrder(observation, order);
-                            }
-                            catch (Exception)
-                            {
-                                observation.OrderReadFailureCount++;
-                            }
-                        }
+                        CountOrder(observation, order);
                     }
                     catch (Exception)
                     {
-                        // The host collection changed while it was being enumerated (a live
-                        // Account.Orders is updated off this thread). An order could have been
-                        // skipped, so the active-order total must stay untrustworthy.
                         observation.OrderReadFailureCount++;
                     }
                 }
+            }
+            catch (Exception)
+            {
+                // The host collection changed while it was being enumerated (a live
+                // Account.Orders is updated off this thread). An order could have been
+                // skipped, so the active-order total must stay untrustworthy.
+                observation.OrderReadFailureCount++;
             }
 
             return observation;
@@ -865,6 +905,30 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 default:
                     observation.UnclassifiedOrderCount++;
                     break;
+            }
+        }
+
+        /// <summary>
+        /// Reads the target account's own read-only <c>Account.Positions</c> collection and
+        /// returns its count. The collection is only ever the verified target's, so another
+        /// account's positions can never be reported as the target's. An unreadable collection
+        /// returns zero; M3 independently records order-read failures and stays fail-closed.
+        /// </summary>
+        private static int ReadPositionCount(Account account)
+        {
+            if (account == null)
+            {
+                return 0;
+            }
+
+            try
+            {
+                var positions = account.Positions;
+                return positions == null ? 0 : positions.Count;
+            }
+            catch (Exception)
+            {
+                return 0;
             }
         }
 

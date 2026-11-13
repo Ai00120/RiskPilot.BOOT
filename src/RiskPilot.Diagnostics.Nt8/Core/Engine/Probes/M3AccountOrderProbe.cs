@@ -55,6 +55,23 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
 
         private DiagnosticResult BuildAccountSurfaceCheck(OrderLifecycleObservation observation, string correlation, DateTime now)
         {
+            // No verified target account means no Portfolio collection was read. Report the
+            // missing verification explicitly so the reason is not confused with an empty but
+            // observed surface. Fail closed: never a PASS.
+            if (!observation.TargetAccountVerified)
+            {
+                return DiagnosticResult
+                    .Inconclusive(ModuleId, "M3.ACCOUNT_SURFACE", correlation, now)
+                    .WithFindingId("M3.ACCOUNT_SURFACE")
+                    .WithReasonCode("TARGET_ACCOUNT_NOT_VERIFIED")
+                    .WithObservation("NOT OBSERVED: no verified target account, so no Portfolio collection was read.")
+                    .WithSource(FindingFactory.SourcePublicApi)
+                    .WithMethod("Portfolio access is limited to the single M2-verified target account; no collection was read.")
+                    .WithLimitation("Without exactly one verified target account the order/position surface is not observed.")
+                    .WithNextAction("Confirm the running account is exactly the permanent target identity, then re-run.")
+                    .WithEvidence(DiagnosticEvidence.Unobservable(FindingFactory.SourcePublicApi, "TARGET_ACCOUNT_NOT_VERIFIED", now));
+            }
+
             if (!observation.OrderSurfaceObservable)
             {
                 return FindingFactory.Unobservable(ModuleId, "M3.ACCOUNT_SURFACE", correlation, now,
@@ -111,6 +128,23 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "orderSnapshots=" + observation.OrderSnapshotCount, now),
                 DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "orderReadFailures=" + observation.OrderReadFailureCount, now)
             };
+
+            // No verified target account: no Portfolio collection was read, so the active-order
+            // count cannot be observed. Fail closed with the missing-verification reason rather
+            // than reporting an empty surface.
+            if (!observation.TargetAccountVerified)
+            {
+                return DiagnosticResult
+                    .Inconclusive(ModuleId, "M3.ACTIVE_ORDERS", correlation, now)
+                    .WithFindingId("M3.ACTIVE_ORDERS")
+                    .WithReasonCode("TARGET_ACCOUNT_NOT_VERIFIED")
+                    .WithObservation("NOT OBSERVED: no verified target account, so no Portfolio collection was read.")
+                    .WithSource(FindingFactory.SourcePublicApi)
+                    .WithMethod("Active orders are counted only from the single M2-verified target account's Account.Orders.")
+                    .WithLimitation("Without exactly one verified target account the active-order count cannot be trusted.")
+                    .WithNextAction("Confirm the running account is exactly the permanent target identity, then re-run.")
+                    .WithEvidence(DiagnosticEvidence.Unobservable(FindingFactory.SourcePublicApi, "TARGET_ACCOUNT_NOT_VERIFIED", now));
+            }
 
             // No readable order collection: the active-order count cannot be observed at all.
             if (!observation.OrderCollectionObservable)
