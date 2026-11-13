@@ -114,8 +114,9 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - Every package carries `evidenceProvenance` (`RUNTIME`/`SAMPLE`); a `SAMPLE` package also shows a
   banner in `summary.html`. Never present a `SAMPLE` package as a runtime result.
 - All `DateTime`/numeric `ToString` on evidence must use `CultureInfo.InvariantCulture`.
-- The `UseStubs=false` configuration references five NT8 assemblies (Core, Cbi, Data,
-  NinjaScript, Gui). The real-host build is not verifiable offline; never claim it is.
+- The `UseStubs=false` configuration references the two real NT8 assemblies (`NinjaTrader.Core`
+  and `NinjaTrader.Gui`) plus WPF (`PresentationCore`, `PresentationFramework`, `System.Xaml`,
+  `WindowsBase`). The real-host build is not verifiable offline; never claim it is.
 
 ## Exact account identity notes (P16 / D-095 / D-096)
 

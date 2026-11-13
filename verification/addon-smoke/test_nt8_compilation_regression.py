@@ -151,6 +151,36 @@ def check_standalone_metadata_preserved() -> list[str]:
     return ["standalone AssemblyInfo.cs + GenerateAssemblyInfo=false preserved"]
 
 
+def check_real_host_project_references() -> list[str]:
+    import xml.etree.ElementTree as ET
+
+    root = ET.fromstring(read(CSPROJ))
+    real_refs = set()
+    for group in root.findall("ItemGroup"):
+        if group.attrib.get("Condition") == "'$(UseStubs)' != 'true'":
+            for ref in group.findall("Reference"):
+                inc = ref.attrib.get("Include", "").strip()
+                if inc:
+                    real_refs.add(inc)
+
+    for required in (
+        "PresentationCore",
+        "PresentationFramework",
+        "System.Xaml",
+        "WindowsBase",
+        "NinjaTrader.Core",
+        "NinjaTrader.Gui",
+    ):
+        require(required in real_refs, f"UseStubs != true must reference {required}")
+
+    for nonexistent in ("NinjaTrader.Cbi", "NinjaTrader.Data", "NinjaTrader.NinjaScript"):
+        require(nonexistent not in real_refs,
+                f"UseStubs != true must not reference nonexistent NT8 assembly {nonexistent}.dll "
+                "(those namespaces live in NinjaTrader.Core.dll)")
+
+    return ["real-host .csproj references include System.Xaml + NinjaTrader.{Core,Gui} only"]
+
+
 def check_install_documentation() -> list[str]:
     install = read(REPO / "docs" / "INSTALL.md")
     readme = read(REPO / "README.md")
@@ -200,6 +230,7 @@ def main() -> int:
         check_packager_rejects_source_assembly_info,
         check_packager_rejects_destination_assembly_info,
         check_standalone_metadata_preserved,
+        check_real_host_project_references,
         check_install_documentation,
         check_currency_api_and_usd_only_path,
     )
