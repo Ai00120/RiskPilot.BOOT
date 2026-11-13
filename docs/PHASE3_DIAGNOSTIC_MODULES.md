@@ -188,6 +188,7 @@ mode `Simulation`، currency `USD`.
 | Check | معنا |
 |---|---|
 | `M3.ACCOUNT_SURFACE` | دسترسی به `Account.Orders` |
+| `M3.ACTIVE_ORDERS` | شمارش دقیق سفارش‌های **فعال** از حالت واقعی `Order.OrderState` |
 | `M3.ORDERID_CLASSIFICATION` | طبقه‌بندی OrderId |
 | `M3.CORRELATION` | ارتباط OrderId ↔ Execution |
 | `M3.F05_ORDER_FILL_CONTINUITY` | **Finding ID = `F-05`** |
@@ -196,6 +197,13 @@ mode `Simulation`، currency `USD`.
 
 **طبقه‌بندی OrderId:** `NULL` / `EMPTY` / `WHITESPACE` / `VALID` / `UNAVAILABLE`
 (`M3OrderLifecycleConsumer.Classify`). `EMPTY` و `WHITESPACE` → `FAIL`.
+
+**سفارش‌های فعال (`M3.ACTIVE_ORDERS`):** شمارش از حالت واقعی هر `Order.OrderState` مشتق می‌شود
+(`Core/Engine/OrderStateClassifier.cs`): `Initialized`/`Submitted`/`Accepted`/`Working`/`PartFilled`/`ChangeSubmitted`
+= **فعال**؛ `Filled` = **تکمیل‌شده**؛ `Cancelled` = **لغوشده**؛ `Rejected` = **ردشده**. سفارش‌های
+پایانی هرگز به‌عنوان فعال شمرده نمی‌شوند. بدون مجموعهٔ سفارش خواندنی، یا با خطای خواندن/حالت
+طبقه‌بندی‌نشده → `INCONCLUSIVE` (fail-closed)، هرگز صفر گمراه‌کننده. `workingOrderCount` در
+`accounts.json` هم از همین شمارش فعال پر می‌شود.
 
 **Correlation:** هر snapshot/رویداد با `CorrelationId`، `OrderRef` (ماسک‌شده با `SyntheticRef`)،
 `Source` و `IngestedAtUtc` ثبت می‌شود. **هیچ ارتباطی بدون مدرک قطعی حدس زده نمی‌شود**؛ اگر

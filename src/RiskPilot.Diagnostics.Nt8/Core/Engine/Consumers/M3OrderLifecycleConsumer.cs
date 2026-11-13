@@ -33,6 +33,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Consumers
             {
                 counters.Increment(RuntimeCounterKeys.OrderSnapshot);
                 ClassifyOrderId(counters, order.OrderRef, order.State);
+                ClassifyActivity(counters, order.State);
                 return;
             }
 
@@ -76,6 +77,34 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Consumers
         }
 
         /// <summary>
+        /// Counts the order's activity class so an active-order total can be derived from real
+        /// ingested records. It uses the shared <see cref="OrderStateClassifier"/> so the ingest
+        /// path and the host adapter agree, and it counts an unclassifiable state as
+        /// <c>order.unclassified</c> rather than guessing it into an active or terminal bucket.
+        /// </summary>
+        private static void ClassifyActivity(RuntimeCounters counters, OrderLifecycleState state)
+        {
+            switch (OrderStateClassifier.Classify(state))
+            {
+                case OrderActivityClass.Active:
+                    counters.Increment(RuntimeCounterKeys.OrderActive);
+                    break;
+                case OrderActivityClass.Completed:
+                    counters.Increment(RuntimeCounterKeys.OrderCompleted);
+                    break;
+                case OrderActivityClass.Cancelled:
+                    counters.Increment(RuntimeCounterKeys.OrderCancelled);
+                    break;
+                case OrderActivityClass.Rejected:
+                    counters.Increment(RuntimeCounterKeys.OrderRejected);
+                    break;
+                default:
+                    counters.Increment(RuntimeCounterKeys.OrderUnclassified);
+                    break;
+            }
+        }
+
+        /// <summary>
         /// Classifies an order id. A null value is NULL, an empty value is EMPTY, a
         /// whitespace-only value is WHITESPACE and anything else is VALID. The categories are
         /// deliberately distinct so an investigation can tell them apart.
@@ -105,9 +134,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Consumers
 
         private static bool IsTerminal(OrderLifecycleState state)
         {
-            return state == OrderLifecycleState.Filled
-                || state == OrderLifecycleState.Cancelled
-                || state == OrderLifecycleState.Rejected;
+            return OrderStateClassifier.IsTerminal(state);
         }
     }
 }

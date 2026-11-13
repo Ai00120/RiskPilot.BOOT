@@ -131,6 +131,7 @@
     <Compile Include="Core\Engine\AttestationReasonCodes.cs" />
     <Compile Include="Core\Engine\StrategyReasonCodes.cs" />
     <Compile Include="Core\Engine\SnapshotAssembler.cs" />
+    <Compile Include="Core\Engine\OrderStateClassifier.cs" />
     <Compile Include="Core\Engine\TradeDirectionClassifier.cs" />
     <Compile Include="Core\Engine\EnrichedDataProvider.cs" />
     <Compile Include="Core\Engine\Probes\M1EnvironmentProbe.cs" />

@@ -11,6 +11,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ### Fixed
 
+- **Active orders were reported as zero (misleading diagnostic).** `accounts.json` always carried
+  `workingOrderCount: 0`, and the M3 lifecycle observation never distinguished a live order from a
+  finished one, so an account with working orders could be reported as having none. The host
+  adapter now reads each account's real `Account.Orders` and classifies every `Order.OrderState`
+  through the new host-free `Core/Engine/OrderStateClassifier.cs`: `Initialized`/`Submitted`/
+  `Accepted`/`Working`/`PartFilled`/`ChangeSubmitted` are **active**; `Filled` is **completed**;
+  `Cancelled` is **cancelled**; `Rejected` is **rejected**. A terminal order is never counted as
+  active, and `workingOrderCount` is now the real active count. The new `M3.ACTIVE_ORDERS` check
+  reports the exact active count with the terminal breakdown as corroborating evidence; with no
+  readable `Account.Orders` collection, an unreadable order, or an unclassifiable state it stays
+  `INCONCLUSIVE` (fail-closed) rather than publishing a misleading zero. The tool only ever reads
+  the order collection — it never submits, changes or cancels an order.
 - **M6 reported every real trade print as an unclassified trade (misleading diagnostic).** The
   host adapter copied the Level I `Last` event into a `MarketDataRecord` but never classified its
   direction, so on a real Rithmic/ES feed every observed print was counted `Unknown` and

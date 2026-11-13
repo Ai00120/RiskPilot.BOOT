@@ -43,6 +43,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             }
 
             results.Add(BuildAccountSurfaceCheck(observation, correlation, now));
+            results.Add(BuildActiveOrdersCheck(observation, correlation, now));
             results.Add(BuildOrderIdClassificationCheck(observation, correlation, now));
             results.Add(BuildCorrelationCheck(observation, correlation, now));
             results.Add(BuildTerminalRetentionCheck(observation, correlation, now));
@@ -79,6 +80,89 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "orderSnapshots=" + observation.OrderSnapshotCount, now),
                     DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "executionUpdates=" + observation.ExecutionUpdateCount, now),
                     DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "executionsInScope=" + observation.ExecutionsInScope, now));
+        }
+
+        /// <summary>
+        /// Reports the active (still live) order count derived from real host order states.
+        /// <para>
+        /// Fail-closed rules: with no readable order collection the count is unobservable;
+        /// a positive read-failure count or an unclassifiable state makes the total
+        /// untrustworthy; and a positive terminal (completed / cancelled / rejected) count is
+        /// reported as evidence but never added to the active total. Only a fully observed,
+        /// fully classified collection yields a trustworthy active-order count.
+        /// </para>
+        /// </summary>
+        private DiagnosticResult BuildActiveOrdersCheck(OrderLifecycleObservation observation, string correlation, DateTime now)
+        {
+            var active = observation.ActiveOrderCount;
+            var completed = observation.CompletedOrderCount;
+            var cancelled = observation.CancelledOrderCount;
+            var rejected = observation.RejectedOrderCount;
+            var unclassified = observation.UnclassifiedOrderCount;
+            var terminal = completed + cancelled + rejected;
+
+            var evidence = new[]
+            {
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "activeOrders=" + active, now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "completedOrders=" + completed, now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "cancelledOrders=" + cancelled, now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "rejectedOrders=" + rejected, now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "unclassifiedOrders=" + unclassified, now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "orderSnapshots=" + observation.OrderSnapshotCount, now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "orderReadFailures=" + observation.OrderReadFailureCount, now)
+            };
+
+            // No readable order collection: the active-order count cannot be observed at all.
+            if (!observation.OrderCollectionObservable)
+            {
+                return DiagnosticResult
+                    .Inconclusive(ModuleId, "M3.ACTIVE_ORDERS", correlation, now)
+                    .WithFindingId("M3.ACTIVE_ORDERS")
+                    .WithReasonCode("ORDER_COLLECTION_UNOBSERVABLE")
+                    .WithObservation("NOT OBSERVED: no account's Account.Orders collection was readable this pass.")
+                    .WithSource(FindingFactory.SourcePublicApi)
+                    .WithMethod("Counted active orders (Working / Accepted / PartFilled / pending submit) from Account.Orders.")
+                    .WithLimitation("Without a readable order collection the active-order count cannot be trusted.")
+                    .WithNextAction("Connect a SIM account and re-run so Account.Orders is readable.")
+                    .WithEvidence(DiagnosticEvidence.Unobservable(FindingFactory.SourcePublicApi, "ORDER_COLLECTION_UNOBSERVABLE", now));
+            }
+
+            // A collection that could not be read, or an order whose state could not be
+            // classified, could hide or misreport an active order. Stay fail-closed rather than
+            // publishing a count that might be wrong.
+            if (observation.OrderReadFailureCount > 0 || unclassified > 0)
+            {
+                return DiagnosticResult
+                    .Inconclusive(ModuleId, "M3.ACTIVE_ORDERS", correlation, now)
+                    .WithFindingId("M3.ACTIVE_ORDERS")
+                    .WithReasonCode("ACTIVE_ORDER_COUNT_UNRELIABLE",
+                        "READ_FAILURES=" + observation.OrderReadFailureCount,
+                        "UNCLASSIFIED=" + unclassified)
+                    .WithObservation("activeOrders=" + active + " readFailures=" + observation.OrderReadFailureCount + " unclassified=" + unclassified)
+                    .WithSource(FindingFactory.SourcePublicApi)
+                    .WithMethod("Counted active orders (Working / Accepted / PartFilled / pending submit) from Account.Orders.")
+                    .WithLimitation("An unreadable order collection or an unclassifiable order state means an active order could be missing from the count.")
+                    .WithNextAction("Re-run once every account's order collection is readable and every order state is classifiable.")
+                    .WithEvidence(evidence);
+            }
+
+            // Fully observed and fully classified. Report the exact active count, with the
+            // terminal breakdown as corroborating evidence (never folded into the active total).
+            return DiagnosticResult
+                .Pass(ModuleId, "M3.ACTIVE_ORDERS", correlation, now)
+                .WithFindingId("M3.ACTIVE_ORDERS")
+                .WithReasonCode("ACTIVE_ORDERS_OBSERVED",
+                    "ACTIVE=" + active,
+                    "COMPLETED=" + completed,
+                    "CANCELLED=" + cancelled,
+                    "REJECTED=" + rejected,
+                    "TERMINAL=" + terminal)
+                .WithObservation("activeOrders=" + active + " completed=" + completed + " cancelled=" + cancelled + " rejected=" + rejected)
+                .WithSource(FindingFactory.SourcePublicApi)
+                .WithMethod("Counted active orders (Working / Accepted / PartFilled / pending submit) from each account's Account.Orders; terminal orders are counted separately and never as active.")
+                .WithLimitation("The count reflects only orders present in Account.Orders at the moment of the snapshot; NinjaTrader may retain or remove terminal orders over time.")
+                .WithNextAction("None.")
+                .WithEvidence(evidence);
         }
 
         private DiagnosticResult BuildOrderIdClassificationCheck(OrderLifecycleObservation observation, string correlation, DateTime now)

@@ -107,6 +107,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Session
         public const string OrderIdValid = "orderid.valid";
         public const string OrderIdUnavailable = "orderid.unavailable";
         public const string OrderTerminalRetained = "order.terminal.retained";
+        public const string OrderActive = "order.active";
+        public const string OrderCompleted = "order.completed";
+        public const string OrderCancelled = "order.cancelled";
+        public const string OrderRejected = "order.rejected";
+        public const string OrderUnclassified = "order.unclassified";
         public const string OrderUnmatchedTerminal = "order.unmatched.terminal";
         public const string ExecutionUnmatched = "execution.unmatched";
 

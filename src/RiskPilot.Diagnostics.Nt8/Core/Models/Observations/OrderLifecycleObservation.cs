@@ -69,6 +69,41 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         /// <summary>Number of terminal-state orders still retained in the snapshot.</summary>
         public int TerminalStateRetainedCount { get; set; }
 
+        /// <summary>
+        /// Number of orders whose state classifies as active (still live at the host):
+        /// working, accepted, partially filled, or a pending submit. A completed, cancelled
+        /// or rejected order is never counted here.
+        /// </summary>
+        public int ActiveOrderCount { get; set; }
+
+        /// <summary>Number of orders in the Filled (completed) state.</summary>
+        public int CompletedOrderCount { get; set; }
+
+        /// <summary>Number of orders in the Cancelled state.</summary>
+        public int CancelledOrderCount { get; set; }
+
+        /// <summary>Number of orders in the Rejected state.</summary>
+        public int RejectedOrderCount { get; set; }
+
+        /// <summary>
+        /// Number of observed orders whose state could not be classified into an activity class.
+        /// A positive count makes an active-order total unreliable (fail closed).
+        /// </summary>
+        public int UnclassifiedOrderCount { get; set; }
+
+        /// <summary>
+        /// True when at least one account's <c>Account.Orders</c> collection was readable this
+        /// pass (even when it was empty). False means the active-order count is unobservable.
+        /// </summary>
+        public bool OrderCollectionObservable { get; set; }
+
+        /// <summary>
+        /// Number of accounts whose order collection could not be read (threw). A positive
+        /// count makes the active-order count unreliable, because an order could be hidden by
+        /// the unreadable collection.
+        /// </summary>
+        public int OrderReadFailureCount { get; set; }
+
         /// <summary>Number of distinct instruments seen across orders.</summary>
         public int DistinctInstrumentCount { get; set; }
 
