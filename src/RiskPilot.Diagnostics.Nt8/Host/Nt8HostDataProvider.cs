@@ -711,22 +711,32 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     // unobservable surface.
                     observation.OrderCollectionObservable = true;
 
-                    foreach (var order in orders)
+                    try
                     {
-                        if (order == null)
+                        foreach (var order in orders)
                         {
-                            observation.OrderReadFailureCount++;
-                            continue;
-                        }
+                            if (order == null)
+                            {
+                                observation.OrderReadFailureCount++;
+                                continue;
+                            }
 
-                        try
-                        {
-                            CountOrder(observation, order);
+                            try
+                            {
+                                CountOrder(observation, order);
+                            }
+                            catch (Exception)
+                            {
+                                observation.OrderReadFailureCount++;
+                            }
                         }
-                        catch (Exception)
-                        {
-                            observation.OrderReadFailureCount++;
-                        }
+                    }
+                    catch (Exception)
+                    {
+                        // The host collection changed while it was being enumerated (a live
+                        // Account.Orders is updated off this thread). An order could have been
+                        // skipped, so the active-order total must stay untrustworthy.
+                        observation.OrderReadFailureCount++;
                     }
                 }
             }
@@ -822,27 +832,37 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             }
 
             var active = 0;
-            foreach (var order in orders)
+            try
             {
-                if (order == null)
+                foreach (var order in orders)
                 {
-                    continue;
-                }
+                    if (order == null)
+                    {
+                        continue;
+                    }
 
-                OrderLifecycleState state;
-                try
-                {
-                    state = MapOrderState(order.OrderState);
-                }
-                catch (Exception)
-                {
-                    continue;
-                }
+                    OrderLifecycleState state;
+                    try
+                    {
+                        state = MapOrderState(order.OrderState);
+                    }
+                    catch (Exception)
+                    {
+                        continue;
+                    }
 
-                if (OrderStateClassifier.IsActive(state))
-                {
-                    active++;
+                    if (OrderStateClassifier.IsActive(state))
+                    {
+                        active++;
+                    }
                 }
+            }
+            catch (Exception)
+            {
+                // The collection changed while it was enumerated; the count for this account is
+                // untrustworthy, so report no active orders rather than a wrong positive. The M3
+                // active-order check independently records the read failure and fails closed.
+                return 0;
             }
 
             return active;
