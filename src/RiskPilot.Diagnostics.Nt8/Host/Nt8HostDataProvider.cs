@@ -33,6 +33,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         };
 
         private readonly Func<bool> _masterMetadataReady;
+        private readonly Func<IReadOnlyList<string>> _lifecycleStates;
         private readonly string _requestedInstrumentId;
         private readonly ISecurityScanSource _securityScanSource;
 
@@ -48,8 +49,22 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// <c>State.Active</c>, before that point, so a captured value would stay false forever.
         /// </summary>
         public Nt8HostDataProvider(Func<bool> masterMetadataReady, string requestedInstrumentId = null)
+            : this(masterMetadataReady, null, requestedInstrumentId)
+        {
+        }
+
+        /// <summary>
+        /// Creates the provider with both host probes. <paramref name="lifecycleStates"/>, when
+        /// supplied, is evaluated on each read to return the AddOn lifecycle transitions observed so
+        /// far (in order). It is a probe rather than a captured list because the AddOn advances
+        /// through its states while the provider lives, so a captured value would freeze at the
+        /// first read. A null or throwing probe leaves the lifecycle unobservable, which M1 reports
+        /// as INCONCLUSIVE.
+        /// </summary>
+        public Nt8HostDataProvider(Func<bool> masterMetadataReady, Func<IReadOnlyList<string>> lifecycleStates, string requestedInstrumentId = null)
         {
             _masterMetadataReady = masterMetadataReady ?? (() => false);
+            _lifecycleStates = lifecycleStates;
             _requestedInstrumentId = requestedInstrumentId;
             _securityScanSource = new FileSystemSecurityScanSource();
         }
@@ -295,6 +310,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             return new DiagnosticSnapshot
             {
                 Runtime = BuildRuntimeObservation(),
+                Lifecycle = BuildLifecycleObservation(),
                 Provider = BuildProviderEvidence(),
                 AccountAssociations = BuildAccountAssociations(),
                 AccountIdentity = BuildAccountIdentityObservation(),
@@ -330,6 +346,46 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             observation.Capabilities.Add(new RuntimeCapability("TradeAggressorSide", CapabilityAvailability.Unobservable, "Not derivable from public Level I data."));
 
             return observation;
+        }
+
+        /// <summary>
+        /// Builds the M1 lifecycle observation from the AddOn's recorded <c>OnStateChange</c>
+        /// transitions. The probe is evaluated on every read so the lifecycle reflects the host's
+        /// current position, not a value captured at construction. A null or throwing probe yields
+        /// an unobservable surface (M1 reports INCONCLUSIVE), never a fabricated state.
+        /// </summary>
+        private LifecycleObservation BuildLifecycleObservation()
+        {
+            if (_lifecycleStates == null)
+            {
+                return new LifecycleObservation { LifecycleSurfaceObservable = false };
+            }
+
+            try
+            {
+                var states = _lifecycleStates();
+                var observation = new LifecycleObservation
+                {
+                    LifecycleSurfaceObservable = true
+                };
+
+                if (states != null)
+                {
+                    foreach (var state in states)
+                    {
+                        if (!string.IsNullOrEmpty(state))
+                        {
+                            observation.ObservedStates.Add(state);
+                        }
+                    }
+                }
+
+                return observation;
+            }
+            catch (Exception)
+            {
+                return new LifecycleObservation { LifecycleSurfaceObservable = false };
+            }
         }
 
         private ProviderEvidence BuildProviderEvidence()

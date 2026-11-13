@@ -11,6 +11,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ### Fixed
 
+- **The AddOn lifecycle was not actually observable by M1 (organization/correctness).** M1 carried a
+  `M1.LIFECYCLE` check that read an untyped `RuntimeObservation.LifecycleStates` list which the host
+  layer never populated, so the check could only ever report `LIFECYCLE_NOT_OBSERVED` — the lifecycle
+  surface was effectively missing from M1. The lifecycle is now a first-class, host-free diagnostic
+  owned by M1: the host records every `State` it sees in `OnStateChange` and exposes it through a live
+  probe (`new Nt8HostDataProvider(() => HostIsLive, () => LifecycleStates)`), the provider reduces the
+  transitions into a dedicated `LifecycleObservation`, and the new host-free
+  `Core/Identity/LifecycleVerifier` classifies them into phases (INITIALIZATION / STARTUP / RUNTIME /
+  SHUTDOWN) and validates the sequence. M1 now emits `M1.LIFECYCLE` (observed sequence + verdict) and
+  `M1.LIFECYCLE_PHASES` (which phases were confirmed). The connection phase is not an AddOn `State`
+  member, so it is explicitly deferred to M2 (`connectionPhase=DEFERRED_TO_M2`) rather than duplicated.
+  The untyped `RuntimeObservation.LifecycleStates` list was removed so there is a single lifecycle
+  surface. Fail-closed: a missing/unobservable surface, a stub/mock value, an unrecognised `State`
+  member, or a missing initialization/startup is `INCONCLUSIVE`; a backwards transition or a state
+  after `Terminated` is `FAIL`; only an ordered sequence that reached startup is `PASS`. `environment.json`
+  now carries a `lifecycle` block (or `UNOBSERVABLE`). Tests: `LifecycleDiagnosticsTests` (verifier,
+  M1 probe, host adapter) and the new lifecycle cases in `Phase3ModuleTests` / `Phase4EvidencePackageTests`.
+- **The SAMPLE report generator no longer compiled.** `tools/RiskPilot.Diagnostics.SampleReport`
+  referenced removed members (`StrategyRiskGateObservation.StrategySurfaceObservable` and
+  `AllCandidatesInvalidCount`), so the documentation sample could not be regenerated. It now builds the
+  sample rejection distribution from `CandidateRejectionReasons` (the derived surface flag and count
+  are computed, not assigned). The sample package was regenerated, including the new M1 lifecycle block.
 - **Active orders were reported as zero (misleading diagnostic).** `accounts.json` always carried
   `workingOrderCount: 0`, and the M3 lifecycle observation never distinguished a live order from a
   finished one, so an account with working orders could be reported as having none. The host
@@ -128,6 +150,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   `HostTargetAccountConnectionTests` (host adapter over the offline stub surface, including the
   "provider is not the first connection" and "multiple connections without a target account"
   cases).
+
+### Changed
+
+- **M1 owns the lifecycle surface.** The M1 module title is now "Environment, API & Lifecycle
+  Compatibility" (catalog, probe and SAMPLE report agree), the AddOn lifecycle observation moved from
+  the untyped `RuntimeObservation.LifecycleStates` list to the dedicated
+  `DiagnosticSnapshot.Lifecycle` / `LifecycleObservation`, and the new `M1.LIFECYCLE_PHASES` check
+  reports the confirmed phases. The connection phase is explicitly deferred to M2.
 
 ## [1.0.0] — Phase 5 final audit & release
 

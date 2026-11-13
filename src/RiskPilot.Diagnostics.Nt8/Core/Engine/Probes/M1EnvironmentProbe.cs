@@ -10,16 +10,22 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
 {
     /// <summary>
     /// M1 — Environment &amp; API compatibility. Verifies that the required public APIs are
-    /// present, records the process architecture and CLR/target framework, records the AddOn
-    /// lifecycle states observed, and builds a capability matrix of what is available versus
-    /// unobservable. The exact NinjaTrader runtime version is explicitly unobservable: it is
-    /// never guessed from a file name or build id and is never reported as PASS.
+    /// present, records the process architecture and CLR/target framework, records and validates
+    /// the AddOn lifecycle states observed (initialization / startup / runtime / shutdown), and
+    /// builds a capability matrix of what is available versus unobservable. The exact NinjaTrader
+    /// runtime version is explicitly unobservable: it is never guessed from a file name or build id
+    /// and is never reported as PASS.
+    /// <para>
+    /// M1 is the single owner of the AddOn lifecycle surface. The connection phase is not an AddOn
+    /// <c>State</c> member, so it is explicitly deferred to M2 (the connection/provider owner)
+    /// rather than duplicated here.
+    /// </para>
     /// </summary>
     public sealed class M1EnvironmentProbe : IDiagnosticProbe
     {
         public string ModuleId { get { return "M1"; } }
 
-        public string Title { get { return "Environment & API Compatibility"; } }
+        public string Title { get { return "Environment, API & Lifecycle Compatibility"; } }
 
         public IReadOnlyList<DiagnosticResult> Evaluate(ProbeContext context)
         {
@@ -74,7 +80,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             results.Add(BuildHostVersionCheck(correlation, now));
             results.Add(BuildArchitectureCheck(runtime, correlation, now));
             results.Add(BuildClrCheck(runtime, correlation, now));
-            results.Add(BuildLifecycleCheck(runtime, correlation, now));
+            results.Add(BuildLifecycleCheck(snapshot, correlation, now));
+            results.Add(BuildLifecyclePhasesCheck(snapshot, correlation, now));
             results.Add(BuildCapabilityCheck(runtime, correlation, now));
             results.Add(BuildBuildModeCheck(correlation, now));
 
@@ -148,36 +155,158 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     DiagnosticEvidence.Observable(FindingFactory.SourceClr, "targetFramework=" + framework, now));
         }
 
-        private DiagnosticResult BuildLifecycleCheck(RuntimeObservation runtime, string correlation, DateTime now)
+        /// <summary>
+        /// Reports the ordered AddOn lifecycle transitions M1 observed and validates the sequence.
+        /// The classification and the verdict are delegated to the host-free
+        /// <see cref="Core.Identity.LifecycleVerifier"/>; this method only renders the result. A
+        /// missing/unobservable surface is INCONCLUSIVE, an out-of-order or post-termination
+        /// transition is FAIL, and only an ordered lifecycle that reached startup is PASS.
+        /// </summary>
+        private DiagnosticResult BuildLifecycleCheck(DiagnosticSnapshot snapshot, string correlation, DateTime now)
         {
-            var states = runtime != null && runtime.LifecycleStates != null
-                ? runtime.LifecycleStates
-                : new List<string>();
+            var observation = snapshot != null ? snapshot.Lifecycle : null;
+            var verdict = Core.Identity.LifecycleVerifier.Evaluate(observation);
 
-            if (states.Count == 0)
+            if (verdict.Status == DiagnosticStatus.PASS)
             {
                 return DiagnosticResult
-                    .Inconclusive(ModuleId, "M1.LIFECYCLE", correlation, now)
+                    .Pass(ModuleId, "M1.LIFECYCLE", correlation, now)
                     .WithFindingId("M1.LIFECYCLE")
-                    .WithReasonCode("LIFECYCLE_NOT_OBSERVED")
-                    .WithObservation("No AddOn lifecycle state was recorded for this pass.")
+                    .WithReasonCode(ToArray(verdict.ReasonCodes))
+                    .WithObservation("states=" + Join(verdict.ObservedStates) + " transitions=" + verdict.TransitionCount
+                        + " current=" + (string.IsNullOrEmpty(verdict.CurrentState) ? "UNKNOWN" : verdict.CurrentState))
                     .WithSource(FindingFactory.SourcePublicApi)
-                    .WithMethod("AddOn OnStateChange transitions recorded by the host layer.")
-                    .WithLimitation("Only states observed so far in this session are reported.")
-                    .WithNextAction("Ensure the AddOn reached Active before running the diagnostic pass.");
+                    .WithMethod("AddOn OnStateChange transitions recorded by the host layer and classified by the host-free lifecycle verifier.")
+                    .WithLimitation("Records observed transitions only; a state the host never reported is reported as not observed, never inferred.")
+                    .WithNextAction("None.")
+                    .WithEvidence(BuildLifecycleEvidence(verdict, now));
             }
 
-            var joined = string.Join(" -> ", states);
+            if (verdict.Status == DiagnosticStatus.FAIL)
+            {
+                return DiagnosticResult
+                    .Fail(ModuleId, "M1.LIFECYCLE", ErrorClass.ConfigurationInvalid, correlation, now)
+                    .WithFindingId("M1.LIFECYCLE")
+                    .WithReasonCode(ToArray(verdict.ReasonCodes))
+                    .WithObservation("states=" + Join(verdict.ObservedStates) + " transitions=" + verdict.TransitionCount
+                        + " current=" + (string.IsNullOrEmpty(verdict.CurrentState) ? "UNKNOWN" : verdict.CurrentState))
+                    .WithSource(FindingFactory.SourcePublicApi)
+                    .WithMethod("AddOn OnStateChange transitions recorded by the host layer and classified by the host-free lifecycle verifier.")
+                    .WithLimitation("An out-of-order transition or a state observed after Terminated is abnormal; the observed sequence is reported as-is.")
+                    .WithNextAction("Investigate why the AddOn lifecycle transitioned abnormally (backwards, or after Terminated).")
+                    .WithEvidence(BuildLifecycleEvidence(verdict, now));
+            }
+
             return DiagnosticResult
-                .Pass(ModuleId, "M1.LIFECYCLE", correlation, now)
+                .Inconclusive(ModuleId, "M1.LIFECYCLE", correlation, now)
                 .WithFindingId("M1.LIFECYCLE")
-                .WithReasonCode("LIFECYCLE_OBSERVED")
-                .WithObservation("states=" + joined)
-                .WithSource(FindingFactory.SourcePublicApi)
-                .WithMethod("AddOn OnStateChange transitions recorded by the host layer.")
-                .WithLimitation("Records observed transitions only; a skipped state is reported as skipped, not inferred.")
-                .WithNextAction("None.")
-                .WithEvidence(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "states=" + joined, now));
+                .WithReasonCode(ToArray(verdict.ReasonCodes))
+                .WithObservation("states=" + Join(verdict.ObservedStates) + " transitions=" + verdict.TransitionCount)
+                .WithSource(observation == null || !observation.LifecycleSurfaceObservable
+                    ? FindingFactory.SourceUnobservable
+                    : FindingFactory.SourcePublicApi)
+                .WithMethod("AddOn OnStateChange transitions recorded by the host layer and classified by the host-free lifecycle verifier.")
+                .WithLimitation("A lifecycle that was not observed, or that could not be classified, is never reported as PASS.")
+                .WithNextAction("Run the pass inside the host so the AddOn reaches Active and the lifecycle becomes observable.")
+                .WithEvidence(BuildLifecycleEvidence(verdict, now));
+        }
+
+        /// <summary>
+        /// Reports which lifecycle phases M1 actually observed. Initialization/startup/runtime are
+        /// derived from the observed transitions; shutdown is optional (the diagnostic normally runs
+        /// while the AddOn is live) and is only reported when observed. The connection phase is
+        /// explicitly deferred to M2 — no NinjaTrader <c>State</c> member carries it, so it is never
+        /// inferred here and is never reported as PASS by M1.
+        /// </summary>
+        private DiagnosticResult BuildLifecyclePhasesCheck(DiagnosticSnapshot snapshot, string correlation, DateTime now)
+        {
+            var observation = snapshot != null ? snapshot.Lifecycle : null;
+            var verdict = Core.Identity.LifecycleVerifier.Evaluate(observation);
+
+            var observed = new List<string>();
+            if (verdict.InitializationObserved) observed.Add(Core.Identity.LifecyclePhases.Initialization);
+            if (verdict.StartupObserved) observed.Add(Core.Identity.LifecyclePhases.Startup);
+            if (verdict.RuntimeObserved) observed.Add(Core.Identity.LifecyclePhases.Runtime);
+            if (verdict.ShutdownObserved) observed.Add(Core.Identity.LifecyclePhases.Shutdown);
+
+            // Startup must have been reached, and the sequence must not be abnormal: a lifecycle
+            // that transitioned out of order (or after Terminated) is not reported as a healthy
+            // phase view, so the phase check stays INCONCLUSIVE rather than contradicting M1.LIFECYCLE.
+            var result = verdict.StartupObserved && verdict.Status != DiagnosticStatus.FAIL
+                ? DiagnosticResult.Pass(ModuleId, "M1.LIFECYCLE_PHASES", correlation, now)
+                : DiagnosticResult.Inconclusive(ModuleId, "M1.LIFECYCLE_PHASES", correlation, now);
+
+            return result
+                .WithFindingId("M1.LIFECYCLE_PHASES")
+                .WithReasonCode(
+                    "PHASES_OBSERVED=" + observed.Count,
+                    "INITIALIZATION=" + verdict.InitializationObserved,
+                    "STARTUP=" + verdict.StartupObserved,
+                    "RUNTIME=" + verdict.RuntimeObserved,
+                    "SHUTDOWN=" + verdict.ShutdownObserved,
+                    "CONNECTION=DEFERRED_TO_M2")
+                .WithObservation("phases=" + Join(observed) + " connection=DEFERRED_TO_M2")
+                .WithSource(observation == null || !observation.LifecycleSurfaceObservable
+                    ? FindingFactory.SourceUnobservable
+                    : FindingFactory.SourcePublicApi)
+                .WithMethod("Classified the observed OnStateChange transitions into lifecycle phases.")
+                .WithLimitation("The connection phase is not an AddOn State member and is owned by M2, so it is never inferred here; shutdown is optional while the tool is live.")
+                .WithNextAction(verdict.StartupObserved
+                    ? "None."
+                    : "Ensure the AddOn reached Active before running the pass.")
+                .WithEvidence(
+                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "initializationObserved=" + verdict.InitializationObserved, now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "startupObserved=" + verdict.StartupObserved, now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "runtimeObserved=" + verdict.RuntimeObserved, now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "shutdownObserved=" + verdict.ShutdownObserved, now),
+                    DiagnosticEvidence.Unobservable(FindingFactory.SourcePublicApi, "connection phase is not an AddOn State member (M2 owns it)", now));
+        }
+
+        private static DiagnosticEvidence[] BuildLifecycleEvidence(Core.Identity.LifecycleVerdict verdict, DateTime now)
+        {
+            var evidence = new List<DiagnosticEvidence>();
+            foreach (var code in verdict.ReasonCodes)
+            {
+                evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "reason=" + code, now));
+            }
+
+            foreach (var state in verdict.ObservedStates)
+            {
+                evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "state=" + state, now));
+            }
+
+            foreach (var state in verdict.UnknownStates)
+            {
+                evidence.Add(DiagnosticEvidence.Unobservable(FindingFactory.SourcePublicApi, "unclassified state=" + state, now));
+            }
+
+            return evidence.ToArray();
+        }
+
+        private static string Join(IList<string> values)
+        {
+            if (values == null || values.Count == 0)
+            {
+                return "none";
+            }
+
+            return string.Join(" -> ", values);
+        }
+
+        private static string[] ToArray(IList<string> values)
+        {
+            if (values == null || values.Count == 0)
+            {
+                return new string[0];
+            }
+
+            var array = new string[values.Count];
+            for (var i = 0; i < values.Count; i++)
+            {
+                array[i] = values[i];
+            }
+
+            return array;
         }
 
         private DiagnosticResult BuildCapabilityCheck(RuntimeObservation runtime, string correlation, DateTime now)

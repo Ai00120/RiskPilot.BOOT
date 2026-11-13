@@ -50,6 +50,7 @@
     <Compile Include="Core\Identity\AccountIdentityVerifier.cs" />
     <Compile Include="Core\Identity\TargetAccountConnectionVerifier.cs" />
     <Compile Include="Core\Identity\InstrumentIdentityVerifier.cs" />
+    <Compile Include="Core\Identity\LifecycleVerifier.cs" />
     <Compile Include="Core\Status\DiagnosticStatus.cs" />
     <Compile Include="Core\Security\SecretRedactor.cs" />
     <Compile Include="Core\Security\SyntheticRef.cs" />
@@ -70,6 +71,7 @@
     <Compile Include="Core\Models\StrategyRecord.cs" />
     <Compile Include="Core\Models\DiagnosticFinding.cs" />
     <Compile Include="Core\Models\Observations\RuntimeObservation.cs" />
+    <Compile Include="Core\Models\Observations\LifecycleObservation.cs" />
     <Compile Include="Core\Models\Observations\OrderLifecycleObservation.cs" />
     <Compile Include="Core\Models\Observations\PostTradeAuditObservation.cs" />
     <Compile Include="Core\Models\Observations\InstrumentAttestationObservation.cs" />

@@ -132,6 +132,8 @@ namespace RiskPilot.Diagnostics.SampleReport
 
             Add("M1", "M1.API_SURFACE", DiagnosticStatus.PASS, "present=7 missing=0", ErrorClass.None, "ALL_REQUIRED_APIS_PRESENT");
             Add("M1", "M1.HOST_VERSION", DiagnosticStatus.INCONCLUSIVE, "NOT OBSERVED: no public API", ErrorClass.None, "HOST_VERSION_UNOBSERVABLE");
+            Add("M1", "M1.LIFECYCLE", DiagnosticStatus.PASS, "states=SetDefaults -> Configure -> Active -> DataLoaded -> Realtime transitions=5 current=Realtime", ErrorClass.None, "LIFECYCLE_VALID");
+            Add("M1", "M1.LIFECYCLE_PHASES", DiagnosticStatus.PASS, "phases=INITIALIZATION -> STARTUP -> RUNTIME connection=DEFERRED_TO_M2", ErrorClass.None, "PHASES_OBSERVED=3", "CONNECTION=DEFERRED_TO_M2");
             Add("M2", "M2.CONNECTION.BROKER", DiagnosticStatus.PASS, "price=CONNECTED order=CONNECTED", ErrorClass.None, "FEEDS_CONNECTED");
             Add("M2", "M2.PROVIDER_IDENTITY", DiagnosticStatus.PASS, "provider=Rithmic resolution=String", ErrorClass.None, "EXPECTED_PROVIDER_MATCH");
             Add("M3", "M3.ACCOUNT_SURFACE", DiagnosticStatus.PASS, "accounts=1 orderSnapshots=2", ErrorClass.None, "ACCOUNT_SURFACE_OBSERVED");
@@ -155,7 +157,7 @@ namespace RiskPilot.Diagnostics.SampleReport
 
             var modules = new List<ModuleStatusView>
             {
-                new ModuleStatusView { ModuleId = "M1", Title = "Environment & API Compatibility", Status = DiagnosticStatus.INCONCLUSIVE, CheckCount = 2, Executed = true },
+                new ModuleStatusView { ModuleId = "M1", Title = "Environment, API & Lifecycle Compatibility", Status = DiagnosticStatus.INCONCLUSIVE, CheckCount = 4, Executed = true },
                 new ModuleStatusView { ModuleId = "M2", Title = "Connection & Provider Identity", Status = DiagnosticStatus.PASS, CheckCount = 2, Executed = true },
                 new ModuleStatusView { ModuleId = "M3", Title = "Account & Order Lifecycle (F-05)", Status = DiagnosticStatus.INCONCLUSIVE, CheckCount = 2, Executed = true },
                 new ModuleStatusView { ModuleId = "M4", Title = "Instrument Attestation / D-078", Status = DiagnosticStatus.FAIL, CheckCount = 1, Executed = true },
@@ -268,6 +270,7 @@ namespace RiskPilot.Diagnostics.SampleReport
 
             dataset.Snapshot = new DiagnosticSnapshot
             {
+                Lifecycle = BuildSampleLifecycle(),
                 TargetAccountConnection = new TargetAccountConnectionObservation
                 {
                     AccountSurfaceObservable = true,
@@ -321,8 +324,7 @@ namespace RiskPilot.Diagnostics.SampleReport
                 },
                 StrategyRiskGate = new StrategyRiskGateObservation
                 {
-                    StrategySurfaceObservable = true,
-                    AllCandidatesInvalidCount = 1234
+                    CandidateRejectionReasons = new Dictionary<string, long> { { "ALL_CANDIDATES_INVALID", 1234 } }
                 },
                 Safety = new SafetyObservation
                 {
@@ -368,6 +370,22 @@ namespace RiskPilot.Diagnostics.SampleReport
             };
 
             return dataset;
+        }
+
+        /// <summary>
+        /// A synthetic, clearly-SAMPLE lifecycle surface so the sample package shows the M1
+        /// lifecycle block. It mirrors the AddOn's own startup progression; the package is still
+        /// marked SAMPLE and must never be read as a runtime result.
+        /// </summary>
+        private static LifecycleObservation BuildSampleLifecycle()
+        {
+            var lifecycle = new LifecycleObservation { LifecycleSurfaceObservable = true };
+            lifecycle.ObservedStates.Add("SetDefaults");
+            lifecycle.ObservedStates.Add("Configure");
+            lifecycle.ObservedStates.Add("Active");
+            lifecycle.ObservedStates.Add("DataLoaded");
+            lifecycle.ObservedStates.Add("Realtime");
+            return lifecycle;
         }
     }
 }

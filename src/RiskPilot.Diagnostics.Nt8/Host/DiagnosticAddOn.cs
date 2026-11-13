@@ -118,7 +118,12 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     // constructed here at State.Active, but MasterInstrument.* is only safe to read
                     // once the host has advanced to a live/data state. A captured value would stay
                     // false for the whole session and leave M4 permanently INCONCLUSIVE.
-                    var provider = new Nt8HostDataProvider(() => HostIsLive);
+                    //
+                    // The lifecycle transitions are likewise supplied as a live probe so M1 sees the
+                    // states the AddOn has reached by the time each pass runs (the provider is built
+                    // before the host advances to DataLoaded/Realtime, so a captured list would only
+                    // ever show the states up to State.Active).
+                    var provider = new Nt8HostDataProvider(() => HostIsLive, () => LifecycleStates);
                     _runtime = new DiagnosticRuntime(provider, SystemClock.Instance, 4096, 8192);
                     _runtime.Initialize();
 

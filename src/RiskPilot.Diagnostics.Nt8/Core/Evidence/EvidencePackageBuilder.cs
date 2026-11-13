@@ -247,8 +247,42 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
                 writer.WriteProperty("sourceTimeBasis", environment.SourceTimeBasis.ToWire());
             }
 
+            WriteLifecycleBlock(writer, dataset);
+
             writer.EndObject();
             return writer.ToString();
+        }
+
+        /// <summary>
+        /// Writes the M1 lifecycle block: the observed AddOn <c>State</c> transitions, the phases M1
+        /// could confirm and the verifier's status/reason codes. It re-evaluates the host-free
+        /// verifier from the snapshot so the exported evidence reports the same result the live M1
+        /// probe produced. The connection phase is explicitly marked as deferred to M2. With no
+        /// lifecycle surface the block is written as UNOBSERVABLE, never fabricated.
+        /// </summary>
+        private static void WriteLifecycleBlock(JsonWriter writer, EvidenceDataset dataset)
+        {
+            var observation = dataset.Snapshot != null ? dataset.Snapshot.Lifecycle : null;
+            if (observation == null || !observation.LifecycleSurfaceObservable)
+            {
+                writer.WriteProperty("lifecycle", "UNOBSERVABLE");
+                return;
+            }
+
+            var verdict = Core.Identity.LifecycleVerifier.Evaluate(observation);
+            writer.BeginObject("lifecycle");
+            writer.WriteProperty("status", verdict.Status.ToWire());
+            writer.WriteProperty("transitionCount", verdict.TransitionCount);
+            writer.WriteProperty("currentState", SecretRedactor.Redact(verdict.CurrentState));
+            writer.WriteProperty("initializationObserved", verdict.InitializationObserved);
+            writer.WriteProperty("startupObserved", verdict.StartupObserved);
+            writer.WriteProperty("runtimeObserved", verdict.RuntimeObserved);
+            writer.WriteProperty("shutdownObserved", verdict.ShutdownObserved);
+            writer.WriteProperty("connectionPhase", "DEFERRED_TO_M2");
+            writer.WriteStringArrayProperty("observedStates", SecretRedactor.RedactArray(ToArray(verdict.ObservedStates)));
+            writer.WriteStringArrayProperty("unclassifiedStates", SecretRedactor.RedactArray(ToArray(verdict.UnknownStates)));
+            writer.WriteStringArrayProperty("reasonCodes", SecretRedactor.RedactArray(ToArray(verdict.ReasonCodes)));
+            writer.EndObject();
         }
 
         private static string BuildConnectionsJson(EvidenceDataset dataset)

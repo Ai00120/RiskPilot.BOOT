@@ -412,6 +412,60 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void EnvironmentJson_Lifecycle_IsUnobservable_WhenNoSurface()
+        {
+            var package = EvidencePackageBuilder.Build(RunResult(), new EvidenceDataset());
+            var environment = package.Read(EvidencePackageCatalog.EnvironmentJson);
+            Assert.Contains("\"lifecycle\":\"UNOBSERVABLE\"", environment);
+        }
+
+        [Fact]
+        public void EnvironmentJson_Lifecycle_ReportsObservedTransitionsAndPhases()
+        {
+            var lifecycle = new LifecycleObservation { LifecycleSurfaceObservable = true };
+            lifecycle.ObservedStates.Add("SetDefaults");
+            lifecycle.ObservedStates.Add("Active");
+            lifecycle.ObservedStates.Add("DataLoaded");
+
+            var dataset = new EvidenceDataset
+            {
+                Snapshot = new DiagnosticSnapshot { Lifecycle = lifecycle }
+            };
+
+            var package = EvidencePackageBuilder.Build(RunResult(), dataset);
+            var environment = package.Read(EvidencePackageCatalog.EnvironmentJson);
+
+            Assert.Contains("\"lifecycle\"", environment);
+            Assert.Contains("\"status\":\"PASS\"", environment);
+            Assert.Contains("\"transitionCount\":3", environment);
+            Assert.Contains("\"startupObserved\":true", environment);
+            Assert.Contains("\"runtimeObserved\":true", environment);
+            Assert.Contains("\"connectionPhase\":\"DEFERRED_TO_M2\"", environment);
+            Assert.Contains("LIFECYCLE_VALID", environment);
+        }
+
+        [Fact]
+        public void EnvironmentJson_Lifecycle_ReportsAbnormalTransitionAsFail()
+        {
+            var lifecycle = new LifecycleObservation { LifecycleSurfaceObservable = true };
+            lifecycle.ObservedStates.Add("SetDefaults");
+            lifecycle.ObservedStates.Add("Active");
+            lifecycle.ObservedStates.Add("Terminated");
+            lifecycle.ObservedStates.Add("Active");
+
+            var dataset = new EvidenceDataset
+            {
+                Snapshot = new DiagnosticSnapshot { Lifecycle = lifecycle }
+            };
+
+            var package = EvidencePackageBuilder.Build(RunResult(), dataset);
+            var environment = package.Read(EvidencePackageCatalog.EnvironmentJson);
+
+            Assert.Contains("\"status\":\"FAIL\"", environment);
+            Assert.Contains("LIFECYCLE_STATE_AFTER_TERMINATION", environment);
+        }
+
+        [Fact]
         public void PartialDataset_ReportsOnlyObservedSectionsAvailable()
         {
             // Only connections + accounts are observable; every other section must be

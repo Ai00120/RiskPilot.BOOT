@@ -367,6 +367,38 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - Tests: `SecurityScanTests` (scanner rules + M8 ownership/reporting over the in-memory read-only source)
   and the M8 cases in `Phase3ModuleTests` / `Phase5ScenarioTests`. A green stub run is **not** real-host proof.
 
+## M1 lifecycle diagnostics (P9 — lifecycle ownership)
+
+- M1 is the **single owner** of the AddOn lifecycle surface. The host records every `State` it sees
+  in `OnStateChange` (`Host/DiagnosticAddOn.cs` `_lifecycleStates` / `LifecycleStates`), and the host
+  provider reduces those transitions into `Core/Models/Observations/LifecycleObservation.cs`
+  (`LifecycleSurfaceObservable`, `ObservedStates`, `IsStubOrMockValue`). The decision is host-free:
+  `Core/Identity/LifecycleVerifier.cs` classifies each state into a phase
+  (`LifecyclePhases`: INITIALIZATION / STARTUP / RUNTIME / SHUTDOWN / UNKNOWN) and validates the
+  sequence. No verdict logic lives in the host layer.
+- The lifecycle is supplied to the provider as a **live probe** (`new Nt8HostDataProvider(() =>
+  HostIsLive, () => LifecycleStates)`), not a captured list: the provider is built at `State.Active`,
+  before the host reaches `DataLoaded`/`Realtime`, so a captured list would freeze at the states seen
+  up to `Active`. The previous untyped `RuntimeObservation.LifecycleStates` list was never populated
+  by the host, so M1 could not see the lifecycle at all; it was removed in favour of the dedicated
+  observation + `DiagnosticSnapshot.Lifecycle`.
+- Two M1 checks: `M1.LIFECYCLE` (the observed sequence + verdict) and `M1.LIFECYCLE_PHASES` (which
+  phases were confirmed). The **connection phase is deferred to M2** (`connectionPhase=DEFERRED_TO_M2`)
+  because no `State` member carries it — M1 never infers it and never reports it PASS, so there is no
+  duplicate lifecycle/connection reporting across modules.
+- Fail-closed contract (`LifecycleVerifier`): no/unobservable surface, a stub/mock value, an
+  unrecognised `State` member, or a missing INITIALIZATION/STARTUP ⇒ `INCONCLUSIVE`; a backwards
+  transition (rank decrease) or any state after `Terminated` ⇒ `FAIL`; only an ordered sequence that
+  reached startup is `PASS`. `SetDefaults` may legitimately repeat (equal rank is allowed). Shutdown
+  is optional (the tool normally runs while the AddOn is live) but if observed must be last.
+- `environment.json` carries a `lifecycle` block (status, transition count, current state, the four
+  phase flags, `connectionPhase`, observed/unclassified states, reason codes) or `"lifecycle":
+  "UNOBSERVABLE"`; `EvidencePackageBuilder.WriteLifecycleBlock` re-evaluates the verifier from
+  `dataset.Snapshot.Lifecycle`, so the exported evidence matches the live M1 probe. Tests:
+  `LifecycleDiagnosticsTests` (verifier + M1 probe + host adapter over the offline stub surface) and
+  the M1 cases in `Phase3ModuleTests` / `Phase4EvidencePackageTests`; a green stub run is **not**
+  real-host proof.
+
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live
