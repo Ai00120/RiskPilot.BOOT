@@ -132,6 +132,11 @@ namespace RiskPilot.Diagnostics.SampleReport
 
             Add("M1", "M1.API_SURFACE", DiagnosticStatus.PASS, "present=7 missing=0", ErrorClass.None, "ALL_REQUIRED_APIS_PRESENT");
             Add("M1", "M1.HOST_VERSION", DiagnosticStatus.INCONCLUSIVE, "NOT OBSERVED: no public API", ErrorClass.None, "HOST_VERSION_UNOBSERVABLE");
+            Add("M1", "M1.HOST_COMPATIBILITY", DiagnosticStatus.INCONCLUSIVE, NinjaTraderCompatibility.CompatibilityStatement(), ErrorClass.None,
+                "TARGET_HOST=" + NinjaTraderCompatibility.TargetVersion,
+                "MIN_SUPPORTED_HOST=" + NinjaTraderCompatibility.MinimumSupportedVersion,
+                "VERIFIED_AT_RUNTIME=NO",
+                "HOST_COMPATIBILITY_UNVERIFIED");
             Add("M1", "M1.LIFECYCLE", DiagnosticStatus.PASS, "states=SetDefaults -> Configure -> Active -> DataLoaded -> Realtime transitions=5 current=Realtime", ErrorClass.None, "LIFECYCLE_VALID");
             Add("M1", "M1.LIFECYCLE_PHASES", DiagnosticStatus.PASS, "phases=INITIALIZATION -> STARTUP -> RUNTIME connection=DEFERRED_TO_M2", ErrorClass.None, "PHASES_OBSERVED=3", "CONNECTION=DEFERRED_TO_M2");
             Add("M2", "M2.CONNECTION.BROKER", DiagnosticStatus.PASS, "price=CONNECTED order=CONNECTED", ErrorClass.None, "FEEDS_CONNECTED");
@@ -157,7 +162,7 @@ namespace RiskPilot.Diagnostics.SampleReport
 
             var modules = new List<ModuleStatusView>
             {
-                new ModuleStatusView { ModuleId = "M1", Title = "Environment, API & Lifecycle Compatibility", Status = DiagnosticStatus.INCONCLUSIVE, CheckCount = 4, Executed = true },
+                new ModuleStatusView { ModuleId = "M1", Title = "Environment, API & Lifecycle Compatibility", Status = DiagnosticStatus.INCONCLUSIVE, CheckCount = 5, Executed = true },
                 new ModuleStatusView { ModuleId = "M2", Title = "Connection & Provider Identity", Status = DiagnosticStatus.PASS, CheckCount = 2, Executed = true },
                 new ModuleStatusView { ModuleId = "M3", Title = "Account & Order Lifecycle (F-05)", Status = DiagnosticStatus.INCONCLUSIVE, CheckCount = 2, Executed = true },
                 new ModuleStatusView { ModuleId = "M4", Title = "Instrument Attestation / D-078", Status = DiagnosticStatus.FAIL, CheckCount = 1, Executed = true },

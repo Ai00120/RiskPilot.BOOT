@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
+using RiskPilot.Diagnostics.Nt8.Core.Identity;
 
 namespace RiskPilot.Diagnostics.Nt8.Core.Security
 {
@@ -24,9 +25,30 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Security
             new Regex(@"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", RegexOptions.Compiled),
             // Windows user-profile paths reveal the operator's user name.
             new Regex(@"(?i)([A-Za-z]:\\Users\\)[^\\\s]+", RegexOptions.Compiled),
-            // IPv4 addresses.
-            new Regex(@"\b(?:\d{1,3}\.){3}\d{1,3}\b", RegexOptions.Compiled),
         };
+
+        // IPv4 addresses can reveal network topology, so a dotted quad is masked. The rule is
+        // applied separately from the pattern list because the tool's own declared version
+        // constants (for example the NinjaTrader target "8.1.9.0") have the same shape but are
+        // not secrets; masking them would corrupt the compatibility report the tool is required
+        // to publish. Only the exact declared version strings are preserved -- a genuine IP
+        // address is still masked.
+        private static readonly Regex Ipv4 = new Regex(@"\b(?:\d{1,3}\.){3}\d{1,3}\b", RegexOptions.Compiled);
+
+        // Exact non-secret version strings that the tool publishes as evidence. Anything else of
+        // the dotted-quad shape is treated as a possible IP address and masked.
+        private static readonly string[] KnownNonSecretVersions = BuildKnownNonSecretVersions();
+
+        private static string[] BuildKnownNonSecretVersions()
+        {
+            return new[]
+            {
+                NinjaTraderCompatibility.TargetVersion,
+                NinjaTraderCompatibility.MinimumSupportedVersion,
+                BuildIdentity.ToolVersion,
+                BuildIdentity.AssemblyVersionString
+            };
+        }
 
         // Account numbers / long digit runs (broker account ids). This rule is applied
         // separately from the pattern list because a bare 6+ digit run is only a *possible*
@@ -51,7 +73,29 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Security
                 result = pattern.Replace(result, Mask);
             }
 
+            result = MaskIpv4(result);
             return MaskAccountDigitRuns(result);
+        }
+
+        /// <summary>
+        /// Masks dotted-quad IPv4 addresses but preserves the tool's own declared version
+        /// constants (for example the NinjaTrader target "8.1.9.0"), which share the shape but are
+        /// published evidence rather than secrets. Only an exact known version is preserved.
+        /// </summary>
+        private static string MaskIpv4(string value)
+        {
+            return Ipv4.Replace(value, match =>
+            {
+                foreach (var known in KnownNonSecretVersions)
+                {
+                    if (string.Equals(match.Value, known, StringComparison.Ordinal))
+                    {
+                        return match.Value;
+                    }
+                }
+
+                return Mask;
+            });
         }
 
         /// <summary>

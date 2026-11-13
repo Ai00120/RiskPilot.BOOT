@@ -248,9 +248,36 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             }
 
             WriteLifecycleBlock(writer, dataset);
+            WriteCompatibilityBlock(writer);
 
             writer.EndObject();
             return writer.ToString();
+        }
+
+        /// <summary>
+        /// Writes the declared NinjaTrader compatibility posture: the intended target version, the
+        /// minimum supported version and whether any host build was verified at runtime. This is a
+        /// compile-time declaration, never a runtime observation — the installed host build is not
+        /// exposed by any public API — so <c>verifiedAtRuntime</c> stays <c>false</c> until a real
+        /// host run is recorded. It lets a reader separate the documented target from a verified
+        /// fact at a glance.
+        /// </summary>
+        private static void WriteCompatibilityBlock(JsonWriter writer)
+        {
+            var tested = new string[NinjaTraderCompatibility.TestedVersions.Count];
+            for (var i = 0; i < tested.Length; i++)
+            {
+                tested[i] = NinjaTraderCompatibility.TestedVersions[i];
+            }
+
+            writer.BeginObject("ninjaTraderCompatibility");
+            writer.WriteProperty("targetVersion", SecretRedactor.Redact(NinjaTraderCompatibility.TargetVersion));
+            writer.WriteProperty("minimumSupportedVersion", SecretRedactor.Redact(NinjaTraderCompatibility.MinimumSupportedVersion));
+            writer.WriteProperty("verifiedAtRuntime", NinjaTraderCompatibility.CompatibilityVerifiedAtRuntime);
+            writer.WriteStringArrayProperty("testedVersions", SecretRedactor.RedactArray(tested));
+            writer.WriteProperty("verifiedBuild", SecretRedactor.Redact(NinjaTraderCompatibility.VerifiedBuild));
+            writer.WriteProperty("statement", SecretRedactor.Redact(NinjaTraderCompatibility.CompatibilityStatement()));
+            writer.EndObject();
         }
 
         /// <summary>
@@ -930,6 +957,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             WriteKeyValue(html, "Provider", ProviderLabel(dataset));
             WriteKeyValue(html, "Instrument", InstrumentLabel(dataset));
             WriteKeyValue(html, "NT runtime version", "UNOBSERVABLE (no public API)");
+            WriteKeyValue(html, "NT target version", NinjaTraderCompatibility.TargetVersion
+                + " (verified at runtime: " + (NinjaTraderCompatibility.CompatibilityVerifiedAtRuntime ? "yes" : "no") + ")");
             html.Close("table");
 
             html.Element("h2", "Module status");

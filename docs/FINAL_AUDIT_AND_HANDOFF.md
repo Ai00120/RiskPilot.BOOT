@@ -325,7 +325,9 @@ elsewhere):
 | `NinjaTrader.NinjaScript.dll` | `C:\Program Files\NinjaTrader 8\bin\` |
 | `NinjaTrader.Gui.dll` | `C:\Program Files\NinjaTrader 8\bin\` |
 
-Target: NinjaTrader **8.1.8.4 (64-bit)** on Windows with the .NET Framework 4.8 targeting pack.
+Target: NinjaTrader **8.1.9.0 (64-bit)** on Windows with the .NET Framework 4.8 targeting pack
+(minimum supported 8.1.8.4; real-host compatibility not verified — see
+`docs/PHASE1_ARCHITECTURE_AND_AUDIT.md` §5.4).
 The Cbi/Data/NinjaScript references were added in this audit so the `UseStubs=false` configuration
 is complete; the stub build is unaffected.
 

@@ -399,6 +399,26 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   the M1 cases in `Phase3ModuleTests` / `Phase4EvidencePackageTests`; a green stub run is **not**
   real-host proof.
 
+## NinjaTrader version compatibility (Prompt 10)
+
+- The declared host versions live in **one** place: `Core/Identity/NinjaTraderCompatibility.cs` —
+  `TargetVersion` (8.1.9.0), `MinimumSupportedVersion` (8.1.8.4), `TestedVersions` (empty) and
+  `CompatibilityVerifiedAtRuntime` (false while `TestedVersions` is empty). Documents reference this
+  declaration; never hardcode a version elsewhere.
+- Minimum, target and tested are deliberately distinct. The **target is an intention, not a runtime
+  fact**: no public NinjaTrader API exposes the installed host build, so `M1.HOST_COMPATIBILITY` is
+  always `INCONCLUSIVE` (never `PASS`) until a real host build is actually run and recorded in
+  `TestedVersions`. Editing a document must never make compatibility PASS.
+- `environment.json` carries a `ninjaTraderCompatibility` block (target/minimum/verifiedAtRuntime/
+  testedVersions/verifiedBuild/statement); `summary.html` shows the target with its verification status.
+- **Redaction nuance:** a version string like `8.1.9.0` matches the IPv4 mask rule. `SecretRedactor`
+  now applies the IPv4 rule separately and preserves only the exact declared version constants
+  (`KnownNonSecretVersions` = target + minimum + tool version + assembly version); every other
+  dotted-quad (a genuine IP) is still masked. If you add a new published version constant, add it to
+  `KnownNonSecretVersions` too, or it will be masked in the evidence and can trip `IsSecretFree`.
+- Tests: `NinjaTraderCompatibilityTests` (declaration invariants + M1 check + environment.json block +
+  redaction round-trip). A green stub run is **not** real-host proof.
+
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live

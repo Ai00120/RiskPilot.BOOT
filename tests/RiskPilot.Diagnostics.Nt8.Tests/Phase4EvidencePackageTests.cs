@@ -93,7 +93,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Environment = new EnvironmentRecord
                 {
                     Environment = EnvironmentClass.Simulation,
-                    HostVersion = "8.1.8.4",
+                    HostVersion = string.Empty,
                     HostVersionObservable = false,
                     ToolBuildMode = "StubOffline",
                     TargetFramework = "net8.0",

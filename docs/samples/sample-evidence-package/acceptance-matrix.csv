@@ -1,6 +1,7 @@
 moduleId,checkId,findingId,status,severity,errorClass,source,observation,limitation,nextAction
 M1,M1.API_SURFACE,M1.API_SURFACE,PASS,INFO,NONE,NinjaTrader Public API,present=7 missing=0,Synthetic documentation sample; not a runtime observation.,None (sample).
 M1,M1.HOST_VERSION,M1.HOST_VERSION,INCONCLUSIVE,MEDIUM,NONE,NinjaTrader Public API,NOT OBSERVED: no public API,Synthetic documentation sample; not a runtime observation.,None (sample).
+M1,M1.HOST_COMPATIBILITY,M1.HOST_COMPATIBILITY,INCONCLUSIVE,MEDIUM,NONE,NinjaTrader Public API,Targets NinjaTrader 8 8.1.9.0 (64-bit); minimum supported 8.1.8.4; verified at runtime: NONE — real-host compatibility is NOT verified without the installed NinjaTrader assemblies.,Synthetic documentation sample; not a runtime observation.,None (sample).
 M1,M1.LIFECYCLE,M1.LIFECYCLE,PASS,INFO,NONE,NinjaTrader Public API,states=SetDefaults -> Configure -> Active -> DataLoaded -> Realtime transitions=5 current=Realtime,Synthetic documentation sample; not a runtime observation.,None (sample).
 M1,M1.LIFECYCLE_PHASES,M1.LIFECYCLE_PHASES,PASS,INFO,NONE,NinjaTrader Public API,phases=INITIALIZATION -> STARTUP -> RUNTIME connection=DEFERRED_TO_M2,Synthetic documentation sample; not a runtime observation.,None (sample).
 M2,M2.CONNECTION.BROKER,M2.CONNECTION.BROKER,PASS,INFO,NONE,NinjaTrader Public API,price=CONNECTED order=CONNECTED,Synthetic documentation sample; not a runtime observation.,None (sample).

@@ -46,7 +46,7 @@ package.
 
 | Module | Focus |
 | --- | --- |
-| **M1** | Environment, API & lifecycle compatibility (host version is unobservable — no public API). Sole owner of the AddOn lifecycle surface; the connection phase is deferred to M2. |
+| **M1** | Environment, API & lifecycle compatibility (host version is unobservable — no public API; the declared target is NinjaTrader 8.1.9.0, minimum supported 8.1.8.4, and it is not verified at runtime). Sole owner of the AddOn lifecycle surface; the connection phase is deferred to M2. |
 | **M2** | Connection & provider identity (price feed and order channel are tracked separately). |
 | **M3** | Account & order lifecycle (F-05): order-id classification, correlation, fill continuity. |
 | **M4** | Instrument attestation / D-078 field approval. |
@@ -79,6 +79,11 @@ strategies.json  safety-audit.json  findings.json  manifest.json
 - `manifest.json` — session, start/end UTC, versions, provider, instrument, **masked** accounts,
   record and dropped counts, truncation status, `evidenceProvenance`, every file with its SHA-256,
   and the overall run status.
+- `environment.json` — the observed environment plus a `ninjaTraderCompatibility` block that
+  separates the declared **target** version, the **minimum supported** version and whether any host
+  build was **verified at runtime**. The installed host build is not exposed by any public API, so
+  the tool never presents the target as verified; the block reports `verifiedAtRuntime: false`
+  until a real-host run is recorded.
 
 Only data that was actually observable is exported. A section whose source could not be read is
 written with `status=UNAVAILABLE` and a `reason`, never fabricated and never omitted silently. Every

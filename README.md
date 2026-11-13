@@ -36,7 +36,9 @@ repository [`Ai00120/RiskPilot.BOT`](https://github.com/Ai00120/RiskPilot.BOT).
 
 > **Real NinjaTrader host compatibility is NOT yet verified.** The offline build compiles against
 > compile-time stubs for CI validation. A green offline build is a syntax/contract check only, not
-> proof that the AddOn builds or runs against a real NinjaTrader 8.1.8.4 host.
+> proof that the AddOn builds or runs against a real NinjaTrader host. The declared target is
+> NinjaTrader **8.1.9.0** (minimum supported **8.1.8.4**); no host build has been verified at
+> runtime because the NinjaTrader assemblies are not available in the offline build environment.
 
 ## Repository layout
 
@@ -79,7 +81,7 @@ With `UseStubs=true` (the default) the project targets `net8.0` and compiles
 
 ### Real host build (NinjaTrader installed)
 
-Requires Windows with NinjaTrader 8.1.8.4 (64-bit) and the .NET Framework 4.8 targeting pack.
+Requires Windows with NinjaTrader 8.1.9.0 (64-bit; minimum supported 8.1.8.4) and the .NET Framework 4.8 targeting pack.
 
 ```bat
 dotnet build src\RiskPilot.Diagnostics.Nt8\RiskPilot.Diagnostics.Nt8.csproj -p:UseStubs=false
@@ -145,6 +147,12 @@ A successful tool build is **not** a RiskPilot.BOT acceptance.
 
 ## Target environment
 
-NinjaTrader 8.1.8.4 (64-bit) / .NET Framework 4.8 / C# 8.0, CME ES futures via an authorized
-Rithmic connection.
+NinjaTrader 8.1.9.0 (64-bit) — minimum supported 8.1.8.4 — / .NET Framework 4.8 / C# 8.0, CME ES
+futures via an authorized Rithmic connection.
+
+The target, the minimum supported version and the tested version are kept distinct and are declared
+in one place, `src/RiskPilot.Diagnostics.Nt8/Core/Identity/NinjaTraderCompatibility.cs`. The
+**tested** list is empty: no host build has been verified at runtime because the NinjaTrader
+assemblies are not available in the offline build environment. Documentation alignment does not
+change that; `M1.HOST_COMPATIBILITY` reports the posture as `INCONCLUSIVE` and never as `PASS`.
 

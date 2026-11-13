@@ -9,7 +9,8 @@
 
 > This document records what was actually built in Phase 2, how it was verified, and —
 > explicitly — what was **not** verified. The offline build uses compile-time stubs, so
-> **real NinjaTrader 8.1.8.4 host compatibility is NOT established** by this phase.
+> **real NinjaTrader 8.1.9.0 host compatibility is NOT established** by this phase
+> (declared target 8.1.9.0, minimum supported 8.1.8.4; see `docs/PHASE1_ARCHITECTURE_AND_AUDIT.md` §5.4).
 
 ---
 
@@ -254,7 +255,7 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 
 | Item | Phase | Notes |
 |---|---|---|
-| Real NT8 build + runtime smoke | Next | Requires a Windows host with NT8 8.1.8.4 |
+| Real NT8 build + runtime smoke | Next | Requires a Windows host with NT8 8.1.9.0 (minimum 8.1.8.4) |
 | M3 Account/Order lifecycle | 3 | Needs Owner decision on `Executions` scope |
 | M4 Instrument attestation (D-078/D-096) | 3 | Reproduce attestation failure reasons |
 | M5 DOM/Market data quality | 4 | RESET frequency, snapshot-sync, gaps |
@@ -294,7 +295,7 @@ posture or the real-host-verification status.
 
 **Remaining limitations after the corrections (unchanged in substance):**
 
-- Real NinjaTrader 8.1.8.4 host build and runtime remain **unverified**.
+- Real NinjaTrader 8.1.9.0 host build and runtime remain **unverified** (minimum supported 8.1.8.4).
 - The lock-free guarantee is *non-blocking*, not formally wait-free, and is evidenced by
   contention tests rather than benchmark measurements.
 - Duplicate detection remains a bounded-window approximation: an identity evicted from the
