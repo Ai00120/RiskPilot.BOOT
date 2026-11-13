@@ -494,6 +494,58 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             }
         }
 
+        [Fact]
+        public void UnreadablePathAttributes_AreTreatedAsUnsafe_FailClosed()
+        {
+            var root = TempRoot();
+            try
+            {
+                WriteCleanBoot(root);
+
+                // A directory that can be listed but not traversed: its entries are enumerated yet
+                // their attributes cannot be read (File.GetAttributes throws). This is the real,
+                // non-mocked trigger for the HasReparsePoint error path.
+                var listed = Path.Combine(root, "Listed");
+                Directory.CreateDirectory(listed);
+                var inner = Path.Combine(listed, "Inner.cs");
+                File.WriteAllText(inner, "public class Inner {}");
+
+                if (!IsPosix)
+                {
+                    return; // Unix permission semantics are required to force the stat failure
+                }
+
+                File.SetUnixFileMode(listed, UnixFileMode.UserRead | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+
+                // The OS still lists the entry; only its attributes are unreadable.
+                Assert.Single(Directory.GetFiles(listed, "*.cs", SearchOption.TopDirectoryOnly));
+
+                // A privileged (root) process bypasses the mode, so the trigger cannot be produced.
+                if (CanStat(inner))
+                {
+                    return;
+                }
+
+                var source = new FileSystemSecurityScanSource(root);
+
+                Assert.True(source.IsAvailable);
+                // An entry whose attributes cannot be read is treated as unsafe, never silently
+                // accepted into the scanned set.
+                Assert.DoesNotContain(source.GetSourceFiles(), f => f.Contains("Inner.cs"));
+                Assert.False(source.IsComplete);
+
+                var scan = SecurityScanner.Scan(source);
+                Assert.True(scan.Executed);
+                Assert.False(scan.SourceComplete);
+                Assert.Contains(SecurityScanReasonCodes.Incomplete, scan.ReasonCodes);
+                Assert.DoesNotContain(SecurityScanReasonCodes.Passed, scan.ReasonCodes);
+            }
+            finally
+            {
+                TryDelete(root);
+            }
+        }
+
         // ---------------- M8 reporting of an incomplete scan ----------------
 
         [Fact]
@@ -555,6 +607,19 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             try
             {
                 File.ReadAllText(file);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        private static bool CanStat(string path)
+        {
+            try
+            {
+                File.GetAttributes(path);
                 return true;
             }
             catch (Exception)

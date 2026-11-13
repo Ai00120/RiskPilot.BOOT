@@ -431,6 +431,12 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             return false;
         }
 
+        /// <summary>
+        /// True when <paramref name="path"/> is a reparse point (a symbolic link or junction), or
+        /// when its attributes cannot be read at all. An unreadable path is treated as unsafe rather
+        /// than assumed to be a plain directory entry, so an unknown path is never followed out of
+        /// the permitted tree.
+        /// </summary>
         private static bool HasReparsePoint(string path)
         {
             try
@@ -440,7 +446,9 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             }
             catch (Exception)
             {
-                return false;
+                // Fail closed: the path's safety is unknown when its attributes cannot be read, so
+                // treat it as unsafe instead of assuming it is an ordinary entry.
+                return true;
             }
         }
 
