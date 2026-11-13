@@ -78,6 +78,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             results.Add(envCheck);
 
             results.Add(BuildHostVersionCheck(correlation, now));
+            results.Add(BuildHostCompatibilityCheck(correlation, now));
             results.Add(BuildArchitectureCheck(runtime, correlation, now));
             results.Add(BuildClrCheck(runtime, correlation, now));
             results.Add(BuildLifecycleCheck(snapshot, correlation, now));
@@ -103,6 +104,39 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 .WithRemediation("Host version cannot be proven through public APIs; confirm manually in Help > About.");
         }
 
+        /// <summary>
+        /// Reports the declared NinjaTrader compatibility posture: the intended target version, the
+        /// minimum supported version and whether any host build has actually been verified at
+        /// runtime. It is INCONCLUSIVE unless a real-host run has been recorded, because no public
+        /// API exposes the installed host build — a documented target is an intention, never a
+        /// runtime fact. This is why changing a document can never make compatibility PASS.
+        /// </summary>
+        private DiagnosticResult BuildHostCompatibilityCheck(string correlation, DateTime now)
+        {
+            var verified = NinjaTraderCompatibility.CompatibilityVerifiedAtRuntime;
+            var result = verified
+                ? DiagnosticResult.Pass(ModuleId, "M1.HOST_COMPATIBILITY", correlation, now)
+                : DiagnosticResult.Inconclusive(ModuleId, "M1.HOST_COMPATIBILITY", correlation, now);
+
+            return result
+                .WithFindingId("M1.HOST_COMPATIBILITY")
+                .WithReasonCode(
+                    "TARGET_HOST=" + NinjaTraderCompatibility.TargetVersion,
+                    "MIN_SUPPORTED_HOST=" + NinjaTraderCompatibility.MinimumSupportedVersion,
+                    "VERIFIED_AT_RUNTIME=" + (verified ? "YES" : "NO"),
+                    "HOST_COMPATIBILITY_UNVERIFIED")
+                .WithObservation(NinjaTraderCompatibility.CompatibilityStatement())
+                .WithSource(FindingFactory.SourceUnobservable)
+                .WithMethod("Reviewed the documented public NinjaScript surface and the declared compatibility constants; no public API exposes the installed host build.")
+                .WithLimitation("The declared target version is a project intention, not a runtime fact; no public API exposes the installed host build, so compatibility cannot be proven from inside the process.")
+                .WithNextAction("Compile against the real NinjaTrader assemblies and record the actual host build in the acceptance report.")
+                .WithEvidence(
+                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "targetVersion=" + NinjaTraderCompatibility.TargetVersion, now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "minimumSupportedVersion=" + NinjaTraderCompatibility.MinimumSupportedVersion, now),
+                    DiagnosticEvidence.Unobservable(FindingFactory.SourcePublicApi, "NO_PUBLIC_API_FOR_INSTALLED_HOST_BUILD", now))
+                .WithRemediation("Real-host compatibility is not verified offline; compile and run on a Windows host with NinjaTrader installed.");
+        }
+
         private DiagnosticResult BuildArchitectureCheck(RuntimeObservation runtime, string correlation, DateTime now)
         {
             if (runtime == null || !runtime.Is64BitProcess.HasValue)
@@ -121,7 +155,9 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 .WithSource(FindingFactory.SourceClr)
                 .WithMethod("Environment.Is64BitProcess.")
                 .WithLimitation("Reports the tool process bitness, which equals the host process bitness when hosted by NinjaTrader.")
-                .WithNextAction(is64 ? "None." : "NinjaTrader 8.1.8.4 is expected to be 64-bit; confirm the host installation.")
+                .WithNextAction(is64
+                    ? "None."
+                    : "NinjaTrader " + NinjaTraderCompatibility.TargetVersion + " (" + NinjaTraderCompatibility.RequiredArchitecture + ") is expected; confirm the host installation.")
                 .WithEvidence(DiagnosticEvidence.Observable(FindingFactory.SourceClr, "is64BitProcess=" + is64, now));
         }
 

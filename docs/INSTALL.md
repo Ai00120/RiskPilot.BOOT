@@ -9,12 +9,17 @@ dependency on `Ai00120/RiskPilot.BOT`.
 > because the NinjaTrader 8 assemblies are not available here. Treat a stub build as a
 > syntax/contract check only. Verify the real-host build on a Windows machine with NinjaTrader 8
 > installed before you install the AddOn.
+>
+> The declared **target** host is NinjaTrader **8.1.9.0** with a **minimum supported** version of
+> **8.1.8.4**. The **tested** version list is empty — no host build has been verified at runtime.
+> Changing this documentation does not change that: the tool cannot observe the installed host
+> build through any public API, so it never reports the target as verified.
 
 ## 1. Requirements
 
 | Item | Value |
 | --- | --- |
-| NinjaTrader | 8.1.8.4 (64-bit) or a compatible 8.x |
+| NinjaTrader (target) | 8.1.9.0 (64-bit); minimum supported 8.1.8.4 |
 | Target framework (real build) | .NET Framework 4.8 (`net48`) |
 | Language level | C# 8.0 |
 | NinjaTrader install path (default) | `C:\Program Files\NinjaTrader 8\bin\` |

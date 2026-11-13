@@ -2,7 +2,9 @@
 
   <!--
     RiskPilot NT8 Diagnostic Center — standalone, read-only NinjaTrader 8 AddOn.
-    Target host: NinjaTrader 8.1.8.4 (64-bit), .NET Framework 4.8, C# 8.0.
+    Target host: NinjaTrader 8.1.9.0 (64-bit), minimum supported 8.1.8.4,
+    .NET Framework 4.8, C# 8.0. Real-host compatibility is NOT verified offline
+    (the NinjaTrader assemblies are not available); see Core/Identity/NinjaTraderCompatibility.cs.
 
     TWO BUILD MODES (identical to the RiskPilot.BOT convention):
 
@@ -47,6 +49,7 @@
     <Compile Include="Core\Clock\IClock.cs" />
     <Compile Include="Core\Identity\CorrelationId.cs" />
     <Compile Include="Core\Identity\BuildIdentity.cs" />
+    <Compile Include="Core\Identity\NinjaTraderCompatibility.cs" />
     <Compile Include="Core\Identity\AccountIdentityVerifier.cs" />
     <Compile Include="Core\Identity\TargetAccountConnectionVerifier.cs" />
     <Compile Include="Core\Identity\InstrumentIdentityVerifier.cs" />
