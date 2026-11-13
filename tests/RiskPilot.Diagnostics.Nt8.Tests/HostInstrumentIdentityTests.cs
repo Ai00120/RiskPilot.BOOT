@@ -445,5 +445,119 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Reset();
             }
         }
+
+        // ---------------- M4 canonical ES economic specification (D-095 §4) ----------------
+
+        [Fact]
+        public void Host_EsEconomics_ProducesPassingObservation()
+        {
+            Reset();
+            try
+            {
+                Connection.Connections.Add(ConnectedRithmic());
+                Instrument.All.Add(EsInstrument());
+
+                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var observation = provider.GetSnapshot().EsProductSpecification;
+
+                Assert.True(observation.InstrumentSurfaceObservable);
+                Assert.True(observation.InstrumentObserved);
+                Assert.Equal(50.0d, observation.PointValue);
+                Assert.Equal(0.25d, observation.TickSize);
+                Assert.Equal(12.5d, observation.TickValue);
+                Assert.Equal("USD", observation.Currency);
+                Assert.Equal(DiagnosticStatus.PASS, EsProductSpecificationVerifier.Evaluate(observation).Status);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Host_WrongEsEconomics_IsFail()
+        {
+            Reset();
+            try
+            {
+                Connection.Connections.Add(ConnectedRithmic());
+                var mes = EsInstrument();
+                mes.MasterInstrument.PointValue = 20; // MES economics, not ES.
+                Instrument.All.Add(mes);
+
+                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var observation = provider.GetSnapshot().EsProductSpecification;
+
+                Assert.Equal(20.0d, observation.PointValue);
+                Assert.Equal(DiagnosticStatus.FAIL, EsProductSpecificationVerifier.Evaluate(observation).Status);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Host_NoLoadedInstrument_EsEconomics_IsInconclusive()
+        {
+            Reset();
+            try
+            {
+                Connection.Connections.Add(ConnectedRithmic());
+
+                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var observation = provider.GetSnapshot().EsProductSpecification;
+
+                Assert.True(observation.InstrumentSurfaceObservable);
+                Assert.False(observation.InstrumentObserved);
+                Assert.Equal(DiagnosticStatus.INCONCLUSIVE, EsProductSpecificationVerifier.Evaluate(observation).Status);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Host_MasterMetadataNotReady_EsEconomics_IsInconclusive_NeverFail()
+        {
+            Reset();
+            try
+            {
+                Connection.Connections.Add(ConnectedRithmic());
+                Instrument.All.Add(EsInstrument());
+
+                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var observation = provider.GetSnapshot().EsProductSpecification;
+
+                Assert.False(observation.InstrumentObserved);
+                Assert.Equal(DiagnosticStatus.INCONCLUSIVE, EsProductSpecificationVerifier.Evaluate(observation).Status);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Host_EsEconomicsObservation_CarriesNoRawSymbol()
+        {
+            Reset();
+            try
+            {
+                Connection.Connections.Add(ConnectedRithmic());
+                Instrument.All.Add(EsInstrument());
+
+                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var observation = provider.GetSnapshot().EsProductSpecification;
+
+                Assert.StartsWith("instrument#", observation.InstrumentRef);
+                Assert.DoesNotContain("ES 12-26", observation.InstrumentRef);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
     }
 }

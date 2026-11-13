@@ -823,7 +823,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             var sink = new InMemoryEvidenceSink();
             Assert.True(runtime.WriteEvidencePackage(result, sink, out var directory));
             Assert.False(string.IsNullOrEmpty(directory));
-            Assert.Equal(17, sink.Files.Count);
+            Assert.Equal(18, sink.Files.Count);
         }
 
         [Fact]

@@ -9,7 +9,37 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+### Added
+
+- **Stage 3 / Stage 4 diagnostic coverage audit (Prompt 11).** A final integration audit traced the
+  important Stage 3 (Position Sizing) and Stage 4 (Independent Risk Gate) requirements defined in
+  RiskPilot.BOT to the BOOT modules and checks that can provide evidence for them. The matrix is
+  defined once in `Core/Run/Stage34Coverage.cs` (`Stage34CoverageCatalog`) and evaluated per run by
+  `Stage34CoverageEvaluator` from the results the run actually produced; it is exported with every
+  run as the new **18th artifact** `stage34-coverage.json` and shown in `summary.html` (short table)
+  and `full-report.html` (full matrix). The readable form is `docs/STAGE34_COVERAGE.md`.
+  - Each requirement records its BOT reference, the BOOT module(s) and exact check id(s), the host
+    data and verification method, an evidence class (`RUNTIME_HOST` / `SOURCE_LEVEL`), a verification
+    scope (`FULL` / `PARTIAL` / `NONE`) and whether it needs a real host / a connected Rithmic SIM
+    account. The per-run status is **derived, never asserted**: `VERIFIED` only when every backing
+    check ran and PASSed; a missing backing check leaves it `INCONCLUSIVE` (never `PASS`); a
+    requirement with no runtime host API is `SOURCE_ONLY`. The artifact always carries an explicit
+    `statement` that BOOT does **not** fully validate Stage 3 or Stage 4.
+  - New read-only check **`M4.ES_PRODUCT_SPEC`** (M4): proves the loaded ES instrument's *economics*
+    — point value 50, tick size 0.25, derived tick value 12.50, currency USD — which Owner Decision
+    D-095 §4 makes part of the one immutable canonical ES specification. `M4.INSTRUMENT_IDENTITY`
+    proves *which* instrument is loaded; this proves *its economics*. The host reads the loaded
+    instrument's `MasterInstrument.*` (after the live readiness probe) and reduces it to numbers plus
+    a synthetic `instrument#<hash>`; a wrong value is `FAIL`, a missing value is `INCONCLUSIVE`
+    (never `PASS`), a stub/mock value is `INCONCLUSIVE`. Tests: `EsProductSpecificationTests`, the M4
+    ES-economics cases in `HostInstrumentIdentityTests` (host adapter over the offline stub surface)
+    and `Stage34CoverageTests`.
+
 ### Changed
+
+- The evidence package now contains **18 artifacts** (was 17): `stage34-coverage.json` was added.
+  `EvidencePackageCatalog` remains the single source of truth; the manifest lists the other 17 files.
+  The committed SAMPLE package and `SHA256SUMS.txt` were regenerated.
 
 - **NinjaTrader version documentation aligned to the declared target 8.1.9.0.** The documented
   target host was 8.1.8.4; the reported target environment is 8.1.9.0. The minimum supported

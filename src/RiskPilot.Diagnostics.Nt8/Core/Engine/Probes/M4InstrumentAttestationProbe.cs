@@ -37,6 +37,12 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             // always reports whether the selected instrument matches the permanent ES/CME identity.
             results.Add(BuildInstrumentIdentityCheck(context, correlation, now));
 
+            // The canonical ES economic specification (D-095 §4) is a separate, independent
+            // read-only check: it proves the loaded instrument's own economics (point value, tick
+            // size, derived tick value, currency) match the CME ES contract, not merely which
+            // instrument it is. It is likewise emitted even when the attestation surface is absent.
+            results.Add(BuildEsProductSpecificationCheck(context, correlation, now));
+
             if (observation == null)
             {
                 results.Add(FindingFactory.Unobservable(ModuleId, "M4.HOST_METADATA", correlation, now,
@@ -112,6 +118,76 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 .WithLimitation("The venue is a configured-route mapping, not an independent exchange-issued "
                     + "listing-venue attestation; an unconfirmed exchange or route keeps the identity unproven "
                     + "(INCONCLUSIVE). The raw symbol is never reported.")
+                .WithNextAction(verdict.Status == DiagnosticStatus.PASS
+                    ? "None."
+                    : "Load/subscribe the permanent ES contract on the CME route, then re-run.")
+                .WithEvidence(evidence.ToArray());
+        }
+
+        /// <summary>
+        /// Proves the loaded ES instrument's own economics match the canonical CME E-mini S&amp;P 500
+        /// Futures specification (D-095 §4): point value 50, tick size 0.25, derived tick value 12.50
+        /// and USD. The host reduces the loaded instrument's <c>MasterInstrument.*</c> economics to
+        /// numbers plus a synthetic reference; the verifier
+        /// (<see cref="Core.Identity.EsProductSpecificationVerifier"/>) decides PASS/FAIL/INCONCLUSIVE.
+        /// A missing field is INCONCLUSIVE, a contradicting field is FAIL, and only a fully observed,
+        /// fully matching specification is PASS. This is source-level/runtime evidence of the
+        /// instrument's economics; it is not a substitute for the D-078 host attestation.
+        /// </summary>
+        private DiagnosticResult BuildEsProductSpecificationCheck(ProbeContext context, string correlation, DateTime now)
+        {
+            var snapshot = context.Snapshot;
+            var observation = snapshot != null ? snapshot.EsProductSpecification : null;
+            var verdict = Core.Identity.EsProductSpecificationVerifier.Evaluate(observation);
+
+            var result = verdict.Status == DiagnosticStatus.PASS
+                ? DiagnosticResult.Pass(ModuleId, "M4.ES_PRODUCT_SPEC", correlation, now)
+                : (verdict.Status == DiagnosticStatus.FAIL
+                    ? DiagnosticResult.Fail(ModuleId, "M4.ES_PRODUCT_SPEC", ErrorClass.MissingInstrumentSpecification, correlation, now)
+                    : DiagnosticResult.Inconclusive(ModuleId, "M4.ES_PRODUCT_SPEC", correlation, now));
+
+            var observationText = "instrumentObserved=" + (observation != null && observation.InstrumentObserved)
+                + " instrumentRef=" + (observation == null || string.IsNullOrEmpty(observation.InstrumentRef) ? "none" : observation.InstrumentRef)
+                + " pointValue=" + Value(observation != null && observation.PointValueObservable ? (double?)observation.PointValue : null)
+                + " tickSize=" + Value(observation != null && observation.TickSizeObservable ? (double?)observation.TickSize : null)
+                + " tickValue=" + Value(observation != null && observation.TickValueObservable ? (double?)observation.TickValue : null)
+                + " currency=" + (observation != null && observation.CurrencyObservable ? observation.Currency : "UNOBSERVABLE")
+                + " mismatchedFields=" + Describe(verdict.MismatchedFields)
+                + " unobservableFields=" + Describe(verdict.UnobservableFields);
+
+            var evidence = new List<DiagnosticEvidence>();
+            foreach (var code in verdict.ReasonCodes)
+            {
+                evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "reason=" + code, now));
+            }
+
+            evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi,
+                "pointValue=" + Value(observation != null && observation.PointValueObservable ? (double?)observation.PointValue : null), now));
+            evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi,
+                "tickSize=" + Value(observation != null && observation.TickSizeObservable ? (double?)observation.TickSize : null), now));
+            evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi,
+                "tickValue=" + Value(observation != null && observation.TickValueObservable ? (double?)observation.TickValue : null), now));
+
+            if (verdict.Status == DiagnosticStatus.INCONCLUSIVE
+                && (observation == null || !observation.InstrumentObserved))
+            {
+                evidence.Add(DiagnosticEvidence.Unobservable(FindingFactory.SourcePublicApi,
+                    "no loaded ES instrument economics were observable", now));
+            }
+
+            return result
+                .WithFindingId("M4.ES_PRODUCT_SPEC")
+                .WithReasonCode(JoinReasonCodes(verdict.ReasonCodes))
+                .WithObservation(observationText)
+                .WithSource(verdict.Status == DiagnosticStatus.INCONCLUSIVE
+                    && (observation == null || !observation.InstrumentObserved)
+                    ? FindingFactory.SourceUnobservable
+                    : FindingFactory.SourcePublicApi)
+                .WithMethod("Read the loaded ES instrument's own MasterInstrument economics (point value, tick size, "
+                    + "derived tick value, currency) and compared them against the canonical CME ES contract facts.")
+                .WithLimitation("The canonical ES economics are published CME contract facts used as reference "
+                    + "expectations, not an independent exchange-issued attestation; a field that could not be read "
+                    + "keeps the specification unproven (INCONCLUSIVE). The raw symbol is never reported.")
                 .WithNextAction(verdict.Status == DiagnosticStatus.PASS
                     ? "None."
                     : "Load/subscribe the permanent ES contract on the CME route, then re-run.")

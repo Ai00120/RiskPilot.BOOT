@@ -92,7 +92,7 @@ Report artifacts are written **outside** the Git working tree:
 %USERPROFILE%\Documents\RiskPilot.Diagnostics.Evidence\<session-id>\
 ```
 
-Each run gets its own directory containing the 17-artifact package (see `docs/USAGE.md`). The
+Each run gets its own directory containing the 18-artifact package (see `docs/USAGE.md`). The
 directory holds no account identifiers or secrets: account references are replaced with synthetic
 `account#<hash>` tokens.
 

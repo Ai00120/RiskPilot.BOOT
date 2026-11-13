@@ -14,7 +14,7 @@ using Xunit;
 namespace RiskPilot.Diagnostics.Nt8.Tests
 {
     /// <summary>
-    /// Phase 4 evidence-package tests. They assert that every one of the 17 artifacts is
+    /// Phase 4 evidence-package tests. They assert that every one of the 18 artifacts is
     /// produced, that the manifest is internally consistent (hashes and lengths match the
     /// bytes actually written), that CSV/JSON/HTML outputs are well-formed, that missing data
     /// is reported as unavailable rather than fabricated, and that no secret can reach an
@@ -231,11 +231,11 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
-        public void Build_ProducesAll17Artifacts()
+        public void Build_ProducesAll18Artifacts()
         {
             var package = EvidencePackageBuilder.Build(RunResult(), FullDataset());
             Assert.True(package.HasCompleteArtifactSet());
-            Assert.Equal(17, package.Files.Count);
+            Assert.Equal(18, package.Files.Count);
             foreach (var name in EvidencePackageCatalog.All)
             {
                 Assert.True(package.Contains(name), "missing artifact: " + name);
@@ -248,8 +248,8 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             var package = EvidencePackageBuilder.Build(RunResult(), FullDataset());
             Assert.True(package.VerifyIntegrity(out var failure), failure);
 
-            // The manifest must list 16 files (all but manifest.json itself).
-            Assert.Equal(16, package.Manifest.Files.Count);
+            // The manifest must list 17 files (all but manifest.json itself).
+            Assert.Equal(17, package.Manifest.Files.Count);
             Assert.Equal("rp-20260101-000000-abc123", package.Manifest.SessionId);
             Assert.Equal("full", package.Manifest.ModeId);
             Assert.Equal("UNOBSERVABLE", package.Manifest.NtRuntimeVersion);

@@ -27,7 +27,7 @@ repository [`Ai00120/RiskPilot.BOT`](https://github.com/Ai00120/RiskPilot.BOT).
   See [`docs/PHASE3_DIAGNOSTIC_MODULES.md`](docs/PHASE3_DIAGNOSTIC_MODULES.md).
 - **Phase 4 complete** — UI, evidence reporting & tests: the three diagnostic modes
   (Quick / Full / Post-Trade Audit), the run coordinator (single-run, cancel, dispatcher
-  marshalling), the 17-artifact evidence package, M9 post-trade audit and the Control Center
+  marshalling), the 18-artifact evidence package, M9 post-trade audit and the Control Center
   window. See [`docs/PHASE4_UI_AND_EVIDENCE.md`](docs/PHASE4_UI_AND_EVIDENCE.md).
 - **Phase 5 complete** — final independent audit, defect fixes, acceptance-scenario tests,
   sample evidence package and release documentation. See
@@ -50,7 +50,7 @@ src/RiskPilot.Diagnostics.Nt8/          The AddOn (shippable product)
 │   ├── Result/ Session/ Queue/ Logging/ Errors/
 │   ├── Report/                          JSON writer, SHA-256 manifest, serializer
 │   ├── Engine/                          DiagnosticEngine + probes M1–M9
-│   ├── Evidence/                        17-artifact evidence package builder
+│   ├── Evidence/                        18-artifact evidence package builder
 │   ├── Run/                             Modes, run coordinator, view state (host-free)
 │   └── Contract/                        IReadOnlyDiagnosticSource (optional)
 ├── Host/                                The ONLY layer that touches NinjaTrader types

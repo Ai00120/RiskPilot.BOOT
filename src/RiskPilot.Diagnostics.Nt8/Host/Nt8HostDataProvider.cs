@@ -318,6 +318,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 OrderLifecycle = BuildOrderLifecycleObservation(),
                 Attestation = BuildAttestationObservation(),
                 InstrumentIdentity = BuildInstrumentIdentityObservation(),
+                EsProductSpecification = BuildEsProductSpecificationObservation(),
                 DomMarketData = new DomMarketDataObservation(),
                 TradeDelta = new TradeDeltaObservation(),
                 StrategyRiskGate = new StrategyRiskGateObservation(),
@@ -1179,6 +1180,70 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             catch (Exception)
             {
                 observation.InstrumentSurfaceObservable = false;
+                return observation;
+            }
+        }
+
+        /// <summary>
+        /// Builds the read-only observation that proves the loaded ES instrument's own economics
+        /// match the canonical CME E-mini S&amp;P 500 Futures specification (D-095 §4). It reuses
+        /// the same unique ES-root resolution as the identity observation (never a name built from
+        /// a configured string), reads the selected instrument's <c>MasterInstrument.*</c> economics
+        /// only after the live readiness probe returns true, and reduces them to numbers plus a
+        /// synthetic reference. The raw symbol never enters the observation. Never throws.
+        /// </summary>
+        private EsProductSpecificationObservation BuildEsProductSpecificationObservation()
+        {
+            var observation = new EsProductSpecificationObservation();
+
+            try
+            {
+                var instrument = ResolveLoadedInstrument(_requestedInstrumentId, () => MasterMetadataReady);
+                if (instrument == null)
+                {
+                    // No unique ES-root instrument: distinguish "surface not enumerable" from
+                    // "enumerated but no matching instrument" so the verifier can fail closed.
+                    observation.InstrumentSurfaceObservable = Instrument.All != null;
+                    observation.InstrumentObserved = false;
+                    return observation;
+                }
+
+                observation.InstrumentSurfaceObservable = true;
+                observation.InstrumentObserved = true;
+
+                var fullName = SafeString(() => instrument.FullName);
+                observation.InstrumentRef = SyntheticRef.For("instrument", fullName);
+
+                var master = instrument.MasterInstrument;
+                if (master == null)
+                {
+                    return observation;
+                }
+
+                var pointValue = SafeDouble(() => master.PointValue);
+                observation.PointValueObservable = pointValue.HasValue;
+                observation.PointValue = pointValue ?? 0d;
+
+                var tickSize = SafeDouble(() => master.TickSize);
+                observation.TickSizeObservable = tickSize.HasValue;
+                observation.TickSize = tickSize ?? 0d;
+
+                if (pointValue.HasValue && tickSize.HasValue)
+                {
+                    observation.TickValue = pointValue.Value * tickSize.Value;
+                    observation.TickValueObservable = true;
+                }
+
+                var currency = MapCurrencyToIsoCode(SafeString(() => master.Currency.ToString()));
+                observation.CurrencyObservable = !string.IsNullOrEmpty(currency);
+                observation.Currency = currency ?? string.Empty;
+
+                return observation;
+            }
+            catch (Exception)
+            {
+                observation.InstrumentSurfaceObservable = false;
+                observation.InstrumentObserved = false;
                 return observation;
             }
         }

@@ -10,7 +10,7 @@
   </tr>
   <tr>
     <th>Session ID</th>
-    <td>diag_20261112_080000_3c35bc4b40724aabbd6714a3ebf20a74</td>
+    <td>diag_20261112_080000_5e4671245e43462c97eb7d118cd7c510</td>
   </tr>
   <tr>
     <th>Mode</th>
@@ -150,6 +150,166 @@
       <td>RiskPilot.BOT acceptance</td>
       <td>NOT_APPLICABLE</td>
       <td>Out of scope. This tool is independent of RiskPilot.BOT and cannot certify it. A successful AddOn build or diagnostic run is NOT a RiskPilot.BOT acceptance.</td>
+    </tr>
+  </tbody>
+</table>
+<h2>Stage 3 / Stage 4 coverage</h2>
+<div class="note">BOOT does NOT fully validate Stage 3 or Stage 4: of 18 traced requirement(s): 0 verified, 0 failed, 5 inconclusive, 10 not executed, 3 source-level only and 0 not covered. 7 are fully runtime-observable, 8 partially, and 3 not verifiable at runtime. 14 need a real NinjaTrader installation and 8 need an actual connected Rithmic simulation account.</div>
+<table>
+  <thead>
+    <tr>
+      <th>Requirement</th>
+      <th>Stage</th>
+      <th>Title</th>
+      <th>Status</th>
+      <th>Scope</th>
+      <th>Evidence</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>S3-D022-DUAL-POLICY</td>
+      <td>Stage 3</td>
+      <td>Dual-policy sizing architecture</td>
+      <td>NOT_EXECUTED</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>S3-D022-FAILCLOSED</td>
+      <td>Stage 3</td>
+      <td>Fail-closed sizing on missing inputs</td>
+      <td>NOT_EXECUTED</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>S3-D022-QUANTITY-LATTICE</td>
+      <td>Stage 3</td>
+      <td>Quantity rounding / min / cap rules</td>
+      <td>NOT_EXECUTED</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>S3-ANALYTICAL-NONEXECUTABLE</td>
+      <td>Stage 3</td>
+      <td>Stage 3 output is analytical and non-executable</td>
+      <td>INCONCLUSIVE</td>
+      <td>FULL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>S3-OD1-INVALIDATION</td>
+      <td>Stage 3</td>
+      <td>Structured InvalidationLevel provenance (OD-1)</td>
+      <td>SOURCE_ONLY</td>
+      <td>NONE</td>
+      <td>SOURCE_LEVEL</td>
+    </tr>
+    <tr>
+      <td>S4-MONOTONIC-QUANTITY</td>
+      <td>Stage 4</td>
+      <td>Monotonic quantity invariant</td>
+      <td>NOT_EXECUTED</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>S4-FAILCLOSED</td>
+      <td>Stage 4</td>
+      <td>Fail-closed risk gate on missing inputs</td>
+      <td>NOT_EXECUTED</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>S4-ACCOUNT-STATE-GATE</td>
+      <td>Stage 4</td>
+      <td>Non-bypassable verified account state (D-032)</td>
+      <td>NOT_EXECUTED</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>S4-RISK-POLICY</td>
+      <td>Stage 4</td>
+      <td>Compiled immutable RiskPolicyLimits with verified hash (D-036 / D-073)</td>
+      <td>SOURCE_ONLY</td>
+      <td>NONE</td>
+      <td>SOURCE_LEVEL</td>
+    </tr>
+    <tr>
+      <td>S4-PORTFOLIO-STATE</td>
+      <td>Stage 4</td>
+      <td>Dynamic portfolio state is not zero-defaulted (OD-2)</td>
+      <td>SOURCE_ONLY</td>
+      <td>NONE</td>
+      <td>SOURCE_LEVEL</td>
+    </tr>
+    <tr>
+      <td>S34-CORRELATION</td>
+      <td>Stage 4</td>
+      <td>Decision→proposal→risk linkage preserved</td>
+      <td>NOT_EXECUTED</td>
+      <td>FULL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>ID-ACCOUNT</td>
+      <td>Identity</td>
+      <td>Exact account identity (D-095 / D-096)</td>
+      <td>NOT_EXECUTED</td>
+      <td>FULL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>ID-CONNECTION-PROVIDER</td>
+      <td>Identity</td>
+      <td>Exact connection / provider identity (D-096)</td>
+      <td>INCONCLUSIVE</td>
+      <td>FULL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>ID-INSTRUMENT</td>
+      <td>Identity</td>
+      <td>Canonical ES/CME instrument identity (D-078 / D-096)</td>
+      <td>NOT_EXECUTED</td>
+      <td>FULL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>ID-ES-ECONOMICS</td>
+      <td>Identity</td>
+      <td>Canonical ES economic specification (D-095 §4)</td>
+      <td>NOT_EXECUTED</td>
+      <td>FULL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>DEP-DOM-MARKETDATA</td>
+      <td>Data</td>
+      <td>DOM / Level II and Level I market-data surface</td>
+      <td>INCONCLUSIVE</td>
+      <td>FULL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>DEP-TRADEDELTA</td>
+      <td>Data</td>
+      <td>TradeDelta / OrderFlow inputs</td>
+      <td>INCONCLUSIVE</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
+    </tr>
+    <tr>
+      <td>DEP-POSTTRADE-AUDIT</td>
+      <td>Data</td>
+      <td>Order / execution / position lifecycle audit</td>
+      <td>INCONCLUSIVE</td>
+      <td>PARTIAL</td>
+      <td>RUNTIME_HOST</td>
     </tr>
   </tbody>
 </table>
