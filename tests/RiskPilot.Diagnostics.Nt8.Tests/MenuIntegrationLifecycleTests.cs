@@ -61,7 +61,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.True(surface.Contains(ItemId));
             Assert.True(registry.IsAttached(owner));
             Assert.Equal(1, registry.AttachedCount);
-            Assert.Equal(MenuSurfaceKind.ControlCenter, registry.CurrentKind);
+            Assert.Equal(MenuSurfaceKind.ControlCenter, registry.OwnedKind(owner));
         }
 
         [Fact]
@@ -87,25 +87,70 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
-        public void SecondOwner_TakesOver_AndThePreviousItemIsRemoved_NoDuplicate()
+        public void MultipleOwnerWindows_EachGetTheirOwnItem_OnTheirOwnMenu()
         {
+            // Requirement: each supported owner window has correct menu integration. Two Control
+            // Center windows (for example across an AddOn reload) each get one item on their own
+            // menu, and neither is a duplicate.
+            var registry = new MenuOwnershipRegistry();
+            var firstSurface = new FakeMenuSurface();
+            var secondSurface = new FakeMenuSurface();
+            var first = new object();
+            var second = new object();
+
+            var firstResult = Attach(registry, first, firstSurface);
+            var secondResult = Attach(registry, second, secondSurface);
+
+            Assert.True(firstResult.Attached);
+            Assert.True(secondResult.Attached);
+            Assert.Equal(MenuAttachStatus.Attached, firstResult.Status);
+            Assert.Equal(MenuAttachStatus.Attached, secondResult.Status);
+            Assert.Equal(1, firstSurface.ItemCount);
+            Assert.Equal(1, secondSurface.ItemCount);
+            Assert.True(registry.IsAttached(first));
+            Assert.True(registry.IsAttached(second));
+            Assert.Equal(2, registry.AttachedCount);
+        }
+
+        [Fact]
+        public void SecondOwnerOnTheSameMenu_IsRefused_NoDuplicate()
+        {
+            // Two windows that present the same menu must not both add the item: the second is
+            // refused, so the one menu never holds a duplicate.
             var registry = new MenuOwnershipRegistry();
             var surface = new FakeMenuSurface();
             var first = new object();
             var second = new object();
-            var firstCleanupCount = 0;
 
-            Assert.True(Attach(registry, first, surface, onRemoved: () => firstCleanupCount++).Attached);
+            Assert.True(Attach(registry, first, surface).Attached);
             var result = Attach(registry, second, surface);
 
-            Assert.True(result.Attached);
-            Assert.Equal(MenuAttachStatus.Replaced, result.Status);
+            Assert.False(result.Attached);
+            Assert.Equal(MenuAttachStatus.SurfaceAlreadyOwned, result.Status);
             Assert.Equal(1, surface.ItemCount);
+            Assert.False(registry.IsAttached(second));
+            Assert.Equal(1, registry.AttachedCount);
+        }
+
+        [Fact]
+        public void RemovingOneOwner_LeavesTheOtherOwnerAndItsItemIntact()
+        {
+            var registry = new MenuOwnershipRegistry();
+            var firstSurface = new FakeMenuSurface();
+            var secondSurface = new FakeMenuSurface();
+            var first = new object();
+            var second = new object();
+
+            Assert.True(Attach(registry, first, firstSurface).Attached);
+            Assert.True(Attach(registry, second, secondSurface).Attached);
+
+            Assert.True(registry.Remove(first));
+
+            Assert.Equal(0, firstSurface.ItemCount);
+            Assert.Equal(1, secondSurface.ItemCount);
             Assert.False(registry.IsAttached(first));
             Assert.True(registry.IsAttached(second));
             Assert.Equal(1, registry.AttachedCount);
-            // The displaced owner's cleanup ran exactly once.
-            Assert.Equal(1, firstCleanupCount);
         }
 
         [Fact]
@@ -181,7 +226,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.Equal(0, surface.ItemCount);
             Assert.False(registry.IsAttached(owner));
             Assert.Equal(0, registry.AttachedCount);
-            Assert.Equal(MenuSurfaceKind.Unknown, registry.CurrentKind);
+            Assert.Equal(MenuSurfaceKind.Unknown, registry.OwnedKind(owner));
             Assert.Equal(1, cleanupCount);
         }
 

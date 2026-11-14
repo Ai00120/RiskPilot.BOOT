@@ -567,10 +567,11 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   `NinjaTrader.Gui.ControlCenter` / `ControlCenter` (matched by walking the window's type hierarchy,
   string-based like the provider-identity path); every other NinjaTrader window is `Other` and is
   refused without touching the menu. Never add the item to an arbitrary window.
-- The registry keeps **at most one** live item: a repeat Attach by the same owner is an idempotent
-  `AlreadyAttached` no-op (no duplicate); a different owner gets `Replaced` (the previous item is
-  removed **before** the new one is added, since both share the same id). A stale surface item under
-  our id is also cleared first. An unalive owner / non-ControlCenter owner / failed add is refused
+- Each supported owner window has its **own** item on its **own** menu (so multiple Control Center
+  windows across a reload each integrate correctly). A repeat Attach by the same owner is an
+  idempotent `AlreadyAttached` no-op; a **second window presenting the same menu** is refused
+  (`SurfaceAlreadyOwned`), so the item is never added twice to one menu. A stale surface item under
+  our id is cleared first. An unalive owner / non-ControlCenter owner / failed add is refused
   (`OwnerNotAlive` / `UnsupportedOwner` / `AddFailed`), never a false success.
 - Removal (`Remove`/`Clear`, also driven by the owner window's `Closed` handler) removes the item,
   detaches the click handler, and drops the owner/surface/callback references, so a destroyed window

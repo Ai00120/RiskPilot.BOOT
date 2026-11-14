@@ -5,8 +5,8 @@ using System.Runtime.CompilerServices;
 namespace RiskPilot.Diagnostics.Nt8.Core.Run
 {
     /// <summary>
-    /// The stable identity of the single diagnostic menu item. It is declared once here so the
-    /// host adapter and its tests can never disagree on the id.
+    /// The stable identity of the diagnostic menu item. It is declared once here so the host
+    /// adapter and its tests can never disagree on the id.
     /// </summary>
     public static class DiagnosticMenu
     {
@@ -68,7 +68,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
     {
         Attached = 0,
         AlreadyAttached = 1,
-        Replaced = 2,
+        SurfaceAlreadyOwned = 2,
         UnsupportedOwner = 3,
         OwnerNotAlive = 4,
         SurfaceUnavailable = 5,
@@ -76,10 +76,10 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
     }
 
     /// <summary>
-    /// Host-free abstraction over the single menu a diagnostic menu item is added to. The host
-    /// adapter implements it over a WPF <c>System.Windows.Controls.Menu</c>; a test implements it in
-    /// memory. It is strictly additive (add / remove / enumerate) and can never submit, change or
-    /// cancel an order and never touches an account, connection or position.
+    /// Host-free abstraction over one menu a diagnostic menu item is added to. The host adapter
+    /// implements it over a WPF <c>System.Windows.Controls.Menu</c>; a test implements it in memory.
+    /// It is strictly additive (add / remove / contains) and can never submit, change or cancel an
+    /// order and never touches an account, connection or position.
     /// </summary>
     public interface IMenuSurface
     {
@@ -123,7 +123,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
     }
 
     /// <summary>
-    /// Tracks exactly which window owns the single diagnostic menu item and on which menu it was
+    /// Tracks exactly which windows own the diagnostic menu item and on which menu each item was
     /// placed. It replaces the previous global <c>bool _added</c> flag, which could not tell which
     /// window owned the item, whether that window had been destroyed, or whether the item had
     /// already been removed — and so could suppress a correct registration after a window lifecycle
@@ -131,8 +131,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
     /// <para>
     /// Ownership rules:
     /// <list type="bullet">
-    /// <item>At most one item is ever live. A second registration by the same owner is an idempotent
-    /// no-op; a registration by a different owner replaces the previous one (no duplicate).</item>
+    /// <item>Each supported owner window has its own item on its own menu; a repeat registration by
+    /// the same owner is an idempotent no-op, so no owner ever gets a duplicate item.</item>
+    /// <item>A single menu can be owned by only one window: a second window that presents the same
+    /// menu is refused (<see cref="MenuAttachStatus.SurfaceAlreadyOwned"/>), so the item is never
+    /// added twice to one menu.</item>
     /// <item>Only <see cref="MenuSurfaceKind.ControlCenter"/> is accepted; any other window is
     /// refused without touching the menu.</item>
     /// <item>A registration for a window that is no longer alive is refused (fail closed).</item>
@@ -144,7 +147,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
     /// Thread safety: every entry point takes a single private lock, so repeated
     /// Attach/Remove/Clear calls from any thread are safe. Every surface mutation (add/remove) is
     /// performed while the lock is held, so two callers can never touch the same menu at once and
-    /// the single-item invariant holds under concurrency. Only the owner's removal callback runs
+    /// the no-duplicate invariant holds under concurrency. Only the owner's removal callback runs
     /// after the lock is released, so a host cleanup handler can never deadlock the registry or
     /// re-enter it while it is held.
     /// </para>
@@ -153,7 +156,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
     {
         private readonly object _gate = new object();
         private readonly Dictionary<object, Entry> _byOwner = new Dictionary<object, Entry>(ReferenceComparer.Instance);
-        private Entry _current;
+        private readonly Dictionary<IMenuSurface, Entry> _bySurface = new Dictionary<IMenuSurface, Entry>(ReferenceComparer.Instance);
 
         private sealed class Entry
         {
@@ -164,13 +167,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
             public Action OnRemoved;
         }
 
-        /// <summary>Number of owners currently holding the item (0 or 1).</summary>
+        /// <summary>Number of owner windows currently holding an item.</summary>
         public int AttachedCount
         {
             get { lock (_gate) { return _byOwner.Count; } }
         }
 
-        /// <summary>True when <paramref name="ownerKey"/> currently owns the item.</summary>
+        /// <summary>True when <paramref name="ownerKey"/> currently owns an item.</summary>
         public bool IsAttached(object ownerKey)
         {
             if (ownerKey == null)
@@ -184,17 +187,27 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
             }
         }
 
-        /// <summary>The kind of the current owner, or <see cref="MenuSurfaceKind.Unknown"/> when none.</summary>
-        public MenuSurfaceKind CurrentKind
+        /// <summary>The kind of the item owned by <paramref name="ownerKey"/>, or
+        /// <see cref="MenuSurfaceKind.Unknown"/> when that window owns nothing.</summary>
+        public MenuSurfaceKind OwnedKind(object ownerKey)
         {
-            get { lock (_gate) { return _current == null ? MenuSurfaceKind.Unknown : _current.Kind; } }
+            if (ownerKey == null)
+            {
+                return MenuSurfaceKind.Unknown;
+            }
+
+            lock (_gate)
+            {
+                Entry entry;
+                return _byOwner.TryGetValue(ownerKey, out entry) ? entry.Kind : MenuSurfaceKind.Unknown;
+            }
         }
 
         /// <summary>
         /// Registers the diagnostic item on <paramref name="surface"/> on behalf of
         /// <paramref name="ownerKey"/>. Returns true when the item is owned by that window after the
-        /// call (either freshly added, already owned, or replaced from another owner). Returns false
-        /// — with <paramref name="status"/> explaining why — when nothing was registered.
+        /// call (freshly added, or already owned). Returns false — with <paramref name="status"/>
+        /// explaining why — when nothing was registered.
         /// </summary>
         /// <param name="onRemoved">
         /// Optional host cleanup invoked when the item is removed (for example to detach a
@@ -229,27 +242,21 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                 return false;
             }
 
-            Entry displaced = null;
-            Entry added;
-
             lock (_gate)
             {
-                if (_current != null && ReferenceEquals(_current.Owner, ownerKey))
+                // Idempotent: this window already owns its item.
+                if (_byOwner.ContainsKey(ownerKey))
                 {
                     status = MenuAttachStatus.AlreadyAttached;
                     return true;
                 }
 
-                // A different owner takes over the single item. Its item is removed from its own
-                // surface *before* the new item is added, because both share the same id and a
-                // removal afterwards would drop the item just added. The displaced owner's host
-                // removal callback is deferred until the lock is released.
-                if (_current != null)
+                // A single menu can be owned by only one window; refuse a second claimant so the
+                // item is never added twice to one menu.
+                if (_bySurface.ContainsKey(surface))
                 {
-                    displaced = _current;
-                    _byOwner.Remove(displaced.Owner);
-                    _current = null;
-                    DetachSurfaceItem(displaced);
+                    status = MenuAttachStatus.SurfaceAlreadyOwned;
+                    return false;
                 }
 
                 // Remove a stale item the surface may still hold under our id (for example one left
@@ -279,42 +286,22 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                 if (!ok)
                 {
                     status = MenuAttachStatus.AddFailed;
-                    added = null;
+                    return false;
                 }
-                else
+
+                var entry = new Entry
                 {
-                    added = new Entry
-                    {
-                        Owner = ownerKey,
-                        Kind = kind,
-                        Surface = surface,
-                        ItemId = itemId,
-                        OnRemoved = onRemoved
-                    };
-                    _byOwner[ownerKey] = added;
-                    _current = added;
-                    status = displaced != null ? MenuAttachStatus.Replaced : MenuAttachStatus.Attached;
-                }
+                    Owner = ownerKey,
+                    Kind = kind,
+                    Surface = surface,
+                    ItemId = itemId,
+                    OnRemoved = onRemoved
+                };
+                _byOwner[ownerKey] = entry;
+                _bySurface[surface] = entry;
+                status = MenuAttachStatus.Attached;
+                return true;
             }
-
-            if (added == null)
-            {
-                // The new registration failed. The previous owner was already displaced and its
-                // item removed; only its removal callback is left to run.
-                if (displaced != null)
-                {
-                    RunRemovalCallback(displaced);
-                }
-
-                return false;
-            }
-
-            if (displaced != null)
-            {
-                RunRemovalCallback(displaced);
-            }
-
-            return true;
         }
 
         /// <summary>
@@ -337,10 +324,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                 }
 
                 _byOwner.Remove(ownerKey);
-                if (ReferenceEquals(_current, entry))
-                {
-                    _current = null;
-                }
+                _bySurface.Remove(entry.Surface);
 
                 // The surface mutation runs under the lock; the host callback runs after it.
                 DetachSurfaceItem(entry);
@@ -361,7 +345,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
             {
                 entries = new List<Entry>(_byOwner.Values);
                 _byOwner.Clear();
-                _current = null;
+                _bySurface.Clear();
 
                 // Every surface mutation runs under the lock; the host callbacks run after it.
                 foreach (var entry in entries)
