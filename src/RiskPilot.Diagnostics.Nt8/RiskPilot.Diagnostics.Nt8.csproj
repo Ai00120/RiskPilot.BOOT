@@ -124,6 +124,8 @@
     <Compile Include="Core\Run\DiagnosticRunResult.cs" />
     <Compile Include="Core\Run\IUiDispatcher.cs" />
     <Compile Include="Core\Run\SwitchableUiDispatcher.cs" />
+    <Compile Include="Core\Run\IDiagnosticWindow.cs" />
+    <Compile Include="Core\Run\DiagnosticWindowLifecycle.cs" />
     <Compile Include="Core\Run\IDiagnosticRunner.cs" />
     <Compile Include="Core\Run\DiagnosticRunCoordinator.cs" />
     <Compile Include="Core\Run\AcceptanceSummary.cs" />
