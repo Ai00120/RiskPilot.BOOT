@@ -62,6 +62,7 @@
     <Compile Include="SecurityScanTests.cs" />
     <Compile Include="SecurityScanScopeTests.cs" />
     <Compile Include="Phase4RunCoordinatorTests.cs" />
+    <Compile Include="WindowLifecycleTests.cs" />
     <Compile Include="Phase4EvidencePackageTests.cs" />
     <Compile Include="Phase4PostTradeAuditTests.cs" />
     <Compile Include="Phase4RuntimeIntegrationTests.cs" />
