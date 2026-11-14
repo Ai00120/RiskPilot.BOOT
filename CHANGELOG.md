@@ -92,6 +92,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ### Fixed
 
+- **M4 no longer reports FIELD_METADATA PASS when a required instrument property could not be
+  read.** Root cause: `SafeString`/`SafeDouble` suppressed getter exceptions and returned an
+  empty string / default, and `BuildAttestationObservation` recorded only a coarse
+  `"MasterInstrument"` failure, so `M4InstrumentAttestationProbe.BuildFieldMetadataCheck` could
+  report `PASS` with an unread field. The attestation metadata path now reads each field through
+  `Nt8HostDataProvider.TryReadMetadataString`/`TryReadMetadataDouble`, which record the exact
+  field name in `ReadFailures` and leave a per-field `*Observable` flag false; one failed field
+  never erases another field's status. `M4.FIELD_METADATA` now `FAIL`s on any getter failure
+  (`HOST_READ_FAILED`, outranking an unobserved field), is `INCONCLUSIVE` when a required field
+  was not observed (`HOST_METADATA_INCOMPLETE`), and only `PASS`es when the full required set was
+  read. `M4.HOST_METADATA` now proves only that the host instrument object/metadata surface was
+  reachable. `instruments.json` preserves the read outcome (`fieldReadFailures` + `*Observable`).
+  `BuildInstrumentIdentityObservation`/`BuildEsProductSpecificationObservation` already fail closed
+  and now have regression coverage. Focused coverage: `M4FieldReadStatusTests`.
+
 - **M3 read Portfolio collections across every visible account.** Root cause:
   `Nt8HostDataProvider.GetAccounts()` and `BuildOrderLifecycleObservation()` iterated the whole
   `Account.All` collection and read each account's `Account.Positions` / `Account.Orders`, so a
