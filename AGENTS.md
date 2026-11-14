@@ -555,6 +555,39 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - Tests: `EsProductSpecificationTests`, the M4 ES-economics cases in `HostInstrumentIdentityTests`, and
   `Stage34CoverageTests`. A green stub run is **not** real-host proof.
 
+## UI dispatcher lifecycle (P12 — Control Center ownership)
+
+- NinjaTrader raises `OnWindowCreated`/`OnWindowDestroyed` for **every** NTWindow (Control Center,
+  charts, DOM, SuperDOM, workspaces), in that window's own thread. The old `DiagnosticAddOn.Ui.cs`
+  attached on any window and detached on any window, so closing an unrelated chart cleared the
+  dispatcher the Diagnostic Center was using. The fix gates both hooks on the **Control Center**:
+  `OnWindowCreated` returns unless `window is NinjaTrader.Gui.ControlCenter` (the documented cast),
+  and `OnWindowDestroyed` detaches only when the window owns the active dispatcher.
+- Ownership lives in the host-free `Core/Run/SwitchableUiDispatcher`, not in the host hook:
+  `Attach(object owner, IUiDispatcher dispatcher)` records the owner and refuses (returns false,
+  leaving the target in place) a different owner while a **live** target is held; a shut-down
+  target is replaced regardless of owner so a re-created Control Center can take over. `Detach(object owner)`
+  clears the target only for the current owner (an unrelated window's destroy is a no-op); the
+  parameterless `Detach()` clears both target and owner unconditionally and is what AddOn termination
+  (`ShutdownUiLayer`) uses, so no stale dispatcher reference survives an AddOn reload.
+- `SwitchableUiDispatcher.Attach` also refuses a null or already-shut-down dispatcher (a dead
+  dispatcher is never adopted, so notifications keep running inline instead of being dropped).
+  `Post` still runs inline with no target; `HasShutdownStarted` stays false with no target so
+  pre-window notifications are never dropped.
+- `WpfUiDispatcher.HasShutdownStarted` covers **both** `HasShutdownStarted` and `HasShutdownFinished`;
+  `Post` contains an `InvalidOperationException` from `InvokeAsync` (the dispatcher can shut down
+  between the flag check and the post) and reports the post as not queued, so a shutdown race never
+  faults the run worker.
+- The offline `System.Windows.Threading.Dispatcher` stub gained settable `HasShutdownStarted` /
+  `HasShutdownFinished` / `OnDispatcherThread` / `ThrowOnInvokeAsync` switches (the existing
+  fault-injection convention) so the shutdown paths are exercised over the stub surface.
+- Tests: `UiDispatcherLifecycleTests` (unrelated window create/destroy, owning window destroy,
+  repeated attach/detach, dispatcher shutdown, AddOn terminate + reinitialise, concurrency). They
+  drive the real `SwitchableUiDispatcher` and the real `WpfUiDispatcher`; the thin `is ControlCenter`
+  host guard is mirrored as test scaffolding. A green stub run is **not** real-host proof: the real
+  `NinjaTrader.Gui.ControlCenter` cast and the real WPF dispatcher shutdown behaviour are only
+  provable inside NinjaTrader 8.
+
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live

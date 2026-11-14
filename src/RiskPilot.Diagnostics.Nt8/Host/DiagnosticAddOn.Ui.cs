@@ -15,20 +15,27 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         private DiagnosticCenterWindowManager _windowManager;
 
         /// <summary>
-        /// Called by the host when a window is created. The first window is used to attach the
-        /// UI dispatcher (so run notifications reach the UI thread) and to add the diagnostic
-        /// menu item. Nothing else about the host window is modified.
+        /// Called by the host whenever <em>any</em> NTWindow is created (the Control Center, a
+        /// chart, a DOM, ...). Only the Control Center owns the UI dispatcher and the menu item,
+        /// so every other window is ignored: attaching to a chart's dispatcher would both
+        /// misroute notifications and let a later chart close clear the active dispatcher.
         /// </summary>
         protected override void OnWindowCreated(Window window)
         {
             try
             {
-                if (window == null || window.Dispatcher == null)
+                // NinjaTrader.Gui.ControlCenter is the single Control Center window. A generic
+                // Window is cast to it exactly as the NinjaScript documentation prescribes.
+                if (!(window is NinjaTrader.Gui.ControlCenter) || window.Dispatcher == null)
                 {
                     return;
                 }
 
-                _uiDispatcher.Attach(new WpfUiDispatcher(window.Dispatcher));
+                // Attach (or refresh) the UI dispatcher for the owning window. The switchable
+                // dispatcher records this window as the owner and refuses any other window, so an
+                // unrelated window can never take over the active dispatcher. A refusing attach
+                // (e.g. a dispatcher already shutting down) leaves the previous target in place.
+                _uiDispatcher.Attach(window, new WpfUiDispatcher(window.Dispatcher));
 
                 DiagnosticCenterWindowManager manager;
                 lock (_gate)
@@ -53,16 +60,49 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             }
         }
 
-        /// <summary>Called by the host when a window is destroyed. Detaches the UI dispatcher.</summary>
+        /// <summary>
+        /// Called by the host whenever an NTWindow is destroyed. The dispatcher is detached only
+        /// when <paramref name="window"/> is the window that owns it; the switchable dispatcher
+        /// performs that identity check, so closing an unrelated chart, DOM or workspace window
+        /// never clears the dispatcher the Diagnostic Center is using.
+        /// </summary>
         protected override void OnWindowDestroyed(Window window)
         {
-            _uiDispatcher.Detach();
+            try
+            {
+                if (window == null)
+                {
+                    return;
+                }
+
+                if (!_uiDispatcher.Detach(window))
+                {
+                    // Not the owner of the active dispatcher: an unrelated window's destruction
+                    // must not affect the Diagnostic Center.
+                    return;
+                }
+
+                // The owning Control Center is gone. Drop the window manager and menu registration
+                // so a re-created Control Center rebuilds them and no stale reference survives.
+                lock (_gate)
+                {
+                    _windowManager = null;
+                }
+
+                MenuIntegration.Reset();
+            }
+            catch (Exception ex)
+            {
+                Log("RiskPilot Diagnostics window teardown failed: " + Core.Errors.ErrorClassifier.Describe(ex),
+                    NinjaTrader.Cbi.LogLevel.Error);
+            }
         }
 
         /// <summary>
-        /// Real-host implementation of the UI teardown: detaches the dispatcher, drops the
-        /// window manager and closes the window. Called from SafeDispose after the run
-        /// coordinator has been stopped.
+        /// Real-host implementation of the UI teardown: unconditionally detaches the dispatcher
+        /// (clearing any stale target and owner), drops the window manager and closes the window.
+        /// Called from SafeDispose after the run coordinator has been stopped, so no notification
+        /// can race the teardown and no stale dispatcher reference survives an AddOn reload.
         /// </summary>
         partial void ShutdownUiLayer()
         {
