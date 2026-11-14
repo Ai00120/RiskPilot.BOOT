@@ -67,6 +67,30 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - `Dispatcher` exposes both `HasShutdownStarted` and `HasShutdownFinished`; check both (the
   stub file declares the latter too).
 
+## Diagnostic Center window lifecycle
+
+- The single-window reference discipline lives in the host-free
+  `Core/Run/DiagnosticWindowLifecycle.cs` (`WindowLifecycle` + `DiagnosticWindowController`), not in
+  the WPF `Host/DiagnosticCenterWindowManager.cs`. `IDiagnosticWindow` (`Core/Run/IDiagnosticWindow.cs`)
+  is the minimal view the policy drives; the manager adapts a real `DiagnosticCenterWindow` to it.
+  This is what makes the lifecycle unit-testable offline (`WindowLifecycleTests.cs`).
+- `WindowLifecycle.CanInvoke` checks **both** `HasShutdownStarted` and `HasShutdownFinished`;
+  `IsUsable` additionally requires the window to be loaded and not closed. A closed, unloaded or
+  shutting-down window is never reused — it is dropped and replaced.
+- `DiagnosticWindowController.CloseIfOpen` clears the tracked reference **before** queuing the
+  close, so it is idempotent and a reopen is never blocked by a half-closed window. `OnWindowClosed`
+  only clears the reference when it still points at the window that closed, so an asynchronous close
+  of an older window can never clear a newer one. No lock is held while invoking a window/dispatcher
+  operation, so a re-entrant callback cannot deadlock.
+- `DiagnosticCenterWindowManager.Controller` is a process-wide static so the "only one window"
+  guarantee survives an AddOn terminate/reload within the same NT8 process; `ShutdownUiLayer` clears
+  it on termination and a re-initialised AddOn reuses the now-empty controller. `Show` refuses a
+  dispatcher that has started **or** finished shutting down, and returns true only meaning the request
+  was queued (the original contract).
+- The manager is real-host-only (`UseStubs != true`); a green stub build and `WindowLifecycleTests`
+  are **not** real-host proof. When changing the manager, type-check it separately (the offline stub
+  build never compiles it).
+
 ## Phase 4 notes (UI + evidence)
 
 - The WPF UI files (`DiagnosticCenterWindow`, `MenuIntegration`, `DiagnosticCenterWindowManager`,
