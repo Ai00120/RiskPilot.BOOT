@@ -651,11 +651,15 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - The three lifecycle PRs (dispatcher ownership, menu ownership, window manager) were audited
   together; the combined host sequence is exercised by `LifecycleIntegrationTests.cs` over the real
   host-free primitives (`SwitchableUiDispatcher`, `MenuOwnershipRegistry`, `DiagnosticWindowController`)
-  and the real `WpfUiDispatcher`/stub `Dispatcher`. The WPF adapters (`DiagnosticAddOn.Ui.cs`,
+  and the real `WpfUiDispatcher`/stub `Dispatcher`. The controller is process-wide/single-window;
+  it is not keyed by the Control Center owner object. The WPF adapters (`DiagnosticAddOn.Ui.cs`,
   `MenuIntegration`, `DiagnosticCenterWindowManager`, `DiagnosticCenterWindow`) are only compiled for
   `UseStubs=false`, so they are not covered offline.
-- No integration defect was found; the three ownership models agree (one owner each, keyed by the
-  Control Center window object). No production source was changed by the audit.
+- No integration defect was found, but the three layers do not share one ownership key: the
+  dispatcher and menu registry are keyed by the Control Center window object, while the
+  Diagnostic Center controller tracks one process-wide window and receives the Control Center
+  dispatcher when Show is requested. The combined test exercises one host-like sequence; it does
+  not prove a common owner key across all three layers. No production source was changed by the audit.
 - **Post-termination stale-destroy behavior (documented, not a defect):** `DiagnosticAddOn.Ui.cs`
   is a long-lived AddOn instance in a single NT8 process. If the Control Center is destroyed *after*
   `SafeDispose` ran, `_uiDispatcher` is the same instance that already ran the unconditional
