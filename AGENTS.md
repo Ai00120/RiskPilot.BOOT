@@ -646,40 +646,6 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   provable inside NinjaTrader 8.
 
 
-## Menu-item ownership & lifecycle (P17 fix)
-
-- `MenuIntegration` no longer uses a global `bool _added`. Ownership lives in the host-free,
-  unit-tested `Core/Run/MenuOwnershipRegistry.cs` (plus `MenuOwnerClassifier` and the
-  `DiagnosticMenu.ItemId` constant). The WPF adapter in `Host/MenuIntegration.cs` is a thin wrapper
-  over it: it finds the Control Center's main `Menu`, wraps it in an `IMenuSurface`, and delegates
-  the ownership decision. This follows the repo rule that all testable UI-adjacent logic lives in
-  `Core/Run` (the WPF files are not compiled offline).
-- **The intended owner is the Control Center only.** `MenuOwnerClassifier` accepts
-  `NinjaTrader.Gui.ControlCenter` / `ControlCenter` (matched by walking the window's type hierarchy,
-  string-based like the provider-identity path); every other NinjaTrader window is `Other` and is
-  refused without touching the menu. Never add the item to an arbitrary window.
-- Each supported owner window has its **own** item on its **own** menu (so multiple Control Center
-  windows across a reload each integrate correctly). A repeat Attach by the same owner is an
-  idempotent `AlreadyAttached` no-op; a **second window presenting the same menu** is refused
-  (`SurfaceAlreadyOwned`), so the item is never added twice to one menu. A stale surface item under
-  our id is cleared first. An unalive owner / non-ControlCenter owner / failed add is refused
-  (`OwnerNotAlive` / `UnsupportedOwner` / `AddFailed`), never a false success.
-- Removal (`Remove`/`Clear`, also driven by the owner window's `Closed` handler) removes the item,
-  detaches the click handler, and drops the owner/surface/callback references, so a destroyed window
-  and its menu are never retained through a static reference. `Reset()` clears the registry and
-  drains the `Closed` subscriptions, so a host restart / AddOn reload can re-register cleanly.
-- Thread safety: every registry entry point takes one private lock. Surface mutations (add/remove)
-  run **under** the lock so the single-item invariant holds under concurrency; only the owner's
-  removal callback runs **after** the lock is released (no deadlock, no re-entrancy). In the host
-  adapter the registry entry and the window-close subscription are created/removed under the same
-  `Gate`, so a concurrent `Reset` cannot leave a dangling subscription or an unsubscribed entry.
-  Tests: `MenuIntegrationLifecycleTests` (first/repeat/multi-owner registration, owner destruction,
-  removal, handler cleanup, reset-then-reattach, no-duplicate, concurrency, classifier). A green
-  stub run is **not** real-host proof — the WPF adapter itself is only compiled in the
-  `UseStubs=false` build.
-
-
-
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live
