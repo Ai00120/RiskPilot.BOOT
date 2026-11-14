@@ -195,10 +195,11 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
-        public void ThreadedAttachDetachWhilePosting_NeverDeadlocks_AndKeepsOneOwner()
+        public void ThreadedAttachAndPost_WithUnrelatedOwnerDetach_NeverDeadlocks()
         {
-            // AddOn callbacks arrive on many window threads. Concurrent attach/detach/post must
-            // never deadlock or violate the single-owner invariant.
+            // AddOn callbacks arrive on many window threads. Concurrent attach/post plus
+            // unrelated-owner detach attempts must never deadlock or violate single ownership.
+            // This intentionally does not exercise a detach by the current owner racing reattach.
             var switchable = new SwitchableUiDispatcher();
             var controlCenter = new object();
             var errors = new List<Exception>();
@@ -395,8 +396,9 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         [Fact]
         public void DispatcherShutdownFinished_IsTreatedAsShutDown_ByEveryLifecycleLayer()
         {
-            // A finished shutdown must read as "shutting down" everywhere: the window is unusable,
-            // the dispatcher refuses posts, and the window manager's Show precondition holds.
+            // A finished shutdown must read as "shutting down" in the layers exercised here:
+            // the WPF dispatcher refuses posts and the window lifecycle marks the window unusable.
+            // This test does not invoke DiagnosticCenterWindowManager.Show.
             var raw = new System.Windows.Threading.Dispatcher { HasShutdownFinished = true };
             var wpf = new RiskPilot.Diagnostics.Nt8.Host.WpfUiDispatcher(raw);
             Assert.True(wpf.HasShutdownStarted);
