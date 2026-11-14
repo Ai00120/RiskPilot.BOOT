@@ -67,6 +67,7 @@
     <Compile Include="Phase5ScenarioTests.cs" />
     <Compile Include="NinjaTraderCompatibilityTests.cs" />
     <Compile Include="CompilationRegressionTests.cs" />
+    <Compile Include="ZeroDefaultTests.cs" />
   </ItemGroup>
 
 </Project>

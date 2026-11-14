@@ -11,6 +11,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ### Added
 
+- **Zero-default fix: unavailable values no longer become a genuine-looking zero.**
+  `AccountRecord.PositionCount`/`WorkingOrderCount` are now `int?` and
+  `InstrumentRecord.TickSize`/`PointValue` are now `double?`, where `null` means
+  unobserved/unreadable and `0` means the host genuinely reported zero.
+  `Nt8HostDataProvider.ReadPositionCount`/`CountActiveOrders` return `null` (not `0`) for a
+  missing/unreadable Portfolio collection, a null order, an unclassifiable order state, or a
+  mid-enumeration failure; `GetInstrument` wraps each economics read so an unreadable field stays
+  `null`. `EvidencePackageBuilder` writes `"UNOBSERVABLE"` for an unknown value and a real number
+  (including `0`) for an observed one, and writes `"count":"UNOBSERVABLE"` for a null/empty
+  `Accounts`/`Instruments` collection instead of `"count":0`. Focused coverage: `ZeroDefaultTests`.
+  The committed SAMPLE package and `SHA256SUMS.txt` were regenerated.
+
 - **Deterministic NinjaScript source-bundle packager.** `tools/nt8-source-package/package_addon_sources.py`
   stages only the `Core/` and `Host/` `.cs` files explicitly compiled by the standalone project,
   fails closed on any `AssemblyInfo.cs`, `[assembly: ...]` attribute, `bin/`, `obj/` or build

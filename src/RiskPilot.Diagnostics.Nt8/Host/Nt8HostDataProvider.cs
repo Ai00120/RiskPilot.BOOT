@@ -244,7 +244,16 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 return null;
             }
 
-            var instrument = Instrument.GetInstrument(instrumentId);
+            Instrument instrument;
+            try
+            {
+                instrument = Instrument.GetInstrument(instrumentId);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+
             if (instrument == null)
             {
                 return null;
@@ -252,7 +261,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
             var record = new InstrumentRecord
             {
-                FullName = instrument.FullName,
+                FullName = SafeString(() => instrument.FullName),
                 InstrumentId = instrumentId,
                 Expiry = SafeString(() => instrument.Expiry.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)),
                 Exchange = SafeString(() => instrument.Exchange.ToString()),
@@ -260,22 +269,18 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 IngestedAtUtc = DateTime.UtcNow
             };
 
-            // Master-instrument metadata must not be read before DataLoaded; guard it.
+            // Master-instrument metadata must not be read before DataLoaded; guard it. Each
+            // field is read through SafeString/SafeDouble so an unreadable value stays null
+            // (unknown) rather than defaulting to a genuine-looking zero/empty.
             if (MasterMetadataReady && instrument.MasterInstrument != null)
             {
-                try
-                {
-                    record.RootSymbol = instrument.MasterInstrument.Name;
-                    record.InstrumentType = instrument.MasterInstrument.InstrumentType.ToString();
-                    record.Currency = instrument.MasterInstrument.Currency.ToString();
-                    record.TickSize = instrument.MasterInstrument.TickSize;
-                    record.PointValue = instrument.MasterInstrument.PointValue;
-                    record.MasterMetadataAvailable = true;
-                }
-                catch (Exception)
-                {
-                    record.MasterMetadataAvailable = false;
-                }
+                var master = instrument.MasterInstrument;
+                record.RootSymbol = SafeString(() => master.Name);
+                record.InstrumentType = SafeString(() => master.InstrumentType.ToString());
+                record.Currency = SafeString(() => master.Currency.ToString());
+                record.TickSize = SafeDouble(() => master.TickSize);
+                record.PointValue = SafeDouble(() => master.PointValue);
+                record.MasterMetadataAvailable = true;
             }
 
             return record;
@@ -911,36 +916,52 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// <summary>
         /// Reads the target account's own read-only <c>Account.Positions</c> collection and
         /// returns its count. The collection is only ever the verified target's, so another
-        /// account's positions can never be reported as the target's. An unreadable collection
-        /// returns zero; M3 independently records order-read failures and stays fail-closed.
+        /// account's positions can never be reported as the target's.
+        /// <para>
+        /// A missing or unreadable collection returns <c>null</c> (unknown), never zero: an
+        /// unreadable collection could hide a position, so reporting zero would fabricate a
+        /// genuine-looking value. Only a readable collection yields a count, and a readable but
+        /// empty collection is a legitimate <c>0</c>.
+        /// </para>
         /// </summary>
-        private static int ReadPositionCount(Account account)
+        private static int? ReadPositionCount(Account account)
         {
             if (account == null)
             {
-                return 0;
+                return null;
             }
 
             try
             {
                 var positions = account.Positions;
-                return positions == null ? 0 : positions.Count;
+                return positions == null ? (int?)null : positions.Count;
             }
             catch (Exception)
             {
-                return 0;
+                return null;
             }
         }
 
         /// <summary>
         /// Counts the account's active (still live) orders from its own read-only
         /// <c>Account.Orders</c> collection. A completed, cancelled or rejected order is never
-        /// counted, so a historical order can never inflate the working-order total. An
-        /// unreadable or absent collection returns zero for this account; the M3 active-order
-        /// check independently records the read failure and stays fail-closed.
+        /// counted, so a historical order can never inflate the working-order total.
+        /// <para>
+        /// A missing or unreadable collection, or an order whose state could not be classified,
+        /// returns <c>null</c> (unknown), never zero: an unreadable or unclassifiable order could
+        /// be an active one, so reporting zero would fabricate a genuine-looking value. Only a
+        /// readable, fully classified collection yields a count, and a readable but empty
+        /// collection is a legitimate <c>0</c>. The M3 active-order check independently records
+        /// the read failure and stays fail-closed.
+        /// </para>
         /// </summary>
-        private static int CountActiveOrders(Account account)
+        private static int? CountActiveOrders(Account account)
         {
+            if (account == null)
+            {
+                return null;
+            }
+
             Collection<Order> orders;
             try
             {
@@ -948,12 +969,12 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             }
             catch (Exception)
             {
-                return 0;
+                return null;
             }
 
             if (orders == null)
             {
-                return 0;
+                return null;
             }
 
             var active = 0;
@@ -963,7 +984,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 {
                     if (order == null)
                     {
-                        continue;
+                        return null;
                     }
 
                     OrderLifecycleState state;
@@ -973,7 +994,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     }
                     catch (Exception)
                     {
-                        continue;
+                        return null;
                     }
 
                     if (OrderStateClassifier.IsActive(state))
@@ -985,9 +1006,9 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             catch (Exception)
             {
                 // The collection changed while it was enumerated; the count for this account is
-                // untrustworthy, so report no active orders rather than a wrong positive. The M3
+                // untrustworthy, so report it as unknown rather than a wrong zero. The M3
                 // active-order check independently records the read failure and fails closed.
-                return 0;
+                return null;
             }
 
             return active;

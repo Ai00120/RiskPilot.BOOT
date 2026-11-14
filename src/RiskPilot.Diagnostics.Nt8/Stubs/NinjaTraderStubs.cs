@@ -201,8 +201,34 @@ namespace NinjaTrader.Cbi
         public string Name { get; set; }
         public InstrumentType InstrumentType { get; set; }
         public Currency Currency { get; set; }
-        public double TickSize { get; set; }
-        public double PointValue { get; set; }
+        // Offline-only fault injection; not NinjaTrader API members. They let an offline test
+        // prove an unreadable economics read stays unknown rather than defaulting to zero.
+        public bool ThrowOnTickSizeRead { get; set; }
+        public bool ThrowOnPointValueRead { get; set; }
+        private double _tickSize;
+        public double TickSize
+        {
+            get
+            {
+                if (ThrowOnTickSizeRead)
+                    throw new InvalidOperationException("Offline tick size read failure");
+                return _tickSize;
+            }
+            set { _tickSize = value; }
+        }
+
+        private double _pointValue;
+        public double PointValue
+        {
+            get
+            {
+                if (ThrowOnPointValueRead)
+                    throw new InvalidOperationException("Offline point value read failure");
+                return _pointValue;
+            }
+            set { _pointValue = value; }
+        }
+
         public List<Exchange> Exchanges { get; set; } = new List<Exchange>();
     }
 
