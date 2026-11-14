@@ -24,6 +24,11 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             get { return _dispatcher != null && _dispatcher.CheckAccess(); }
         }
 
+        /// <summary>
+        /// True once the dispatcher has begun or finished shutting down (or is absent). Both
+        /// flags are checked because a dispatcher that has started shutting down may still be
+        /// draining its queue, and one that has finished can no longer accept work at all.
+        /// </summary>
         public bool HasShutdownStarted
         {
             get { return _dispatcher == null || _dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished; }
@@ -36,7 +41,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 return false;
             }
 
-            if (_dispatcher == null || _dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished)
+            if (HasShutdownStarted)
             {
                 return false;
             }
@@ -47,8 +52,18 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 return true;
             }
 
-            _dispatcher.InvokeAsync(action);
-            return true;
+            try
+            {
+                // The dispatcher can begin shutting down between the check above and this call;
+                // an InvokeAsync on a shut-down dispatcher throws, so contain it and report the
+                // post as not queued instead of faulting the run worker.
+                _dispatcher.InvokeAsync(action);
+                return true;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
         }
     }
 }

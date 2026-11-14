@@ -472,12 +472,34 @@ namespace System.Windows.Threading
 {
     public class Dispatcher
     {
-        public bool CheckAccess() { return true; }
-        public bool HasShutdownStarted { get { return false; } }
-        public bool HasShutdownFinished { get { return false; } }
+        /// <summary>
+        /// Offline-only switch (not a NinjaTrader/WPF API member) that lets a test choose whether
+        /// the current thread is the dispatcher thread. Defaults to true so the stub keeps running
+        /// posted work inline.
+        /// </summary>
+        public bool OnDispatcherThread { get; set; } = true;
+
+        /// <summary>Offline-only switch that mirrors a dispatcher that has begun shutting down.</summary>
+        public bool HasShutdownStarted { get; set; }
+
+        /// <summary>Offline-only switch that mirrors a dispatcher that has finished shutting down.</summary>
+        public bool HasShutdownFinished { get; set; }
+
+        /// <summary>
+        /// Offline-only switch that makes <see cref="InvokeAsync"/> throw as a real WPF dispatcher
+        /// does once it is shut down, so a post that races the shutdown can be exercised.
+        /// </summary>
+        public bool ThrowOnInvokeAsync { get; set; }
+
+        public bool CheckAccess() { return OnDispatcherThread; }
 
         public void InvokeAsync(Action action)
         {
+            if (ThrowOnInvokeAsync)
+            {
+                throw new InvalidOperationException("Offline dispatcher has shut down");
+            }
+
             if (action != null)
             {
                 action();

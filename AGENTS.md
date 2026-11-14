@@ -579,6 +579,73 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 - Tests: `EsProductSpecificationTests`, the M4 ES-economics cases in `HostInstrumentIdentityTests`, and
   `Stage34CoverageTests`. A green stub run is **not** real-host proof.
 
+## Menu-item ownership & lifecycle (P17 fix)
+
+- `MenuIntegration` no longer uses a global `bool _added`. Ownership lives in the host-free,
+  unit-tested `Core/Run/MenuOwnershipRegistry.cs` (plus `MenuOwnerClassifier` and the
+  `DiagnosticMenu.ItemId` constant). The WPF adapter in `Host/MenuIntegration.cs` is a thin wrapper
+  over it: it finds the Control Center's main `Menu`, wraps it in an `IMenuSurface`, and delegates
+  the ownership decision. This follows the repo rule that all testable UI-adjacent logic lives in
+  `Core/Run` (the WPF files are not compiled offline).
+- **The intended owner is the Control Center only.** `MenuOwnerClassifier` accepts
+  `NinjaTrader.Gui.ControlCenter` / `ControlCenter` (matched by walking the window's type hierarchy,
+  string-based like the provider-identity path); every other NinjaTrader window is `Other` and is
+  refused without touching the menu. Never add the item to an arbitrary window.
+- Each supported owner window has its **own** item on its **own** menu (so multiple Control Center
+  windows across a reload each integrate correctly). A repeat Attach by the same owner is an
+  idempotent `AlreadyAttached` no-op; a **second window presenting the same menu** is refused
+  (`SurfaceAlreadyOwned`), so the item is never added twice to one menu. A stale surface item under
+  our id is cleared first. An unalive owner / non-ControlCenter owner / failed add is refused
+  (`OwnerNotAlive` / `UnsupportedOwner` / `AddFailed`), never a false success.
+- Removal (`Remove`/`Clear`, also driven by the owner window's `Closed` handler) removes the item,
+  detaches the click handler, and drops the owner/surface/callback references, so a destroyed window
+  and its menu are never retained through a static reference. `Reset()` clears the registry and
+  drains the `Closed` subscriptions, so a host restart / AddOn reload can re-register cleanly.
+- Thread safety: every registry entry point takes one private lock. Surface mutations (add/remove)
+  run **under** the lock so the single-item invariant holds under concurrency; only the owner's
+  removal callback runs **after** the lock is released (no deadlock, no re-entrancy). In the host
+  adapter the registry entry and the window-close subscription are created/removed under the same
+  `Gate`, so a concurrent `Reset` cannot leave a dangling subscription or an unsubscribed entry.
+  Tests: `MenuIntegrationLifecycleTests` (first/repeat/multi-owner registration, owner destruction,
+  removal, handler cleanup, reset-then-reattach, no-duplicate, concurrency, classifier). A green
+  stub run is **not** real-host proof — the WPF adapter itself is only compiled in the
+  `UseStubs=false` build.
+
+
+## UI dispatcher lifecycle (P12 — Control Center ownership)
+
+- NinjaTrader raises `OnWindowCreated`/`OnWindowDestroyed` for **every** NTWindow (Control Center,
+  charts, DOM, SuperDOM, workspaces), in that window's own thread. The old `DiagnosticAddOn.Ui.cs`
+  attached on any window and detached on any window, so closing an unrelated chart cleared the
+  dispatcher the Diagnostic Center was using. The fix gates both hooks on the **Control Center**:
+  `OnWindowCreated` returns unless `window is NinjaTrader.Gui.ControlCenter` (the documented cast),
+  and `OnWindowDestroyed` detaches only when the window owns the active dispatcher.
+- Ownership lives in the host-free `Core/Run/SwitchableUiDispatcher`, not in the host hook:
+  `Attach(object owner, IUiDispatcher dispatcher)` records the owner and refuses (returns false,
+  leaving the target in place) a different owner while a **live** target is held; a shut-down
+  target is replaced regardless of owner so a re-created Control Center can take over. `Detach(object owner)`
+  clears the target only for the current owner (an unrelated window's destroy is a no-op); the
+  parameterless `Detach()` clears both target and owner unconditionally and is what AddOn termination
+  (`ShutdownUiLayer`) uses, so no stale dispatcher reference survives an AddOn reload.
+- `SwitchableUiDispatcher.Attach` also refuses a null or already-shut-down dispatcher (a dead
+  dispatcher is never adopted, so notifications keep running inline instead of being dropped).
+  `Post` still runs inline with no target; `HasShutdownStarted` stays false with no target so
+  pre-window notifications are never dropped.
+- `WpfUiDispatcher.HasShutdownStarted` covers **both** `HasShutdownStarted` and `HasShutdownFinished`;
+  `Post` contains an `InvalidOperationException` from `InvokeAsync` (the dispatcher can shut down
+  between the flag check and the post) and reports the post as not queued, so a shutdown race never
+  faults the run worker.
+- The offline `System.Windows.Threading.Dispatcher` stub gained settable `HasShutdownStarted` /
+  `HasShutdownFinished` / `OnDispatcherThread` / `ThrowOnInvokeAsync` switches (the existing
+  fault-injection convention) so the shutdown paths are exercised over the stub surface.
+- Tests: `UiDispatcherLifecycleTests` (unrelated window create/destroy, owning window destroy,
+  repeated attach/detach, dispatcher shutdown, AddOn terminate + reinitialise, concurrency). They
+  drive the real `SwitchableUiDispatcher` and the real `WpfUiDispatcher`; the thin `is ControlCenter`
+  host guard is mirrored as test scaffolding. A green stub run is **not** real-host proof: the real
+  `NinjaTrader.Gui.ControlCenter` cast and the real WPF dispatcher shutdown behaviour are only
+  provable inside NinjaTrader 8.
+
+
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live
