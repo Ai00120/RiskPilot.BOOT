@@ -63,6 +63,7 @@
     <Compile Include="SecurityScanScopeTests.cs" />
     <Compile Include="MenuIntegrationLifecycleTests.cs" />
     <Compile Include="UiDispatcherLifecycleTests.cs" />
+    <Compile Include="LifecycleIntegrationTests.cs" />
     <Compile Include="Phase4RunCoordinatorTests.cs" />
     <Compile Include="WindowLifecycleTests.cs" />
     <Compile Include="Phase4EvidencePackageTests.cs" />
