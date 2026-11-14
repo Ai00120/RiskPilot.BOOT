@@ -142,9 +142,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
     /// </para>
     /// <para>
     /// Thread safety: every entry point takes a single private lock, so repeated
-    /// Attach/Remove/Clear calls from any thread are safe. Host callbacks (the surface add/remove
-    /// and the removal cleanup) are invoked outside the lock, so a callback can never deadlock the
-    /// registry or re-enter it while it is held.
+    /// Attach/Remove/Clear calls from any thread are safe. Every surface mutation (add/remove) is
+    /// performed while the lock is held, so two callers can never touch the same menu at once and
+    /// the single-item invariant holds under concurrency. Only the owner's removal callback runs
+    /// after the lock is released, so a host cleanup handler can never deadlock the registry or
+    /// re-enter it while it is held.
     /// </para>
     /// </summary>
     public sealed class MenuOwnershipRegistry
@@ -339,9 +341,12 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                 {
                     _current = null;
                 }
+
+                // The surface mutation runs under the lock; the host callback runs after it.
+                DetachSurfaceItem(entry);
             }
 
-            Cleanup(entry);
+            RunRemovalCallback(entry);
             return true;
         }
 
@@ -357,20 +362,20 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                 entries = new List<Entry>(_byOwner.Values);
                 _byOwner.Clear();
                 _current = null;
+
+                // Every surface mutation runs under the lock; the host callbacks run after it.
+                foreach (var entry in entries)
+                {
+                    DetachSurfaceItem(entry);
+                }
             }
 
             foreach (var entry in entries)
             {
-                Cleanup(entry);
+                RunRemovalCallback(entry);
             }
 
             return entries.Count;
-        }
-
-        private static void Cleanup(Entry entry)
-        {
-            DetachSurfaceItem(entry);
-            RunRemovalCallback(entry);
         }
 
         private static void DetachSurfaceItem(Entry entry)

@@ -396,6 +396,27 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
             Assert.True(surface.ItemCount <= 1);
             Assert.True(registry.AttachedCount <= 1);
+            // AttachedCount and the live surface item must agree: no entry without an item and no
+            // item without an entry.
+            Assert.Equal(registry.AttachedCount, surface.ItemCount);
+        }
+
+        [Fact]
+        public void ConcurrentAttachFromDifferentOwners_LeavesExactlyOneItem()
+        {
+            // Two windows racing for the single item must never both succeed: the surface ends with
+            // exactly one item and at most one owner is recorded.
+            var registry = new MenuOwnershipRegistry();
+            var surface = new FakeMenuSurface();
+            var first = new object();
+            var second = new object();
+
+            Parallel.Invoke(
+                () => Attach(registry, first, surface),
+                () => Attach(registry, second, surface));
+
+            Assert.Equal(1, surface.ItemCount);
+            Assert.Equal(1, registry.AttachedCount);
         }
 
         [Theory]

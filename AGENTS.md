@@ -576,11 +576,15 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   detaches the click handler, and drops the owner/surface/callback references, so a destroyed window
   and its menu are never retained through a static reference. `Reset()` clears the registry and
   drains the `Closed` subscriptions, so a host restart / AddOn reload can re-register cleanly.
-- Thread safety: every registry entry point takes one private lock and host callbacks run outside
-  it (no deadlock, no re-entrancy). Tests: `MenuIntegrationLifecycleTests` (first/repeat/multi-owner
-  registration, owner destruction, removal, handler cleanup, reset-then-reattach, no-duplicate,
-  concurrency, classifier). A green stub run is **not** real-host proof — the WPF adapter itself is
-  only compiled in the `UseStubs=false` build.
+- Thread safety: every registry entry point takes one private lock. Surface mutations (add/remove)
+  run **under** the lock so the single-item invariant holds under concurrency; only the owner's
+  removal callback runs **after** the lock is released (no deadlock, no re-entrancy). In the host
+  adapter the registry entry and the window-close subscription are created/removed under the same
+  `Gate`, so a concurrent `Reset` cannot leave a dangling subscription or an unsubscribed entry.
+  Tests: `MenuIntegrationLifecycleTests` (first/repeat/multi-owner registration, owner destruction,
+  removal, handler cleanup, reset-then-reattach, no-duplicate, concurrency, classifier). A green
+  stub run is **not** real-host proof — the WPF adapter itself is only compiled in the
+  `UseStubs=false` build.
 
 ## Reference repo
 

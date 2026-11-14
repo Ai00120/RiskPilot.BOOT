@@ -68,24 +68,30 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 var surface = new WpfMenuSurface(menu);
                 Action onClick = () => manager.Show(controlCenterWindow.Dispatcher);
 
-                MenuAttachStatus status;
-                var attached = Registry.Attach(
-                    owner,
-                    MenuSurfaceKind.ControlCenter,
-                    true,
-                    surface,
-                    MenuItemId,
-                    onClick,
-                    () => UnsubscribeClose(owner),
-                    out status);
-
-                if (!attached)
+                // Serialise the registry entry and its close subscription under one lock, so a
+                // concurrent Reset can never leave a dangling subscription (which would retain the
+                // window) or a registry entry with no subscription (which would retain the menu).
+                lock (Gate)
                 {
-                    return false;
-                }
+                    MenuAttachStatus status;
+                    var attached = Registry.Attach(
+                        owner,
+                        MenuSurfaceKind.ControlCenter,
+                        true,
+                        surface,
+                        MenuItemId,
+                        onClick,
+                        () => UnsubscribeCloseLocked(owner),
+                        out status);
 
-                EnsureCloseSubscribed(controlCenterWindow);
-                return true;
+                    if (!attached)
+                    {
+                        return false;
+                    }
+
+                    EnsureCloseSubscribedLocked(controlCenterWindow);
+                    return true;
+                }
             }
             catch (Exception)
             {
@@ -106,7 +112,10 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
             try
             {
-                return Registry.Remove(controlCenterWindow);
+                lock (Gate)
+                {
+                    return Registry.Remove(controlCenterWindow);
+                }
             }
             catch (Exception)
             {
@@ -120,56 +129,62 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// </summary>
         public static void Reset()
         {
-            try
-            {
-                Registry.Clear();
-            }
-            catch (Exception)
-            {
-                // Resetting must never throw; a leftover entry is retried on the next call.
-            }
-
-            // Defensive drain: Registry.Clear already detaches each subscription through its
-            // removal callback, so this normally finds nothing.
-            List<KeyValuePair<Window, EventHandler>> handlers;
             lock (Gate)
-            {
-                handlers = new List<KeyValuePair<Window, EventHandler>>(CloseHandlers);
-                CloseHandlers.Clear();
-            }
-
-            foreach (var pair in handlers)
             {
                 try
                 {
-                    pair.Key.Closed -= pair.Value;
+                    // Registry.Clear runs each owner's removal callback (UnsubscribeCloseLocked),
+                    // which drains CloseHandlers as it goes.
+                    Registry.Clear();
                 }
                 catch (Exception)
                 {
-                    // Unsubscribing during teardown must never throw.
+                    // Resetting must never throw; a leftover entry is retried on the next call.
                 }
-            }
-        }
 
-        private static void EnsureCloseSubscribed(Window window)
-        {
-            lock (Gate)
-            {
-                EventHandler existing;
-                if (TryGetCloseHandler(window, out existing))
+                // Defensive drain: Registry.Clear already detaches each subscription, so this
+                // normally finds nothing.
+                var handlers = new List<KeyValuePair<Window, EventHandler>>(CloseHandlers);
+                CloseHandlers.Clear();
+                foreach (var pair in handlers)
                 {
-                    return;
+                    try
+                    {
+                        pair.Key.Closed -= pair.Value;
+                    }
+                    catch (Exception)
+                    {
+                        // Unsubscribing during teardown must never throw.
+                    }
                 }
-
-                // Remove the item (and this subscription) when the owning window is destroyed, so a
-                // destroyed window and its menu are never retained.
-                EventHandler handler = (_, __) => Registry.Remove(window);
-                CloseHandlers.Add(new KeyValuePair<Window, EventHandler>(window, handler));
-                window.Closed += handler;
             }
         }
 
-        private static void UnsubscribeClose(object owner)
+        /// <summary>
+        /// Subscribes to the owning window's <c>Closed</c> event so the item is removed when the
+        /// window is destroyed. Must be called with <see cref="Gate"/> held. Idempotent per window.
+        /// </summary>
+        private static void EnsureCloseSubscribedLocked(Window window)
+        {
+            EventHandler existing;
+            if (TryGetCloseHandler(window, out existing))
+            {
+                return;
+            }
+
+            // The window raises Closed on its own thread without Gate held, so take the lock here;
+            // the registry's removal callback (UnsubscribeCloseLocked) then runs under Gate too.
+            EventHandler handler = (_, __) => { lock (Gate) { Registry.Remove(window); } };
+            CloseHandlers.Add(new KeyValuePair<Window, EventHandler>(window, handler));
+            window.Closed += handler;
+        }
+
+        /// <summary>
+        /// Detaches the owning window's close subscription. Invoked from the registry's removal
+        /// callback, which only ever runs while <see cref="Gate"/> is held (every registry call in
+        /// this class is made under the lock), so it does not take the lock again.
+        /// </summary>
+        private static void UnsubscribeCloseLocked(object owner)
         {
             var window = owner as Window;
             if (window == null)
@@ -177,32 +192,23 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 return;
             }
 
-            EventHandler handler = null;
-            lock (Gate)
+            for (var i = 0; i < CloseHandlers.Count; i++)
             {
-                for (var i = 0; i < CloseHandlers.Count; i++)
+                if (ReferenceEquals(CloseHandlers[i].Key, window))
                 {
-                    if (ReferenceEquals(CloseHandlers[i].Key, window))
+                    var handler = CloseHandlers[i].Value;
+                    CloseHandlers.RemoveAt(i);
+                    try
                     {
-                        handler = CloseHandlers[i].Value;
-                        CloseHandlers.RemoveAt(i);
-                        break;
+                        window.Closed -= handler;
                     }
+                    catch (Exception)
+                    {
+                        // Detaching during teardown must never throw.
+                    }
+
+                    return;
                 }
-            }
-
-            if (handler == null)
-            {
-                return;
-            }
-
-            try
-            {
-                window.Closed -= handler;
-            }
-            catch (Exception)
-            {
-                // Detaching during teardown must never throw.
             }
         }
 
