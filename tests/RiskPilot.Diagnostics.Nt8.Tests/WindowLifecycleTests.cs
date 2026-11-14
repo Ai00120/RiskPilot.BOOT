@@ -204,6 +204,51 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void OpenOrActivate_WhenWindowStateReadThrows_IsContained_AndKeepsTheReference()
+        {
+            var controller = new DiagnosticWindowController();
+            var window = LoadedWindow();
+            controller.OpenOrActivate(() => window);
+
+            // A window whose state getters throw must not fault the host, and must not be
+            // duplicated: the existing reference is preserved.
+            window.ThrowOnStateRead = true;
+
+            var result = controller.OpenOrActivate(() => LoadedWindow());
+
+            Assert.Equal(DiagnosticWindowOpenResult.Unavailable, result);
+            Assert.True(controller.IsOpen);
+        }
+
+        [Fact]
+        public void CloseIfOpen_WhenWindowStateReadThrows_IsContained_AndClearsTheReference()
+        {
+            var controller = new DiagnosticWindowController();
+            var window = LoadedWindow();
+            controller.OpenOrActivate(() => window);
+            window.ThrowOnStateRead = true;
+
+            controller.CloseIfOpen(); // must not throw
+
+            Assert.False(controller.IsOpen);
+        }
+
+        [Fact]
+        public void CloseIfOpen_NotifiesOnClosed_EvenWhenStateReadThrows()
+        {
+            var controller = new DiagnosticWindowController();
+            var window = LoadedWindow();
+            controller.OpenOrActivate(() => window);
+            window.ThrowOnStateRead = true;
+
+            var notified = false;
+            controller.CloseIfOpen(() => notified = true);
+
+            Assert.True(notified);
+            Assert.False(controller.IsOpen);
+        }
+
+        [Fact]
         public void Show_WhenFactoryThrows_LeavesNoTrackedWindow()
         {
             var controller = new DiagnosticWindowController();
@@ -310,17 +355,35 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         /// <summary>In-memory <see cref="IDiagnosticWindow"/>; only the WPF window is substituted.</summary>
         private sealed class FakeDiagnosticWindow : IDiagnosticWindow
         {
+            private bool _closed;
+            private bool _shutdownStarted;
+            private bool _shutdownFinished;
+
             public bool IsLoaded { get; set; }
 
-            public bool IsClosed { get; private set; }
+            public bool IsClosed
+            {
+                get { ThrowIfStateReadFaults(); return _closed; }
+            }
 
-            public bool HasShutdownStarted { get; set; }
+            public bool HasShutdownStarted
+            {
+                get { ThrowIfStateReadFaults(); return _shutdownStarted; }
+                set { _shutdownStarted = value; }
+            }
 
-            public bool HasShutdownFinished { get; set; }
+            public bool HasShutdownFinished
+            {
+                get { ThrowIfStateReadFaults(); return _shutdownFinished; }
+                set { _shutdownFinished = value; }
+            }
 
             public IUiDispatcher Dispatcher { get; set; }
 
             public bool ThrowOnClose { get; set; }
+
+            /// <summary>When set, every state getter throws (models a torn-down WPF window).</summary>
+            public bool ThrowOnStateRead { get; set; }
 
             public int ShowCount { get; private set; }
 
@@ -355,11 +418,19 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             /// <summary>Simulates the operator closing the window (the Closed event fires).</summary>
             public void RaiseClosed()
             {
-                IsClosed = true;
+                _closed = true;
                 var handler = Closed;
                 if (handler != null)
                 {
                     handler(this, EventArgs.Empty);
+                }
+            }
+
+            private void ThrowIfStateReadFaults()
+            {
+                if (ThrowOnStateRead)
+                {
+                    throw new InvalidOperationException("window state unreadable");
                 }
             }
         }

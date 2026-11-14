@@ -102,6 +102,20 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
                 throw new ArgumentNullException(nameof(factory));
             }
 
+            try
+            {
+                return OpenOrActivateCore(factory);
+            }
+            catch (Exception)
+            {
+                // An unreadable window state must never propagate to the host. Do not create a
+                // duplicate: keep whatever reference we have and report that nothing was created.
+                return DiagnosticWindowOpenResult.Unavailable;
+            }
+        }
+
+        private DiagnosticWindowOpenResult OpenOrActivateCore(Func<IDiagnosticWindow> factory)
+        {
             IDiagnosticWindow existing;
             lock (_gate)
             {
@@ -189,26 +203,32 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
 
             // The reference is cleared before any UI work runs, so a re-entrant CloseIfOpen or a
             // second OpenOrActivate from the close path can never observe a half-closed window.
-            if (window != null && WindowLifecycle.CanInvoke(window))
+            if (window != null)
             {
-                var dispatcher = window.Dispatcher;
                 try
                 {
-                    if (dispatcher != null && !dispatcher.HasShutdownStarted)
+                    // Both dispatcher shutdown states are checked before any work is queued: a
+                    // dispatcher that has finished shutting down cannot run a close and must not be
+                    // asked to.
+                    if (WindowLifecycle.CanInvoke(window))
                     {
-                        dispatcher.Post(() => CloseSafely(window));
-                    }
-                    else
-                    {
-                        // No usable dispatcher: the caller is already on the UI thread (or the host
-                        // is tearing down), so close inline.
-                        CloseSafely(window);
+                        var dispatcher = window.Dispatcher;
+                        if (dispatcher != null && !dispatcher.HasShutdownStarted)
+                        {
+                            dispatcher.Post(() => CloseSafely(window));
+                        }
+                        else
+                        {
+                            // No usable dispatcher: the caller is already on the UI thread (or the
+                            // host is tearing down), so close inline.
+                            CloseSafely(window);
+                        }
                     }
                 }
                 catch (Exception)
                 {
                     // The window is being torn down with the host; the reference is already cleared
-                    // so no stale state remains.
+                    // so no stale state remains and the exception is contained.
                 }
             }
 
