@@ -4,6 +4,7 @@ using NinjaTrader.Cbi;
 using RiskPilot.Diagnostics.Nt8.Core.Engine;
 using RiskPilot.Diagnostics.Nt8.Core.Engine.Probes;
 using RiskPilot.Diagnostics.Nt8.Core.Evidence;
+using RiskPilot.Diagnostics.Nt8.Core.Identity;
 using RiskPilot.Diagnostics.Nt8.Core.Models.Observations;
 using RiskPilot.Diagnostics.Nt8.Core.Report;
 using RiskPilot.Diagnostics.Nt8.Core.Result;
@@ -339,6 +340,86 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
             Assert.Equal(DiagnosticStatus.INCONCLUSIVE, field.Status);
             Assert.Equal("UNOBSERVABLE", string.Join("|", field.ReasonCodes));
+        }
+
+        // ---------------- the other M4 host builders stay fail-closed on a throwing getter ----------------
+
+        [Fact]
+        public void IdentityBuilder_ThrowingRootGetter_IsInconclusiveNotPass()
+        {
+            // The prompt names BuildInstrumentIdentityObservation as a primary area. Its reads go
+            // through SafeString, but the observation carries explicit observability flags set from
+            // the read result (never from a swallowed exception), so a throwing getter leaves the
+            // identity unobservable and the verifier stays INCONCLUSIVE rather than PASS.
+            Reset();
+            try
+            {
+                Connection.Connections.Add(ConnectedRithmic());
+                var instrument = EsInstrument();
+                instrument.MasterInstrument.ThrowOnNameRead = true;
+                Instrument.All.Add(instrument);
+
+                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var observation = provider.GetSnapshot().InstrumentIdentity;
+
+                Assert.False(observation.RootMetadataObservable);
+                Assert.Equal(0, observation.MatchingInstrumentCount);
+                Assert.Equal(DiagnosticStatus.INCONCLUSIVE, InstrumentIdentityVerifier.Evaluate(observation).Status);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void IdentityBuilder_ThrowingCurrencyGetter_IsInconclusiveNotPass()
+        {
+            Reset();
+            try
+            {
+                Connection.Connections.Add(ConnectedRithmic());
+                var instrument = EsInstrument();
+                instrument.MasterInstrument.ThrowOnCurrencyRead = true;
+                Instrument.All.Add(instrument);
+
+                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var observation = provider.GetSnapshot().InstrumentIdentity;
+
+                Assert.False(observation.CurrencyObservable);
+                Assert.Equal(DiagnosticStatus.INCONCLUSIVE, InstrumentIdentityVerifier.Evaluate(observation).Status);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void EsProductSpecBuilder_ThrowingGetter_IsInconclusiveNotPass()
+        {
+            // The prompt names BuildEsProductSpecificationObservation as a primary area. It reads
+            // through SafeDouble/SafeString but sets each *Observable flag from HasValue / the read
+            // result, so a throwing getter keeps the specification unproven (INCONCLUSIVE).
+            Reset();
+            try
+            {
+                Connection.Connections.Add(ConnectedRithmic());
+                var instrument = EsInstrument();
+                instrument.MasterInstrument.ThrowOnPointValueRead = true;
+                Instrument.All.Add(instrument);
+
+                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var observation = provider.GetSnapshot().EsProductSpecification;
+
+                Assert.True(observation.InstrumentObserved);
+                Assert.False(observation.PointValueObservable);
+                Assert.Equal(DiagnosticStatus.INCONCLUSIVE, EsProductSpecificationVerifier.Evaluate(observation).Status);
+            }
+            finally
+            {
+                Reset();
+            }
         }
 
         // ---------------- exported evidence preserves the read outcome ----------------

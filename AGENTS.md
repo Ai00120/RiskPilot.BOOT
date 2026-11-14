@@ -267,6 +267,12 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   `PASS` (`ALL_FIELDS_READ`).
 - `M4.HOST_METADATA` now proves only that the host instrument object/metadata surface was
   reachable; it never claims every required field was read (that is `M4.FIELD_METADATA`'s job).
+- `BuildInstrumentIdentityObservation` and `BuildEsProductSpecificationObservation` (also named in
+  the P0 prompt) already fail closed: they read through `SafeString`/`SafeDouble` but set their own
+  `*Observable` flags from the read result (`HasValue`/`IsNullOrEmpty`), so a throwing getter leaves
+  the field unobservable and `InstrumentIdentityVerifier`/`EsProductSpecificationVerifier` stay
+  INCONCLUSIVE. `M4FieldReadStatusTests` now proves this with a throwing getter on each path, so a
+  future refactor cannot silently regress them to PASS.
 - The exported `instruments.json` attestation block carries a `metadata` object with
   `fieldReadFailures` and the per-field `*Observable` flags, so the read outcome is preserved.
 - Offline stub `MasterInstrument` gained `ThrowOnNameRead`/`ThrowOnInstrumentTypeRead`/
