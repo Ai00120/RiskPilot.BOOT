@@ -36,8 +36,40 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         /// <summary>True when <c>MasterInstrument</c> was safe to read (post DataLoaded).</summary>
         public bool MasterMetadataAvailable { get; set; }
 
-        /// <summary>Property reads that threw while reading host metadata.</summary>
+        /// <summary>
+        /// True when <c>Instrument.FullName</c> was read (the getter did not throw and
+        /// returned a value). A read failure leaves this false rather than reporting an
+        /// empty string as a valid value.
+        /// </summary>
+        public bool FullNameObservable { get; set; }
+
+        /// <summary>True when <c>Instrument.Expiry</c> was read without error.</summary>
+        public bool ExpiryObservable { get; set; }
+
+        /// <summary>True when <c>Instrument.Exchange</c> was read without error.</summary>
+        public bool ExchangeObservable { get; set; }
+
+        /// <summary>True when <c>MasterInstrument.Name</c> was read without error.</summary>
+        public bool RootNameObservable { get; set; }
+
+        /// <summary>True when <c>MasterInstrument.InstrumentType</c> was read without error.</summary>
+        public bool InstrumentTypeObservable { get; set; }
+
+        /// <summary>True when <c>MasterInstrument.Currency</c> was read without error.</summary>
+        public bool CurrencyObservable { get; set; }
+
+        /// <summary>
+        /// Property reads that threw while reading host metadata. Each entry names the one
+        /// field whose getter threw, so the read status of every field is preserved
+        /// independently and one failed field never erases another field's result.
+        /// </summary>
         public IList<string> ReadFailures { get; set; }
+
+        /// <summary>True when at least one required property getter threw.</summary>
+        public bool HasReadFailures
+        {
+            get { return ReadFailures != null && ReadFailures.Count > 0; }
+        }
 
         public InstrumentMetadataObservation()
         {

@@ -210,16 +210,33 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     .WithEvidence(DiagnosticEvidence.Unobservable(FindingFactory.SourcePublicApi, AttestationReasonCodes.HostUnavailable, now));
             }
 
+            // The host instrument object was resolved and its metadata surface was observable.
+            // This check proves only that the object/surface was reachable; it deliberately does
+            // NOT claim that every required field was read. Whether each required field was read
+            // and validated is decided separately by M4.FIELD_METADATA.
+            var metadata = observation.Metadata;
+            var evidence = new List<DiagnosticEvidence>
+            {
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "fullName=" + metadata.FullName, now)
+            };
+            if (metadata.HasReadFailures)
+            {
+                evidence.Add(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi,
+                    "fieldReadFailures=" + string.Join(",", metadata.ReadFailures), now));
+            }
+
             return DiagnosticResult
                 .Pass(ModuleId, "M4.HOST_METADATA", correlation, now)
                 .WithFindingId("M4.HOST_METADATA")
                 .WithReasonCode("HOST_METADATA_AVAILABLE")
-                .WithObservation("fullName=" + observation.Metadata.FullName + " masterMetadataAvailable=" + observation.Metadata.MasterMetadataAvailable)
+                .WithObservation("fullName=" + metadata.FullName + " masterMetadataAvailable=" + metadata.MasterMetadataAvailable
+                    + " fieldReadFailures=" + (metadata.HasReadFailures ? string.Join(",", metadata.ReadFailures) : "none"))
                 .WithSource(FindingFactory.SourcePublicApi)
                 .WithMethod("Read of Instrument.FullName / Expiry / Exchange / MasterInstrument.* after DataLoaded.")
-                .WithLimitation("A value that could not be read is recorded as a read failure, never substituted.")
+                .WithLimitation("This proves the host instrument object and metadata surface were reachable; it does not "
+                    + "assert that every required field was read. M4.FIELD_METADATA proves the required-field reads.")
                 .WithNextAction("None.")
-                .WithEvidence(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "fullName=" + observation.Metadata.FullName, now));
+                .WithEvidence(evidence.ToArray());
         }
 
         private DiagnosticResult BuildFieldMetadataCheck(InstrumentAttestationObservation observation, string correlation, DateTime now)
@@ -245,6 +262,9 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "tickValue(derived)=" + Value(metadata.TickValue), now)
             };
 
+            // (1) A property getter that threw is a hard read failure: the field is unverified and
+            //     can never be attested. This outranks an unobserved field (a definite failure is
+            //     stronger evidence than an unknown one).
             if (failures.Count > 0)
             {
                 return DiagnosticResult
@@ -259,16 +279,96 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     .WithEvidence(evidence.ToArray());
             }
 
+            // (2) No getter threw, but a required field was still not observed (for example the
+            //     master metadata surface was not readable, or the observation came from a source
+            //     that never read the field). The field set is incomplete, so it can never PASS.
+            var unobserved = UnobservedRequiredFields(metadata);
+            if (unobserved.Count > 0)
+            {
+                evidence.Add(DiagnosticEvidence.Unobservable(FindingFactory.SourcePublicApi,
+                    "requiredFieldsNotRead=" + string.Join(",", unobserved), now));
+
+                return DiagnosticResult
+                    .Inconclusive(ModuleId, "M4.FIELD_METADATA", correlation, now)
+                    .WithFindingId(AttestationReasonCodes.HostMetadataIncomplete)
+                    .WithReasonCode(AttestationReasonCodes.HostMetadataIncomplete, "UNOBSERVED_FIELDS=" + unobserved.Count)
+                    .WithObservation("requiredFieldsNotRead=" + string.Join(",", unobserved))
+                    .WithSource(FindingFactory.SourcePublicApi)
+                    .WithMethod("Each host metadata property read is guarded and its read status is recorded independently.")
+                    .WithLimitation("A required field that was never read leaves the field set incomplete, so it cannot be attested.")
+                    .WithNextAction("Ensure the instrument is subscribed and the AddOn reached DataLoaded, then re-run.")
+                    .WithEvidence(evidence.ToArray());
+            }
+
             return DiagnosticResult
                 .Pass(ModuleId, "M4.FIELD_METADATA", correlation, now)
                 .WithFindingId("M4.FIELD_METADATA")
                 .WithReasonCode("ALL_FIELDS_READ")
-                .WithObservation("All instrument metadata fields were read without error.")
+                .WithObservation("All required instrument metadata fields were read without error.")
                 .WithSource(FindingFactory.SourcePublicApi)
                 .WithMethod("Guarded property reads of the public instrument metadata surface.")
                 .WithLimitation("A read value is only what the host reports; it is not independently verified against an exchange.")
                 .WithNextAction("None.")
                 .WithEvidence(evidence.ToArray());
+        }
+
+        /// <summary>
+        /// Names the required metadata fields whose read did not complete. A field is required
+        /// when it is part of the canonical instrument metadata surface; a field whose getter did
+        /// not throw is still required to have actually been read, so a field left unobserved
+        /// (for example a master field read before readiness) is reported here rather than being
+        /// treated as an empty valid value.
+        /// </summary>
+        private static List<string> UnobservedRequiredFields(InstrumentMetadataObservation metadata)
+        {
+            var missing = new List<string>();
+
+            if (!metadata.FullNameObservable)
+            {
+                missing.Add("FullName");
+            }
+
+            if (!metadata.ExpiryObservable)
+            {
+                missing.Add("Expiry");
+            }
+
+            if (!metadata.ExchangeObservable)
+            {
+                missing.Add("Exchange");
+            }
+
+            if (!metadata.MasterMetadataAvailable)
+            {
+                missing.Add("MasterInstrument");
+            }
+
+            if (!metadata.RootNameObservable)
+            {
+                missing.Add("RootName");
+            }
+
+            if (!metadata.InstrumentTypeObservable)
+            {
+                missing.Add("InstrumentType");
+            }
+
+            if (!metadata.CurrencyObservable)
+            {
+                missing.Add("Currency");
+            }
+
+            if (!metadata.PointValue.HasValue)
+            {
+                missing.Add("PointValue");
+            }
+
+            if (!metadata.TickSize.HasValue)
+            {
+                missing.Add("TickSize");
+            }
+
+            return missing;
         }
 
         private DiagnosticResult BuildRouteCandidateCheck(InstrumentAttestationObservation observation, string correlation, DateTime now)

@@ -10,6 +10,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine
     {
         public const string HostUnavailable = "HOST_UNAVAILABLE";
         public const string HostReadFailed = "HOST_READ_FAILED";
+
+        /// <summary>
+        /// A required metadata field was never read (no getter threw), so the field set is
+        /// incomplete and cannot be validated. Distinct from <see cref="HostReadFailed"/>,
+        /// which records a getter that actually threw.
+        /// </summary>
+        public const string HostMetadataIncomplete = "HOST_METADATA_INCOMPLETE";
         public const string IdentityUnparseable = "IDENTITY_UNPARSEABLE";
         public const string IdentityMismatch = "IDENTITY_MISMATCH";
         public const string InstrumentRootMismatch = "INSTRUMENT_ROOT_MISMATCH";

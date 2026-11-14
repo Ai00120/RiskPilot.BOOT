@@ -198,11 +198,49 @@ namespace NinjaTrader.Cbi
 
     public class MasterInstrument
     {
-        public string Name { get; set; }
-        public InstrumentType InstrumentType { get; set; }
-        public Currency Currency { get; set; }
+        private string _name;
+        private InstrumentType _instrumentType;
+        private Currency _currency;
+
+        public string Name
+        {
+            get
+            {
+                if (ThrowOnNameRead)
+                    throw new InvalidOperationException("Offline master name read failure");
+                return _name;
+            }
+            set { _name = value; }
+        }
+
+        public InstrumentType InstrumentType
+        {
+            get
+            {
+                if (ThrowOnInstrumentTypeRead)
+                    throw new InvalidOperationException("Offline instrument type read failure");
+                return _instrumentType;
+            }
+            set { _instrumentType = value; }
+        }
+
+        public Currency Currency
+        {
+            get
+            {
+                if (ThrowOnCurrencyRead)
+                    throw new InvalidOperationException("Offline currency read failure");
+                return _currency;
+            }
+            set { _currency = value; }
+        }
+
         // Offline-only fault injection; not NinjaTrader API members. They let an offline test
-        // prove an unreadable economics read stays unknown rather than defaulting to zero.
+        // prove an unreadable metadata read stays a recorded read failure rather than
+        // defaulting to an empty string / zero.
+        public bool ThrowOnNameRead { get; set; }
+        public bool ThrowOnInstrumentTypeRead { get; set; }
+        public bool ThrowOnCurrencyRead { get; set; }
         public bool ThrowOnTickSizeRead { get; set; }
         public bool ThrowOnPointValueRead { get; set; }
         private double _tickSize;
