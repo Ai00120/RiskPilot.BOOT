@@ -156,15 +156,22 @@ can only be exercised inside NT8.
 - **Verified (offline).** A shutting-down Control Center dispatcher makes the coordinator drop
   notifications instead of posting to a dead dispatcher, and the run still completes
   (`ShuttingDownControlCenterDispatcher_DoesNotFaultARun`).
+- **Verified (offline).** `DispatcherShutdownFinished_IsTreatedAsShutDown_ByEveryLifecycleLayer`
+  checks `WpfUiDispatcher` post rejection and `WindowLifecycle` usability. It does not call
+  `DiagnosticCenterWindowManager.Show`; manager precondition behavior is therefore not covered
+  by that test.
 
 ### Objective 9 — The three implementations do not contradict each other's ownership assumptions
 
-- **Verified (offline).** All three key their ownership on the **same** Control Center window object:
-  the dispatcher owner, the menu owner and the window-manager lifecycle are driven by the same host
-  sequence. `LifecycleIntegrationTests` asserts the combined sequence end-to-end.
+- **Verified (offline).** The dispatcher and menu registry both use the Control Center window
+  object as their ownership key. The Diagnostic Center window controller does **not** use that
+  owner key: it tracks one window process-wide through a static controller. The combined test
+  drives all three through one host-like sequence, but does not establish a shared ownership key
+  across all three layers.
 - **Verified (offline).** `MenuIntegration.MenuItemId` and `DiagnosticMenu.ItemId` are the same
-  constant; the window manager is real-host-only and holds a process-wide controller (static), the
-  dispatcher is per-AddOn-instance, and the menu registry is static with an explicit `Reset`.
+  constant. The window manager is real-host-only and holds a process-wide controller (static);
+  its `Show(Dispatcher)` request is dispatched using the supplied Control Center dispatcher.
+  The dispatcher is per-AddOn-instance, and the menu registry is static with an explicit `Reset`.
 
 ### Objective 10 — No unrelated functionality or trading-safety behavior changed
 
