@@ -150,9 +150,10 @@ can only be exercised inside NT8.
 - **Verified (offline).** `SwitchableUiDispatcher` holds no lock while invoking the inner dispatcher
   (it copies the target under the lock, then posts outside it); `MenuOwnershipRegistry` runs surface
   mutations under its lock but the host removal callback outside it; `DiagnosticWindowController`
-  holds no lock while invoking a window/dispatcher operation. Concurrent attach/detach/post never
-  deadlocks (`ConcurrentAttachDetachPost_DoesNotThrow_AndKeepsInvariants`,
-  `ThreadedAttachDetachWhilePosting_NeverDeadlocks_AndKeepsOneOwner`).
+  holds no lock while invoking a window/dispatcher operation. The threaded integration test
+  exercises concurrent attach/post and unrelated-owner detach attempts; it does not race a detach
+  by the current owner against reattachment (`ConcurrentAttachDetachPost_DoesNotThrow_AndKeepsInvariants`,
+  `ThreadedAttachAndPost_WithUnrelatedOwnerDetach_NeverDeadlocks`).
 - **Verified (offline).** A shutting-down Control Center dispatcher makes the coordinator drop
   notifications instead of posting to a dead dispatcher, and the run still completes
   (`ShuttingDownControlCenterDispatcher_DoesNotFaultARun`).
