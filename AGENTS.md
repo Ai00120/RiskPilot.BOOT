@@ -646,6 +646,41 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   provable inside NinjaTrader 8.
 
 
+## Combined lifecycle integration audit (dispatcher + menu + window)
+
+- The three lifecycle PRs (dispatcher ownership, menu ownership, window manager) were audited
+  together; the combined host sequence is exercised by `LifecycleIntegrationTests.cs` over the real
+  host-free primitives (`SwitchableUiDispatcher`, `MenuOwnershipRegistry`, `DiagnosticWindowController`)
+  and the real `WpfUiDispatcher`/stub `Dispatcher`. The controller is process-wide/single-window;
+  it is not keyed by the Control Center owner object. The WPF adapters (`DiagnosticAddOn.Ui.cs`,
+  `MenuIntegration`, `DiagnosticCenterWindowManager`, `DiagnosticCenterWindow`) are only compiled for
+  `UseStubs=false`, so they are not covered offline.
+- No integration defect was found, but the three layers do not share one ownership key: the
+  dispatcher and menu registry are keyed by the Control Center window object, while the
+  Diagnostic Center controller tracks one process-wide window and receives the Control Center
+  dispatcher when Show is requested. The combined test exercises one host-like sequence; it does
+  not prove a common owner key across all three layers. No production source was changed by the audit.
+- **Post-termination stale-destroy behavior (documented, not a defect):** `DiagnosticAddOn.Ui.cs`
+  is a long-lived AddOn instance in a single NT8 process. If the Control Center is destroyed *after*
+  `SafeDispose` ran, `_uiDispatcher` is the same instance that already ran the unconditional
+  `Detach()`; `Detach(window)` returns false (owner already null), so the guard does not run and no
+  stale `_windowManager`/menu can be cleared incorrectly. In normal operation `OnWindowDestroyed`
+  fires before `SafeDispose`, which is what clears `_windowManager` and resets the menu.
+- `MenuIntegration.Detach(Window)` is production-dead code: the AddOn drives menu cleanup through
+  `MenuIntegration.Reset()` only. It is correct and harmless; do not wire it without re-auditing.
+- Reopening the Diagnostic Center relies on `DiagnosticWindowController.CloseIfOpen` clearing the
+  tracked reference **before** queuing the close, so a reopen is never blocked by a half-closed
+  window (`WindowLifecycleTests` + `LifecycleIntegrationTests`).
+- A run started before the Control Center window exists is applied inline (no dispatcher target);
+  once a real dispatcher attaches, later notifications are marshalled (`InvokeAsync`) and only
+  rendered when the UI thread drains the queue. The live probe and the exported package both read the
+  thread-safe `DiagnosticViewState`, so a deferred render is a display-timing property, not a lost
+  result.
+- Real-host behavior (the `NinjaTrader.Gui.ControlCenter` cast, per-window `OnWindowCreated`/
+  `OnWindowDestroyed` threading, and real `Dispatcher.HasShutdownStarted`/`HasShutdownFinished`
+  timing) is **not** provable offline and still needs the manual NT8 acceptance tests in
+  `docs/LIFECYCLE_INTEGRATION_AUDIT.md`.
+
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live
