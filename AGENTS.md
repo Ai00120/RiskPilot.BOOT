@@ -248,6 +248,32 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   completed / cancelled / rejected / mixed / unreadable). A green stub run is **not** real-host
   proof.
 
+## Zero-vs-unknown at the data-reading and serialization boundaries (P0 fix)
+
+- A value the host **read** and that is genuinely zero stays a number; a missing, null, unavailable
+  or unreadable value stays **unknown**. Never default an unavailable value to `0`.
+- `AccountRecord.PositionCount` / `AccountRecord.WorkingOrderCount` are now `int?` and
+  `InstrumentRecord.TickSize` / `InstrumentRecord.PointValue` are now `double?`. `null` means
+  unobserved/unreadable; `0` means the host genuinely reported zero (a readable, confirmed-empty
+  collection for the counts).
+- `Nt8HostDataProvider.ReadPositionCount`/`CountActiveOrders` return `null` (not `0`) when the
+  Portfolio collection is missing/unreadable, when an order is null, when an order state cannot be
+  classified, or when enumeration throws mid-read. `GetInstrument` wraps every field in
+  `SafeString`/`SafeDouble` so an unreadable economics field stays `null` instead of a fabricated
+  `0`/empty. A genuinely readable-but-empty collection still yields a real `0`.
+- `EvidencePackageBuilder.WriteObservableCount`/`WriteObservableDouble` emit the number for an
+  observed value and the string `"UNOBSERVABLE"` for an unknown one, so `accounts.json` /
+  `instruments.json` preserve genuine-zero vs unknown vs confirmed-empty. `WriteCollectionCount`
+  emits `"UNOBSERVABLE"` for a null/empty `Accounts`/`Instruments` collection (never `"count":0`);
+  `BuildAccountsJson`/`BuildInstrumentsJson`/`BuildManifest`/`CountRecords`/`ProviderLabel`/
+  `InstrumentLabel` are null-collection safe.
+- The M4 probes keep their own `*Observable` flags on `InstrumentAttestationObservation` /
+  `EsProductSpecificationObservation`; the `InstrumentRecord` nulls feed only the evidence export,
+  never a diagnostic verdict. No downstream check treats an unknown as valid evidence.
+- Tests: `ZeroDefaultTests` (model, JSON genuine-zero/unreadable, null/empty collection, and the
+  host adapter over the offline stub surface with read-fault injection). A green stub run is
+  **not** real-host proof.
+
 ## M5 DOM & market data (P4 — data reliability)
 
 - M5 now ingests **real** host data: `Host/MarketDataCapture.cs` subscribes (read-only) to the

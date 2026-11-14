@@ -226,6 +226,7 @@ namespace RiskPilot.Diagnostics.SampleReport
                 Denomination = "USD",
                 ProviderName = "Rithmic",
                 PositionCount = 1,
+                WorkingOrderCount = 0,
                 ExecutionsInScope = false
             });
 

@@ -16,9 +16,20 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
 
         public string ProviderName { get; set; }
 
-        public int PositionCount { get; set; }
+        /// <summary>
+        /// Open positions read from the verified target account's <c>Account.Positions</c>.
+        /// <c>null</c> when the collection was missing or unreadable (unknown); <c>0</c> only
+        /// when a readable collection was confirmed empty.
+        /// </summary>
+        public int? PositionCount { get; set; }
 
-        public int WorkingOrderCount { get; set; }
+        /// <summary>
+        /// Active orders read from the verified target account's <c>Account.Orders</c>.
+        /// <c>null</c> when the collection was missing, unreadable, or held an order whose
+        /// state could not be classified (unknown); <c>0</c> only when a readable, fully
+        /// classified collection was confirmed empty.
+        /// </summary>
+        public int? WorkingOrderCount { get; set; }
 
         /// <summary>True when execution records were read; false keeps them out of scope.</summary>
         public bool ExecutionsInScope { get; set; }

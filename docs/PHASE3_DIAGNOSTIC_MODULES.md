@@ -220,7 +220,8 @@ mode `Simulation`، currency `USD`.
 = **فعال**؛ `Filled` = **تکمیل‌شده**؛ `Cancelled` = **لغوشده**؛ `Rejected` = **ردشده**. سفارش‌های
 پایانی هرگز به‌عنوان فعال شمرده نمی‌شوند. بدون مجموعهٔ سفارش خواندنی، یا با خطای خواندن/حالت
 طبقه‌بندی‌نشده → `INCONCLUSIVE` (fail-closed)، هرگز صفر گمراه‌کننده. `workingOrderCount` در
-`accounts.json` هم از همین شمارش فعال پر می‌شود.
+`accounts.json` هم از همین شمارش فعال پر می‌شود؛ اگر مجموعهٔ سفارش خواندنی نباشد یا حالتی
+طبقه‌بندی‌نشده باشد مقدار آن `UNOBSERVABLE` است (نه صفر).
 
 **Correlation:** هر snapshot/رویداد با `CorrelationId`، `OrderRef` (ماسک‌شده با `SyntheticRef`)،
 `Source` و `IngestedAtUtc` ثبت می‌شود. **هیچ ارتباطی بدون مدرک قطعی حدس زده نمی‌شود**؛ اگر

@@ -20,9 +20,18 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
 
         public string Currency { get; set; }
 
-        public double TickSize { get; set; }
+        /// <summary>
+        /// Tick size read from <c>MasterInstrument.TickSize</c>. <c>null</c> when the metadata
+        /// was not readable (unknown); <c>0</c> only when the host genuinely reported zero.
+        /// </summary>
+        public double? TickSize { get; set; }
 
-        public double PointValue { get; set; }
+        /// <summary>
+        /// Point value read from <c>MasterInstrument.PointValue</c>. <c>null</c> when the
+        /// metadata was not readable (unknown); <c>0</c> only when the host genuinely reported
+        /// zero.
+        /// </summary>
+        public double? PointValue { get; set; }
 
         /// <summary>True when master-instrument metadata was safe to read (post DataLoaded).</summary>
         public bool MasterMetadataAvailable { get; set; }

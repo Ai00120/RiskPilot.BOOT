@@ -85,14 +85,17 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
                 AggregateStatus = (result != null ? result.AggregateStatus : DiagnosticStatus.NOT_APPLICABLE).ToWire()
             };
 
-            foreach (var account in dataset.Accounts)
+            if (dataset.Accounts != null)
             {
-                manifest.AccountsObserved.Add(new MaskedAccountRef
+                foreach (var account in dataset.Accounts)
                 {
-                    MaskedRef = MaskedAccount(account),
-                    AccountClass = account.AccountClass.ToWire(),
-                    ProviderName = SecretRedactor.Redact(account.ProviderName)
-                });
+                    manifest.AccountsObserved.Add(new MaskedAccountRef
+                    {
+                        MaskedRef = MaskedAccount(account),
+                        AccountClass = account.AccountClass.ToWire(),
+                        ProviderName = SecretRedactor.Redact(account.ProviderName)
+                    });
+                }
             }
 
             foreach (var name in EvidencePackageCatalog.All)
@@ -117,13 +120,18 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
 
         private static long CountRecords(EvidenceDataset dataset)
         {
-            return dataset.Orders.Count
-                + dataset.Executions.Count
-                + dataset.Positions.Count
-                + dataset.MarketData.Count
-                + dataset.Dom.Count
-                + dataset.Strategies.Count
-                + dataset.OrderLifecycleEvents.Count;
+            return Count(dataset.Orders)
+                + Count(dataset.Executions)
+                + Count(dataset.Positions)
+                + Count(dataset.MarketData)
+                + Count(dataset.Dom)
+                + Count(dataset.Strategies)
+                + Count(dataset.OrderLifecycleEvents);
+        }
+
+        private static long Count<T>(IList<T> records)
+        {
+            return records != null ? records.Count : 0L;
         }
 
         private static string ProviderLabel(EvidenceDataset dataset)
@@ -133,7 +141,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
                 return SecretRedactor.Redact(dataset.Provider.Name);
             }
 
-            if (dataset.Connections.Count > 0 && !string.IsNullOrEmpty(dataset.Connections[0].ProviderName))
+            if (dataset.Connections != null && dataset.Connections.Count > 0
+                && !string.IsNullOrEmpty(dataset.Connections[0].ProviderName))
             {
                 return SecretRedactor.Redact(dataset.Connections[0].ProviderName);
             }
@@ -143,7 +152,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
 
         private static string InstrumentLabel(EvidenceDataset dataset)
         {
-            if (dataset.Instruments.Count > 0)
+            if (dataset.Instruments != null && dataset.Instruments.Count > 0)
             {
                 return SecretRedactor.Redact(dataset.Instruments[0].FullName);
             }
@@ -368,8 +377,16 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
         {
             var writer = new JsonWriter();
             writer.BeginObject();
-            writer.WriteProperty("count", dataset.Accounts.Count);
-            if (dataset.Accounts.Count == 0)
+
+            // A null collection means the account surface was not observable at all; it is not
+            // a confirmed empty collection. Only an observed collection reports a real count.
+            var accounts = dataset.Accounts;
+            WriteCollectionCount(writer, accounts != null ? accounts.Count : (int?)null);
+            if (accounts == null)
+            {
+                WriteUnavailable(writer, "the account collection was not observable");
+            }
+            else if (accounts.Count == 0)
             {
                 WriteUnavailable(writer, "no account was observable");
             }
@@ -379,17 +396,20 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             }
 
             writer.BeginArray("accounts");
-            foreach (var account in dataset.Accounts)
+            if (accounts != null)
             {
-                writer.BeginObject();
-                writer.WriteProperty("accountRef", MaskedAccount(account));
-                writer.WriteProperty("accountClass", account.AccountClass.ToWire());
-                writer.WriteProperty("denomination", SecretRedactor.Redact(account.Denomination));
-                writer.WriteProperty("providerName", SecretRedactor.Redact(account.ProviderName));
-                writer.WriteProperty("positionCount", account.PositionCount);
-                writer.WriteProperty("workingOrderCount", account.WorkingOrderCount);
-                writer.WriteProperty("executionsInScope", account.ExecutionsInScope);
-                writer.EndObject();
+                foreach (var account in accounts)
+                {
+                    writer.BeginObject();
+                    writer.WriteProperty("accountRef", MaskedAccount(account));
+                    writer.WriteProperty("accountClass", account.AccountClass.ToWire());
+                    writer.WriteProperty("denomination", SecretRedactor.Redact(account.Denomination));
+                    writer.WriteProperty("providerName", SecretRedactor.Redact(account.ProviderName));
+                    WriteObservableCount(writer, "positionCount", account.PositionCount);
+                    WriteObservableCount(writer, "workingOrderCount", account.WorkingOrderCount);
+                    writer.WriteProperty("executionsInScope", account.ExecutionsInScope);
+                    writer.EndObject();
+                }
             }
 
             writer.EndArray();
@@ -475,22 +495,42 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
         {
             var writer = new JsonWriter();
             writer.BeginObject();
-            writer.WriteProperty("count", dataset.Instruments.Count);
-            writer.BeginArray("instruments");
-            foreach (var instrument in dataset.Instruments)
+
+            // A null collection means the instrument surface was not observable at all; it is
+            // not a confirmed empty collection. Only an observed collection reports a real count.
+            var instruments = dataset.Instruments;
+            WriteCollectionCount(writer, instruments != null ? instruments.Count : (int?)null);
+            if (instruments == null)
             {
-                writer.BeginObject();
-                writer.WriteProperty("fullName", SecretRedactor.Redact(instrument.FullName));
-                writer.WriteProperty("instrumentId", SecretRedactor.Redact(instrument.InstrumentId));
-                writer.WriteProperty("rootSymbol", SecretRedactor.Redact(instrument.RootSymbol));
-                writer.WriteProperty("expiry", SecretRedactor.Redact(instrument.Expiry));
-                writer.WriteProperty("exchange", SecretRedactor.Redact(instrument.Exchange));
-                writer.WriteProperty("instrumentType", SecretRedactor.Redact(instrument.InstrumentType));
-                writer.WriteProperty("currency", SecretRedactor.Redact(instrument.Currency));
-                writer.WriteProperty("tickSize", instrument.TickSize);
-                writer.WriteProperty("pointValue", instrument.PointValue);
-                writer.WriteProperty("masterMetadataAvailable", instrument.MasterMetadataAvailable);
-                writer.EndObject();
+                WriteUnavailable(writer, "the instrument collection was not observable");
+            }
+            else if (instruments.Count == 0)
+            {
+                WriteUnavailable(writer, "no instrument was observable");
+            }
+            else
+            {
+                writer.WriteProperty("status", AvailableStatus);
+            }
+
+            writer.BeginArray("instruments");
+            if (instruments != null)
+            {
+                foreach (var instrument in instruments)
+                {
+                    writer.BeginObject();
+                    writer.WriteProperty("fullName", SecretRedactor.Redact(instrument.FullName));
+                    writer.WriteProperty("instrumentId", SecretRedactor.Redact(instrument.InstrumentId));
+                    writer.WriteProperty("rootSymbol", SecretRedactor.Redact(instrument.RootSymbol));
+                    writer.WriteProperty("expiry", SecretRedactor.Redact(instrument.Expiry));
+                    writer.WriteProperty("exchange", SecretRedactor.Redact(instrument.Exchange));
+                    writer.WriteProperty("instrumentType", SecretRedactor.Redact(instrument.InstrumentType));
+                    writer.WriteProperty("currency", SecretRedactor.Redact(instrument.Currency));
+                    WriteObservableDouble(writer, "tickSize", instrument.TickSize);
+                    WriteObservableDouble(writer, "pointValue", instrument.PointValue);
+                    writer.WriteProperty("masterMetadataAvailable", instrument.MasterMetadataAvailable);
+                    writer.EndObject();
+                }
             }
 
             writer.EndArray();
@@ -1259,6 +1299,62 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
         {
             writer.WriteProperty("status", UnavailableStatus);
             writer.WriteProperty("reason", SecretRedactor.Redact(reason));
+        }
+
+        /// <summary>
+        /// Writes a count that was read from the host. A value the host actually reported is
+        /// written as the number (including a genuine <c>0</c> from a readable empty
+        /// collection); a value that could not be read is written as <c>UNOBSERVABLE</c>, so a
+        /// missing count is never presented as a valid zero.
+        /// </summary>
+        private static void WriteObservableCount(JsonWriter writer, string name, int? value)
+        {
+            if (value.HasValue)
+            {
+                writer.WriteProperty(name, value.Value);
+            }
+            else
+            {
+                writer.WriteProperty(name, "UNOBSERVABLE");
+            }
+        }
+
+        /// <summary>
+        /// Writes a numeric field that was read from the host. A value the host actually
+        /// reported is written as the number (including a genuine <c>0</c>); a value that could
+        /// not be read is written as <c>UNOBSERVABLE</c>, so an unreadable field is never
+        /// presented as a valid zero.
+        /// </summary>
+        private static void WriteObservableDouble(JsonWriter writer, string name, double? value)
+        {
+            if (value.HasValue)
+            {
+                writer.WriteProperty(name, value.Value);
+            }
+            else
+            {
+                writer.WriteProperty(name, "UNOBSERVABLE");
+            }
+        }
+
+        /// <summary>
+        /// Writes the item count of a host collection. An observed, non-empty collection writes
+        /// its real count; a null collection, or a collection with no observed item, writes
+        /// <c>UNOBSERVABLE</c> so an unavailable surface is never presented as a confirmed empty
+        /// collection with a count of zero. (In this tool the accounts and instruments surfaces
+        /// have no legitimate "observed but empty" state: a verified target always yields one
+        /// account, and the instrument list is only populated when a source supplies it.)
+        /// </summary>
+        private static void WriteCollectionCount(JsonWriter writer, int? observedCount)
+        {
+            if (observedCount.HasValue && observedCount.Value > 0)
+            {
+                writer.WriteProperty("count", observedCount.Value);
+            }
+            else
+            {
+                writer.WriteProperty("count", "UNOBSERVABLE");
+            }
         }
 
         private static string FormatUtc(DateTime value)
