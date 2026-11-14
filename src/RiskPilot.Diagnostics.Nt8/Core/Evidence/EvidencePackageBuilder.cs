@@ -547,6 +547,31 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
                 writer.WriteProperty("d078Approved", attestation.D078Approved);
                 writer.WriteProperty("attestationEpoch", attestation.AttestationEpoch);
                 writer.WriteStringArrayProperty("failureReasons", SecretRedactor.RedactArray(ToArray(attestation.FailureReasons)));
+
+                // Preserve the actual field-read outcome: a required property whose getter threw
+                // is exported by name so a downstream reader can see that the field was not read
+                // rather than mistaking an empty/default value for a valid one.
+                var metadata = attestation.Metadata;
+                if (metadata != null)
+                {
+                    writer.BeginObject("metadata");
+                    writer.WriteProperty("masterMetadataAvailable", metadata.MasterMetadataAvailable);
+                    writer.WriteStringArrayProperty("fieldReadFailures", SecretRedactor.RedactArray(ToArray(metadata.ReadFailures)));
+                    writer.WriteProperty("fullNameObservable", metadata.FullNameObservable);
+                    writer.WriteProperty("expiryObservable", metadata.ExpiryObservable);
+                    writer.WriteProperty("exchangeObservable", metadata.ExchangeObservable);
+                    writer.WriteProperty("rootNameObservable", metadata.RootNameObservable);
+                    writer.WriteProperty("instrumentTypeObservable", metadata.InstrumentTypeObservable);
+                    writer.WriteProperty("currencyObservable", metadata.CurrencyObservable);
+                    writer.WriteProperty("pointValueObservable", metadata.PointValue.HasValue);
+                    writer.WriteProperty("tickSizeObservable", metadata.TickSize.HasValue);
+                    writer.EndObject();
+                }
+                else
+                {
+                    writer.WriteProperty("metadata", "UNOBSERVABLE");
+                }
+
                 writer.EndObject();
             }
             else

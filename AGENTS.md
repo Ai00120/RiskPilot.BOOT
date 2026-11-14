@@ -248,6 +248,38 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   completed / cancelled / rejected / mixed / unreadable). A green stub run is **not** real-host
   proof.
 
+## M4 field-read status (P0 fix)
+
+- `SafeString`/`SafeDouble` swallow getter exceptions and return `""`/`null`, which hid a real
+  read failure. `BuildAttestationObservation` read every metadata field through them and only
+  recorded a coarse `"MasterInstrument"` failure, so `M4.FIELD_METADATA` could PASS with an
+  unread field (the false-PASS risk).
+- Fix: the attestation metadata path now uses `Nt8HostDataProvider.TryReadMetadataString` /
+  `TryReadMetadataDouble`, which record the **exact** field name in `ReadFailures` when the getter
+  throws and leave a per-field `*Observable` flag false. One failed field never erases another
+  field's read status. `SafeString`/`SafeDouble` are unchanged for the other (non-attestation)
+  call sites.
+- `InstrumentMetadataObservation` carries per-field observability (`FullNameObservable`,
+  `ExpiryObservable`, `ExchangeObservable`, `RootNameObservable`, `InstrumentTypeObservable`,
+  `CurrencyObservable`) plus `HasReadFailures`. `M4.FIELD_METADATA` decides: any recorded read
+  failure ⇒ `FAIL` (`HOST_READ_FAILED`, outranks an unobserved field); else any required field not
+  observed ⇒ `INCONCLUSIVE` (`HOST_METADATA_INCOMPLETE`); only a fully read, fully validated set ⇒
+  `PASS` (`ALL_FIELDS_READ`).
+- `M4.HOST_METADATA` now proves only that the host instrument object/metadata surface was
+  reachable; it never claims every required field was read (that is `M4.FIELD_METADATA`'s job).
+- `BuildInstrumentIdentityObservation` and `BuildEsProductSpecificationObservation` (also named in
+  the P0 prompt) already fail closed: they read through `SafeString`/`SafeDouble` but set their own
+  `*Observable` flags from the read result (`HasValue`/`IsNullOrEmpty`), so a throwing getter leaves
+  the field unobservable and `InstrumentIdentityVerifier`/`EsProductSpecificationVerifier` stay
+  INCONCLUSIVE. `M4FieldReadStatusTests` now proves this with a throwing getter on each path, so a
+  future refactor cannot silently regress them to PASS.
+- The exported `instruments.json` attestation block carries a `metadata` object with
+  `fieldReadFailures` and the per-field `*Observable` flags, so the read outcome is preserved.
+- Offline stub `MasterInstrument` gained `ThrowOnNameRead`/`ThrowOnInstrumentTypeRead`/
+  `ThrowOnCurrencyRead` fault injection (mirrors `ThrowOnTickSizeRead`/`ThrowOnPointValueRead`) to
+  exercise a throwing getter over the stub surface. Tests: `M4FieldReadStatusTests`. A green stub
+  run is **not** real-host proof.
+
 ## Zero-vs-unknown at the data-reading and serialization boundaries (P0 fix)
 
 - A value the host **read** and that is genuinely zero stays a number; a missing, null, unavailable

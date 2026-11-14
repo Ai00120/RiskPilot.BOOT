@@ -1033,20 +1033,59 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
             var metadata = new InstrumentMetadataObservation
             {
-                FullName = SafeString(() => instrument.FullName),
-                ExpiryRaw = SafeString(() => instrument.Expiry.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)),
-                ExpiryKind = SafeString(() => instrument.Expiry.Kind.ToString()),
-                ExchangeRaw = SafeString(() => instrument.Exchange.ToString()),
                 MasterMetadataAvailable = MasterMetadataReady
             };
 
+            // Each required field is read independently so one throwing getter never erases the
+            // read status of the other fields. A failed read is recorded against the exact field
+            // name and never substituted with a valid-looking empty string or zero.
+            string fullName;
+            metadata.FullNameObservable = TryReadMetadataString(() => instrument.FullName, "FullName", metadata, out fullName);
+            metadata.FullName = fullName;
+
+            string expiry;
+            metadata.ExpiryObservable = TryReadMetadataString(
+                () => instrument.Expiry.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                "Expiry", metadata, out expiry);
+            metadata.ExpiryRaw = expiry;
+
+            string expiryKind;
+            TryReadMetadataString(() => instrument.Expiry.Kind.ToString(), "ExpiryKind", metadata, out expiryKind);
+            metadata.ExpiryKind = expiryKind;
+
+            string exchange;
+            metadata.ExchangeObservable = TryReadMetadataString(() => instrument.Exchange.ToString(), "Exchange", metadata, out exchange);
+            metadata.ExchangeRaw = exchange;
+
             if (MasterMetadataReady && instrument.MasterInstrument != null)
             {
-                metadata.RootName = SafeString(() => instrument.MasterInstrument.Name);
-                metadata.InstrumentTypeRaw = SafeString(() => instrument.MasterInstrument.InstrumentType.ToString());
-                metadata.CurrencyRaw = SafeString(() => instrument.MasterInstrument.Currency.ToString());
-                metadata.PointValue = SafeDouble(() => instrument.MasterInstrument.PointValue);
-                metadata.TickSize = SafeDouble(() => instrument.MasterInstrument.TickSize);
+                string rootName;
+                metadata.RootNameObservable = TryReadMetadataString(
+                    () => instrument.MasterInstrument.Name, "RootName", metadata, out rootName);
+                metadata.RootName = rootName;
+
+                string instrumentType;
+                metadata.InstrumentTypeObservable = TryReadMetadataString(
+                    () => instrument.MasterInstrument.InstrumentType.ToString(), "InstrumentType", metadata, out instrumentType);
+                metadata.InstrumentTypeRaw = instrumentType;
+
+                string currency;
+                metadata.CurrencyObservable = TryReadMetadataString(
+                    () => instrument.MasterInstrument.Currency.ToString(), "Currency", metadata, out currency);
+                metadata.CurrencyRaw = currency;
+
+                double pointValue;
+                if (TryReadMetadataDouble(() => instrument.MasterInstrument.PointValue, "PointValue", metadata, out pointValue))
+                {
+                    metadata.PointValue = pointValue;
+                }
+
+                double tickSize;
+                if (TryReadMetadataDouble(() => instrument.MasterInstrument.TickSize, "TickSize", metadata, out tickSize))
+                {
+                    metadata.TickSize = tickSize;
+                }
+
                 if (metadata.PointValue.HasValue && metadata.TickSize.HasValue)
                 {
                     metadata.TickValue = metadata.PointValue.Value * metadata.TickSize.Value;
@@ -1604,6 +1643,50 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             catch (Exception)
             {
                 return null;
+            }
+        }
+
+        /// <summary>
+        /// Reads one instrument-metadata string property and preserves the read outcome. A getter
+        /// that throws is recorded as a per-field read failure (named by <paramref name="fieldName"/>)
+        /// instead of being substituted with a valid-looking empty string; the value is only
+        /// returned when the getter completed. The failure is attributed to the exact field so one
+        /// failed read never hides the status of another field. This is the field-level boundary for
+        /// M4 metadata; <see cref="SafeString"/> is intentionally left unchanged for the other,
+        /// non-attestation call sites.
+        /// </summary>
+        private static bool TryReadMetadataString(Func<string> reader, string fieldName, InstrumentMetadataObservation metadata, out string value)
+        {
+            try
+            {
+                value = reader() ?? string.Empty;
+                return true;
+            }
+            catch (Exception)
+            {
+                value = string.Empty;
+                metadata.ReadFailures.Add(fieldName);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Reads one instrument-metadata numeric property and preserves the read outcome. A getter
+        /// that throws is recorded as a per-field read failure instead of being substituted with a
+        /// default numeric value. A genuine host-reported <c>0</c> is still a successful read.
+        /// </summary>
+        private static bool TryReadMetadataDouble(Func<double> reader, string fieldName, InstrumentMetadataObservation metadata, out double value)
+        {
+            try
+            {
+                value = reader();
+                return true;
+            }
+            catch (Exception)
+            {
+                value = 0d;
+                metadata.ReadFailures.Add(fieldName);
+                return false;
             }
         }
 

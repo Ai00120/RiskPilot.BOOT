@@ -52,6 +52,7 @@
     <Compile Include="HostAccountIdentityTests.cs" />
     <Compile Include="HostTargetAccountConnectionTests.cs" />
     <Compile Include="HostInstrumentIdentityTests.cs" />
+    <Compile Include="M4FieldReadStatusTests.cs" />
     <Compile Include="M3ActiveOrderTests.cs" />
     <Compile Include="M5DomMarketDataTests.cs" />
     <Compile Include="M6TradeDeltaTests.cs" />
