@@ -139,14 +139,22 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
         }
 
         /// <summary>
-        /// Resolves a placeholder slot to a verified vendor through the owner-authorized mapping,
-        /// or returns null when no verified mapping applies. The mapping is matched
+        /// Resolves a <b>placeholder slot</b> to a verified vendor through the owner-authorized
+        /// mapping, or returns null when no verified mapping applies. The mapping is matched
         /// case-insensitively on the exact slot name.
+        /// <para>
+        /// The mapping applies to placeholder slots only: an explicitly named provider (for example
+        /// <c>Yahoo</c> or <c>Simulator</c>) already carries a real vendor identity, so it is never
+        /// remapped, even when the mapping dictionary contains an entry for its name. Such a value
+        /// resolves to null and is then compared by its own name.
+        /// </para>
         /// </summary>
         public static string Resolve(string raw, IReadOnlyDictionary<string, string> ownerAuthorizedSlots)
         {
             var value = Normalize(raw);
-            if (string.IsNullOrEmpty(value) || ownerAuthorizedSlots == null)
+            if (string.IsNullOrEmpty(value)
+                || ownerAuthorizedSlots == null
+                || !IsPlaceholderSlot(value))
             {
                 return null;
             }
