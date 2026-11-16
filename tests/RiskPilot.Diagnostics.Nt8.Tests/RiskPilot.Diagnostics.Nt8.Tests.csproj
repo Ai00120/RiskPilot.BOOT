@@ -41,6 +41,8 @@
     <Compile Include="SecretRedactionTests.cs" />
     <Compile Include="LifecycleTests.cs" />
     <Compile Include="LifecycleDiagnosticsTests.cs" />
+    <Compile Include="HostReadinessTests.cs" />
+    <Compile Include="AddOnLifecycleReadinessTests.cs" />
     <Compile Include="ErrorClassificationTests.cs" />
     <Compile Include="StatusPropagationTests.cs" />
     <Compile Include="ProbeTests.cs" />

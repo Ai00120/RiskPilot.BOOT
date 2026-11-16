@@ -64,6 +64,7 @@
     <Compile Include="Core\Identity\InstrumentIdentityVerifier.cs" />
     <Compile Include="Core\Identity\EsProductSpecification.cs" />
     <Compile Include="Core\Identity\LifecycleVerifier.cs" />
+    <Compile Include="Core\Identity\AddOnLifecycle.cs" />
     <Compile Include="Core\Status\DiagnosticStatus.cs" />
     <Compile Include="Core\Security\SecretRedactor.cs" />
     <Compile Include="Core\Security\SyntheticRef.cs" />
@@ -85,6 +86,7 @@
     <Compile Include="Core\Models\DiagnosticFinding.cs" />
     <Compile Include="Core\Models\Observations\RuntimeObservation.cs" />
     <Compile Include="Core\Models\Observations\LifecycleObservation.cs" />
+    <Compile Include="Core\Models\Observations\HostReadinessObservation.cs" />
     <Compile Include="Core\Models\Observations\OrderLifecycleObservation.cs" />
     <Compile Include="Core\Models\Observations\PostTradeAuditObservation.cs" />
     <Compile Include="Core\Models\Observations\InstrumentAttestationObservation.cs" />
@@ -124,6 +126,7 @@
     <Compile Include="Core\Run\DiagnosticRunResult.cs" />
     <Compile Include="Core\Run\IUiDispatcher.cs" />
     <Compile Include="Core\Run\SwitchableUiDispatcher.cs" />
+    <Compile Include="Core\Run\HostReadiness.cs" />
     <Compile Include="Core\Run\MenuOwnershipRegistry.cs" />
     <Compile Include="Core\Run\IDiagnosticWindow.cs" />
     <Compile Include="Core\Run\DiagnosticWindowLifecycle.cs" />

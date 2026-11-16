@@ -9,6 +9,33 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+### Fixed
+
+- **AddOn lifecycle/readiness gate: the host is now recognized at `Active`, and readiness is
+  reported as five separate facts instead of one permanently-false Boolean.** Root cause: the
+  readiness probe (`DiagnosticAddOn.HostIsLive`) accepted only the data-processing states
+  `DataLoaded`/`Historical`/`Transition`/`Realtime`, but a NinjaTrader 8 AddOn uses the **"Active
+  state"** management system (`SetDefaults → Configure → Active → Terminated`) and never reaches
+  those states. The probe was therefore permanently `false`, so host metadata, the selected
+  instrument and market data were never observed. The fix:
+  - `Core/Identity/AddOnLifecycle.cs` — the authoritative lifecycle predicate; `Active` is
+    operational (the data-processing states remain accepted defensively, an unknown state is not).
+  - `Core/Run/HostReadiness.cs` + `Core/Models/Observations/HostReadinessObservation.cs` — the
+    host-free readiness model: `HostReadinessFacts`, `HostReadinessEvaluator`, a thread-safe
+    `HostReadinessTracker` and a bounded `HostReadinessRetryPolicy`. The five concepts (AddOn
+    lifecycle, host availability, instrument readiness, metadata readiness, market-data
+    subscription) are reported separately; only all five hold ⇒ `READY`.
+  - `Host/DiagnosticAddOn.cs` — reacts to `Active` (records host availability and starts a bounded,
+    idempotent readiness loop with geometric backoff), records the market-data subscription and
+    detaches on `Terminated`/dispose. `HostIsLive` now reads the same tracked state.
+  - `Host/MarketDataCapture.cs` — records the instrument/metadata/subscription facts on the tracker.
+  - `Core/Engine/Probes/M1EnvironmentProbe.cs` — new `M1.HOST_READINESS` check (PASS only when all
+    five facts hold; INCONCLUSIVE otherwise, never a readiness claim from construction alone).
+  - `environment.json` gains a `hostReadiness` block.
+  Reaching `Active` alone is never reported as ready (fail-closed). Focused coverage:
+  `HostReadinessTests`, `AddOnLifecycleReadinessTests`, and the new M1/evidence cases. The committed
+  SAMPLE package was regenerated.
+
 ### Added
 
 - **Zero-default fix: unavailable values no longer become a genuine-looking zero.**

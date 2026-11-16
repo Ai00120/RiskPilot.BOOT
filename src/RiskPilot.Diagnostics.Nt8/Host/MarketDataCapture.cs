@@ -23,16 +23,33 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         private readonly Func<NormalizedRecord, bool> _ingest;
         private readonly Func<bool> _masterMetadataReady;
         private readonly string _requestedInstrumentId;
+        private readonly Core.Run.HostReadinessTracker _readiness;
 
         private readonly object _gate = new object();
         private Instrument _instrument;
         private bool _subscribed;
 
         public MarketDataCapture(Func<NormalizedRecord, bool> ingest, Func<bool> masterMetadataReady, string requestedInstrumentId = null)
+            : this(ingest, masterMetadataReady, requestedInstrumentId, null)
+        {
+        }
+
+        /// <summary>
+        /// Creates the capture with the optional readiness tracker. The tracker is updated as each
+        /// readiness fact becomes true (instrument resolved, master metadata readable, streams
+        /// attached), so the host can report exactly which fact is still outstanding instead of a
+        /// single conflated Boolean.
+        /// </summary>
+        public MarketDataCapture(
+            Func<NormalizedRecord, bool> ingest,
+            Func<bool> masterMetadataReady,
+            string requestedInstrumentId,
+            Core.Run.HostReadinessTracker readiness)
         {
             _ingest = ingest;
             _masterMetadataReady = masterMetadataReady ?? (() => false);
             _requestedInstrumentId = requestedInstrumentId;
+            _readiness = readiness;
         }
 
         /// <summary>True once the capture subscribed to a resolved instrument's data streams.</summary>
@@ -55,10 +72,39 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
                 try
                 {
+                    // The master-metadata readiness gate decides whether MasterInstrument.* is safe to
+                    // read; it is true from the AddOn's operational (Active) state onward. Recording it
+                    // here keeps the readiness observation honest: metadata is only ready once the host
+                    // actually reports it is readable.
+                    var metadataReady = false;
+                    try
+                    {
+                        metadataReady = _masterMetadataReady();
+                    }
+                    catch (Exception)
+                    {
+                        metadataReady = false;
+                    }
+
+                    if (_readiness != null)
+                    {
+                        _readiness.RecordMetadataReady(metadataReady);
+                    }
+
                     var instrument = Nt8HostDataProvider.ResolveLoadedInstrument(_requestedInstrumentId, _masterMetadataReady);
                     if (instrument == null)
                     {
+                        if (_readiness != null)
+                        {
+                            _readiness.RecordInstrumentResolved(false);
+                        }
+
                         return false;
+                    }
+
+                    if (_readiness != null)
+                    {
+                        _readiness.RecordInstrumentResolved(true);
                     }
 
                     var marketData = instrument.MarketData;
@@ -94,12 +140,22 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
                     _instrument = instrument;
                     _subscribed = true;
+                    if (_readiness != null)
+                    {
+                        _readiness.RecordMarketDataSubscribed(true);
+                    }
+
                     return true;
                 }
                 catch (Exception)
                 {
                     // A host read failure is not fatal: the capture simply stays unsubscribed and
                     // M5 reports the market-data surface as unobserved (INCONCLUSIVE).
+                    if (_readiness != null)
+                    {
+                        _readiness.RecordMarketDataSubscribed(false);
+                    }
+
                     return false;
                 }
             }
@@ -116,6 +172,11 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 subscribed = _subscribed;
                 _instrument = null;
                 _subscribed = false;
+            }
+
+            if (_readiness != null)
+            {
+                _readiness.RecordMarketDataSubscribed(false);
             }
 
             if (!subscribed || instrument == null)

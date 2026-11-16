@@ -467,6 +467,51 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void EnvironmentJson_HostReadiness_IsUnobservable_WhenNoSurface()
+        {
+            var package = EvidencePackageBuilder.Build(RunResult(), new EvidenceDataset());
+            var environment = package.Read(EvidencePackageCatalog.EnvironmentJson);
+            Assert.Contains("\"hostReadiness\":\"UNOBSERVABLE\"", environment);
+        }
+
+        [Fact]
+        public void EnvironmentJson_HostReadiness_ReportsTheSeparatedFacts()
+        {
+            var dataset = new EvidenceDataset
+            {
+                Snapshot = new DiagnosticSnapshot
+                {
+                    HostReadiness = new HostReadinessObservation
+                    {
+                        SurfaceObservable = true,
+                        AddOnState = "Active",
+                        LifecycleOperational = true,
+                        HostAvailable = true,
+                        InstrumentReady = true,
+                        MetadataReady = true,
+                        MarketDataSubscribed = true,
+                        FullyReady = true,
+                        State = HostReadinessState.Ready,
+                        ReasonCodes = new List<string> { HostReadinessReasonCodes.Ready }
+                    }
+                }
+            };
+
+            var package = EvidencePackageBuilder.Build(RunResult(), dataset);
+            var environment = package.Read(EvidencePackageCatalog.EnvironmentJson);
+
+            Assert.Contains("\"hostReadiness\"", environment);
+            Assert.Contains("\"state\":\"READY\"", environment);
+            Assert.Contains("\"addOnState\":\"Active\"", environment);
+            Assert.Contains("\"hostAvailable\":true", environment);
+            Assert.Contains("\"instrumentReady\":true", environment);
+            Assert.Contains("\"metadataReady\":true", environment);
+            Assert.Contains("\"marketDataSubscribed\":true", environment);
+            Assert.Contains("\"fullyReady\":true", environment);
+            Assert.Contains("HOST_READY", environment);
+        }
+
+        [Fact]
         public void PartialDataset_ReportsOnlyObservedSectionsAvailable()
         {
             // Only connections + accounts are observable; every other section must be

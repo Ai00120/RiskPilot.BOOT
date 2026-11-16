@@ -83,6 +83,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             results.Add(BuildClrCheck(runtime, correlation, now));
             results.Add(BuildLifecycleCheck(snapshot, correlation, now));
             results.Add(BuildLifecyclePhasesCheck(snapshot, correlation, now));
+            results.Add(BuildHostReadinessCheck(snapshot, correlation, now));
             results.Add(BuildCapabilityCheck(runtime, correlation, now));
             results.Add(BuildBuildModeCheck(correlation, now));
 
@@ -296,6 +297,70 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "runtimeObserved=" + verdict.RuntimeObserved, now),
                     DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "shutdownObserved=" + verdict.ShutdownObserved, now),
                     DiagnosticEvidence.Unobservable(FindingFactory.SourcePublicApi, "connection phase is not an AddOn State member (M2 owns it)", now));
+        }
+
+        /// <summary>
+        /// Reports the separated host-readiness facts: the AddOn lifecycle state, whether the
+        /// NinjaTrader host object model is reachable, whether the resolved instrument's master
+        /// metadata is readable, whether a target instrument was resolved and whether the Level I/II
+        /// market-data streams are attached. The five concepts are reported <b>individually</b> so a
+        /// reader can see exactly which one is outstanding; the check is PASS only when all five
+        /// hold, and INCONCLUSIVE (never PASS) when no readiness surface was supplied. This is the
+        /// explicit guard against reporting the host ready merely because the AddOn was constructed.
+        /// </summary>
+        private DiagnosticResult BuildHostReadinessCheck(DiagnosticSnapshot snapshot, string correlation, DateTime now)
+        {
+            var observation = snapshot != null ? snapshot.HostReadiness : null;
+            if (observation == null || !observation.SurfaceObservable)
+            {
+                return DiagnosticResult
+                    .Inconclusive(ModuleId, "M1.HOST_READINESS", correlation, now)
+                    .WithFindingId("M1.HOST_READINESS")
+                    .WithReasonCode(Core.Models.Observations.HostReadinessReasonCodes.Unobservable)
+                    .WithObservation("NOT OBSERVED: no host-readiness surface was supplied by the host layer.")
+                    .WithSource(FindingFactory.SourceUnobservable)
+                    .WithMethod("Read the separated host-readiness probe supplied by the AddOn.")
+                    .WithLimitation("With no readiness surface the tool cannot prove the host is ready; it never reports readiness from the mere fact the AddOn was constructed.")
+                    .WithNextAction("Run the pass inside the host so the AddOn reaches Active and the readiness surface becomes observable.")
+                    .WithEvidence(DiagnosticEvidence.Unobservable(FindingFactory.SourcePublicApi, "no readiness surface", now));
+            }
+
+            var evidence = new List<DiagnosticEvidence>
+            {
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "addOnState=" + (string.IsNullOrEmpty(observation.AddOnState) ? "UNKNOWN" : observation.AddOnState), now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "lifecycleOperational=" + observation.LifecycleOperational, now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "hostAvailable=" + observation.HostAvailable, now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "instrumentReady=" + observation.InstrumentReady, now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "metadataReady=" + observation.MetadataReady, now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "marketDataSubscribed=" + observation.MarketDataSubscribed, now)
+            };
+
+            var ready = observation.FullyReady;
+            var result = ready
+                ? DiagnosticResult.Pass(ModuleId, "M1.HOST_READINESS", correlation, now)
+                : DiagnosticResult.Inconclusive(ModuleId, "M1.HOST_READINESS", correlation, now);
+
+            return result
+                .WithFindingId("M1.HOST_READINESS")
+                .WithReasonCode(ToArray(observation.ReasonCodes))
+                .WithObservation("state=" + observation.State
+                    + " addOnState=" + (string.IsNullOrEmpty(observation.AddOnState) ? "UNKNOWN" : observation.AddOnState)
+                    + " lifecycleOperational=" + observation.LifecycleOperational
+                    + " hostAvailable=" + observation.HostAvailable
+                    + " instrumentReady=" + observation.InstrumentReady
+                    + " metadataReady=" + observation.MetadataReady
+                    + " marketDataSubscribed=" + observation.MarketDataSubscribed)
+                .WithSource(FindingFactory.SourcePublicApi)
+                .WithMethod("Evaluated the five separated readiness facts (AddOn lifecycle, host availability, "
+                    + "instrument readiness, metadata readiness and market-data subscription) reported by the host layer.")
+                .WithLimitation("Readiness is only ever what the observed facts prove. A run before the instrument is "
+                    + "loaded, or before its metadata is readable, stays INCONCLUSIVE; the AddOn reaching Active alone is "
+                    + "never treated as readiness.")
+                .WithNextAction(ready
+                    ? "None."
+                    : "Wait for the host to load the target instrument and its metadata, then re-run (the readiness loop "
+                        + "retries automatically while the AddOn is live).")
+                .WithEvidence(evidence.ToArray());
         }
 
         private static DiagnosticEvidence[] BuildLifecycleEvidence(Core.Identity.LifecycleVerdict verdict, DateTime now)
