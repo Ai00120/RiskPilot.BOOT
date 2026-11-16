@@ -26,7 +26,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Connection.Connections.Clear();
         }
 
-        private static Connection RequiredConnection(Provider provider = Provider.Rithmic, string name = ExpectedConnection)
+        private static Connection RequiredConnection(Provider provider = Provider.Provider14, string name = ExpectedConnection)
         {
             return new Connection
             {
@@ -41,7 +41,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             };
         }
 
-        private static Account TargetAccount(Connection connection, Provider accountProvider = Provider.Rithmic)
+        private static Account TargetAccount(Connection connection, Provider accountProvider = Provider.Provider14)
         {
             return new Account
             {
@@ -62,7 +62,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Account.All.Add(TargetAccount(connection));
                 Connection.Connections.Add(connection);
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
                 var observation = provider.GetSnapshot().TargetAccountConnection;
 
                 Assert.True(observation.AccountSurfaceObservable);
@@ -70,10 +70,10 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Assert.Equal(1, observation.MatchingAccountCount);
                 Assert.Equal(1, observation.ConnectionCount);
                 Assert.Equal(1, observation.MatchingConnectionCount);
-                Assert.True(observation.AccountProviderMatches);
+                Assert.Equal(ProviderIdentityMatch.Matches, observation.AccountProviderMatch);
                 Assert.True(observation.ConnectionObserved);
                 Assert.True(observation.ConnectionNameMatches);
-                Assert.True(observation.ConnectionProviderMatches);
+                Assert.Equal(ProviderIdentityMatch.Matches, observation.ConnectionProviderMatch);
                 Assert.Equal(DiagnosticStatus.PASS, TargetAccountConnectionVerifier.Evaluate(observation).Status);
             }
             finally
@@ -90,7 +90,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             {
                 Account.All.Add(TargetAccount(RequiredConnection(name: "Other Rithmic")));
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
                 var observation = provider.GetSnapshot().TargetAccountConnection;
 
                 Assert.True(observation.ConnectionNameObservable);
@@ -111,10 +111,10 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             {
                 Account.All.Add(TargetAccount(RequiredConnection(provider: Provider.Simulator)));
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
                 var observation = provider.GetSnapshot().TargetAccountConnection;
 
-                Assert.False(observation.ConnectionProviderMatches);
+                Assert.Equal(ProviderIdentityMatch.Differs, observation.ConnectionProviderMatch);
                 Assert.Equal(DiagnosticStatus.FAIL, TargetAccountConnectionVerifier.Evaluate(observation).Status);
             }
             finally
@@ -131,7 +131,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             {
                 Account.All.Add(TargetAccount(null));
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
                 var observation = provider.GetSnapshot().TargetAccountConnection;
 
                 Assert.False(observation.ConnectionObserved);
@@ -158,11 +158,11 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 {
                     Status = ConnectionStatus.Connected,
                     PriceStatus = ConnectionStatus.Connected,
-                    Options = new ConnectOptions { Name = "Kinetick", Provider = Provider.Default, Mode = Mode.Live }
+                    Options = new ConnectOptions { Name = "Kinetick", Provider = Provider.Photon, Mode = Mode.Live }
                 });
                 Connection.Connections.Add(target);
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
                 var observation = provider.GetSnapshot().TargetAccountConnection;
 
                 Assert.Equal(2, observation.ConnectionCount);
@@ -190,7 +190,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(target);
                 Connection.Connections.Add(RequiredConnection());
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
                 var observation = provider.GetSnapshot().TargetAccountConnection;
 
                 Assert.Equal(2, observation.ConnectionCount);
@@ -214,7 +214,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Account.All.Add(TargetAccount(RequiredConnection()));
                 Account.All.Add(TargetAccount(RequiredConnection()));
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
                 var observation = provider.GetSnapshot().TargetAccountConnection;
 
                 Assert.Equal(2, observation.MatchingAccountCount);
@@ -232,7 +232,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Reset();
             try
             {
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
                 var observation = provider.GetSnapshot().TargetAccountConnection;
 
                 Assert.True(observation.AccountSurfaceObservable);
@@ -252,7 +252,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             try
             {
                 Account.All.Add(TargetAccount(RequiredConnection()));
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
                 var observation = provider.GetSnapshot().TargetAccountConnection;
 
                 var text = observation.AccountRef ?? string.Empty;
@@ -273,7 +273,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Reset();
             try
             {
-                var target = RequiredConnection(Provider.Rithmic);
+                var target = RequiredConnection(Provider.Provider14);
                 Account.All.Add(TargetAccount(target));
 
                 // The first enumerated connection belongs to an unrelated provider; the provider
@@ -281,15 +281,15 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(RequiredConnection(Provider.Simulator, "Unrelated"));
                 Connection.Connections.Add(target);
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
                 var evidence = provider.GetSnapshot().Provider;
                 var record = provider.GetProvider();
 
                 Assert.NotNull(evidence);
-                Assert.Equal("Rithmic", evidence.RawProviderValue);
+                Assert.Equal("Provider14", evidence.RawProviderValue);
                 Assert.Equal(ProviderResolutionBasis.TargetAccountConnection, evidence.ResolutionBasis);
                 Assert.NotNull(record);
-                Assert.Equal("Rithmic", record.Name);
+                Assert.Equal("Provider14", record.Name);
                 Assert.True(record.IsExpectedEvidenceProvider);
             }
             finally
@@ -306,10 +306,10 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             {
                 // No target account, and two connections: the provider cannot be attributed to
                 // an unambiguous connection, so it must not be taken from the first one.
-                Connection.Connections.Add(RequiredConnection(Provider.Rithmic));
+                Connection.Connections.Add(RequiredConnection(Provider.Provider14));
                 Connection.Connections.Add(RequiredConnection(Provider.Simulator, "Unrelated"));
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
 
                 Assert.Null(provider.GetProvider());
                 Assert.Null(provider.GetSnapshot().Provider);
@@ -326,13 +326,13 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Reset();
             try
             {
-                Connection.Connections.Add(RequiredConnection(Provider.Rithmic));
+                Connection.Connections.Add(RequiredConnection(Provider.Provider14));
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
                 var evidence = provider.GetSnapshot().Provider;
 
                 Assert.NotNull(evidence);
-                Assert.Equal("Rithmic", evidence.RawProviderValue);
+                Assert.Equal("Provider14", evidence.RawProviderValue);
                 Assert.Equal(ProviderResolutionBasis.SingleConnection, evidence.ResolutionBasis);
             }
             finally

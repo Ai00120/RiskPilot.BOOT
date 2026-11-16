@@ -16,11 +16,17 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
         public const string AmbiguousConnection = "TARGET_ACCOUNT_CONNECTION_AMBIGUOUS";
         public const string AccountProviderMismatch = "TARGET_ACCOUNT_PROVIDER_MISMATCH";
         public const string AccountProviderUnobservable = "TARGET_ACCOUNT_PROVIDER_UNOBSERVABLE";
+        /// <summary>The account provider was read but is an unresolved generic placeholder slot.</summary>
+        public const string AccountProviderUnresolved = "TARGET_ACCOUNT_PROVIDER_UNRESOLVED";
         public const string ConnectionNotObserved = "TARGET_ACCOUNT_CONNECTION_NOT_OBSERVED";
+        /// <summary>The account's own connection object was not among the enumerated connections.</summary>
+        public const string ConnectionNotEnumerated = "TARGET_ACCOUNT_CONNECTION_NOT_ENUMERATED";
         public const string ConnectionNameMismatch = "TARGET_ACCOUNT_CONNECTION_NAME_MISMATCH";
         public const string ConnectionNameUnobservable = "TARGET_ACCOUNT_CONNECTION_NAME_UNOBSERVABLE";
         public const string ConnectionProviderMismatch = "TARGET_ACCOUNT_CONNECTION_PROVIDER_MISMATCH";
         public const string ConnectionProviderUnobservable = "TARGET_ACCOUNT_CONNECTION_PROVIDER_UNOBSERVABLE";
+        /// <summary>The connection provider was read but is an unresolved generic placeholder slot.</summary>
+        public const string ConnectionProviderUnresolved = "TARGET_ACCOUNT_CONNECTION_PROVIDER_UNRESOLVED";
         public const string IncompleteMetadata = "TARGET_ACCOUNT_ASSOCIATION_INCOMPLETE_METADATA";
     }
 
@@ -144,9 +150,15 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
             {
                 unobservable.Add(TargetAccountConnectionReasonCodes.AccountProviderUnobservable);
             }
-            else if (!observation.AccountProviderMatches)
+            else if (observation.AccountProviderMatch == ProviderIdentityMatch.Differs)
             {
                 mismatched.Add(TargetAccountConnectionReasonCodes.AccountProviderMismatch);
+            }
+            else if (observation.AccountProviderMatch == ProviderIdentityMatch.Unresolved)
+            {
+                // A generic placeholder slot (e.g. "Provider14") carries no vendor identity, so the
+                // account provider cannot be proven. Fail closed (INCONCLUSIVE), never a false mismatch.
+                unobservable.Add(TargetAccountConnectionReasonCodes.AccountProviderUnresolved);
             }
 
             if (!observation.ConnectionObserved)
@@ -155,6 +167,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
             }
             else
             {
+                // The target account's own connection object must be part of the host's enumerated
+                // connection set. A name match alone does not prove the association, so a connection
+                // the host did not enumerate keeps the association unproven.
+                if (!observation.ConnectionEnumerated)
+                {
+                    unobservable.Add(TargetAccountConnectionReasonCodes.ConnectionNotEnumerated);
+                }
+
                 if (!observation.ConnectionNameObservable)
                 {
                     unobservable.Add(TargetAccountConnectionReasonCodes.ConnectionNameUnobservable);
@@ -168,9 +188,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
                 {
                     unobservable.Add(TargetAccountConnectionReasonCodes.ConnectionProviderUnobservable);
                 }
-                else if (!observation.ConnectionProviderMatches)
+                else if (observation.ConnectionProviderMatch == ProviderIdentityMatch.Differs)
                 {
                     mismatched.Add(TargetAccountConnectionReasonCodes.ConnectionProviderMismatch);
+                }
+                else if (observation.ConnectionProviderMatch == ProviderIdentityMatch.Unresolved)
+                {
+                    unobservable.Add(TargetAccountConnectionReasonCodes.ConnectionProviderUnresolved);
                 }
             }
 

@@ -233,7 +233,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 return new Account
                 {
                     Name = RiskPilot.Diagnostics.Nt8.Core.Identity.ExpectedAccountIdentity.AccountName,
-                    Provider = Provider.Rithmic,
+                    Provider = Provider.Provider14,
                     Denomination = Currency.UsDollar,
                     Connection = new Connection
                     {
@@ -242,7 +242,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                         Options = new ConnectOptions
                         {
                             Name = RiskPilot.Diagnostics.Nt8.Core.Identity.ExpectedAccountIdentity.ConnectionName,
-                            Provider = Provider.Rithmic,
+                            Provider = Provider.Provider14,
                             Mode = Mode.Simulation
                         }
                     }
@@ -275,7 +275,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 {
                     Account.All.Add(VerifiedTargetAccount());
 
-                    var accounts = new Nt8HostDataProvider(masterMetadataReady: false).GetAccounts();
+                    var accounts = TestHost.Provider(false).GetAccounts();
 
                     Assert.Single(accounts);
                     Assert.Equal(0, accounts[0].PositionCount);
@@ -298,7 +298,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     account.ThrowOnOrdersRead = true;
                     Account.All.Add(account);
 
-                    var accounts = new Nt8HostDataProvider(masterMetadataReady: false).GetAccounts();
+                    var accounts = TestHost.Provider(false).GetAccounts();
 
                     Assert.Single(accounts);
                     Assert.Null(accounts[0].PositionCount);
@@ -322,7 +322,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     Account.All.Add(VerifiedTargetAccount());
 
                     var dataset = new EvidenceDataset();
-                    foreach (var record in new Nt8HostDataProvider(masterMetadataReady: false).GetAccounts())
+                    foreach (var record in TestHost.Provider(false).GetAccounts())
                     {
                         dataset.Accounts.Add(record);
                     }
@@ -351,7 +351,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     Account.All.Add(account);
 
                     var dataset = new EvidenceDataset();
-                    foreach (var record in new Nt8HostDataProvider(masterMetadataReady: false).GetAccounts())
+                    foreach (var record in TestHost.Provider(false).GetAccounts())
                     {
                         dataset.Accounts.Add(record);
                     }
@@ -378,7 +378,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     instrument.MasterInstrument.PointValue = 0;
                     Instrument.All.Add(instrument);
 
-                    var record = new Nt8HostDataProvider(masterMetadataReady: true).GetInstrument("ES 12-26");
+                    var record = TestHost.Provider(true).GetInstrument("ES 12-26");
 
                     Assert.NotNull(record);
                     Assert.True(record.MasterMetadataAvailable);
@@ -402,7 +402,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     instrument.MasterInstrument.ThrowOnPointValueRead = true;
                     Instrument.All.Add(instrument);
 
-                    var record = new Nt8HostDataProvider(masterMetadataReady: true).GetInstrument("ES 12-26");
+                    var record = TestHost.Provider(true).GetInstrument("ES 12-26");
 
                     Assert.NotNull(record);
                     Assert.True(record.MasterMetadataAvailable);
@@ -427,7 +427,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     Instrument.All.Add(instrument);
 
                     var dataset = new EvidenceDataset();
-                    dataset.Instruments.Add(new Nt8HostDataProvider(masterMetadataReady: true).GetInstrument("ES 12-26"));
+                    dataset.Instruments.Add(TestHost.Provider(true).GetInstrument("ES 12-26"));
 
                     var json = ReadInstruments(dataset);
                     Assert.Contains("\"tickSize\":\"UNOBSERVABLE\"", json);
@@ -446,7 +446,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Reset();
                 try
                 {
-                    var record = new Nt8HostDataProvider(masterMetadataReady: true).GetInstrument("ES 12-26");
+                    var record = TestHost.Provider(true).GetInstrument("ES 12-26");
                     Assert.Null(record);
                 }
                 finally
@@ -463,7 +463,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 {
                     // No account at all: the surface is not observable, so no account record (and
                     // therefore no zero count) is produced.
-                    var accounts = new Nt8HostDataProvider(masterMetadataReady: false).GetAccounts();
+                    var accounts = TestHost.Provider(false).GetAccounts();
                     Assert.Empty(accounts);
 
                     var dataset = new EvidenceDataset();

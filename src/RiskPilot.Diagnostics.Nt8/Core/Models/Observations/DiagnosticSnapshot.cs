@@ -44,6 +44,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         public bool MatchesExpectedProvider { get; set; }
 
         /// <summary>
+        /// True when the raw value carries a verified vendor identity (a named enum member, or a
+        /// generic placeholder slot with an owner-authorized mapping). When false the value is a
+        /// generic slot (e.g. "Provider14") or unreadable, so the provider cannot be proven and the
+        /// identity stays INCONCLUSIVE.
+        /// </summary>
+        public bool ProviderResolved { get; set; }
+
+        /// <summary>
         /// True when the observed value originates from a compile-time stub or a test double
         /// rather than the real host. A stub value can never establish the real provider.
         /// </summary>
@@ -87,6 +95,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
 
         /// <summary>True when the account provider and connection provider agree.</summary>
         public bool ProvidersAgree { get; set; }
+
+        /// <summary>
+        /// True when the two provider values could be compared to a definite answer (agree or
+        /// differ). When either value is a generic placeholder slot (e.g. "Provider14") or
+        /// unreadable, the agreement cannot be established and the check stays INCONCLUSIVE, never
+        /// a false FAIL.
+        /// </summary>
+        public bool ProviderAgreementResolved { get; set; }
 
         public AccountConnectionAssociation()
         {

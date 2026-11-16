@@ -47,7 +47,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Options = new ConnectOptions
                 {
                     Name = ExpectedConnection,
-                    Provider = Provider.Rithmic,
+                    Provider = Provider.Provider14,
                     Mode = Mode.Simulation
                 }
             };
@@ -58,7 +58,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             return new Account
             {
                 Name = ExpectedAccount,
-                Provider = Provider.Rithmic,
+                Provider = Provider.Provider14,
                 Denomination = denomination,
                 Connection = ConnectedRithmic()
             };
@@ -93,12 +93,12 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 MatchingAccountCount = 1,
                 AccountRef = "account#regression",
                 AccountProviderObservable = true,
-                AccountProviderMatches = true,
+                AccountProviderMatch = ProviderIdentityMatch.Matches,
                 ConnectionObserved = true,
                 ConnectionNameObservable = true,
                 ConnectionNameMatches = true,
                 ConnectionProviderObservable = true,
-                ConnectionProviderMatches = true,
+                ConnectionProviderMatch = ProviderIdentityMatch.Matches,
                 ConnectionStatusObservable = true,
                 ConnectionConnected = true,
                 ModeObservable = true,
@@ -135,7 +135,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             try
             {
                 Account.All.Add(IdentityAccount(Currency.UsDollar));
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
                 var observation = provider.GetSnapshot().AccountIdentity;
 
                 Assert.True(observation.DenominationObservable);
@@ -162,7 +162,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             try
             {
                 Account.All.Add(IdentityAccount(Currency.Euro));
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
                 var observation = provider.GetSnapshot().AccountIdentity;
 
                 // A real, observed non-USD member must stay observable (a definite contradiction),
@@ -189,7 +189,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 var account = IdentityAccount(Currency.UsDollar);
                 account.ThrowOnDenominationRead = true;
                 Account.All.Add(account);
-                var observation = new Nt8HostDataProvider(false).GetSnapshot().AccountIdentity;
+                var observation = TestHost.Provider(false).GetSnapshot().AccountIdentity;
                 Assert.False(observation.DenominationObservable);
                 Assert.False(observation.DenominationIsUsd);
                 var verdict = AccountIdentityVerifier.Evaluate(observation);
@@ -225,7 +225,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument(Currency.Euro));
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.True(observation.CurrencyObservable);
@@ -250,7 +250,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument(Currency.Euro));
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().EsProductSpecification;
 
                 Assert.True(observation.CurrencyObservable);
@@ -278,7 +278,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 instrument.MasterInstrument = null; // product currency (and economics) unavailable
                 Instrument.All.Add(instrument);
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.False(observation.CurrencyObservable);

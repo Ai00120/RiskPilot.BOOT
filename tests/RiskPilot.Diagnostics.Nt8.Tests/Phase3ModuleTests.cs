@@ -136,7 +136,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             });
             provider.Snapshot = new DiagnosticSnapshot
             {
-                Provider = new ProviderEvidence { RawProviderValue = "Rithmic", ResolutionMethod = "String", ResolutionBasis = ProviderResolutionBasis.SingleConnection }
+                Provider = new ProviderEvidence { RawProviderValue = "Rithmic", ResolutionMethod = "String", ResolutionBasis = ProviderResolutionBasis.SingleConnection, MatchesExpectedProvider = true, ProviderResolved = true }
             };
 
             var results = new M2ConnectionProbe().Evaluate(Context(provider));
@@ -165,7 +165,8 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                         HasConnection = true,
                         ConnectionName = "Rithmic",
                         ConnectionProvider = "Simulator",
-                        ProvidersAgree = false
+                        ProvidersAgree = false,
+                        ProviderAgreementResolved = true
                     }
                 }
             };

@@ -89,6 +89,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
         public const string CurrencyMismatch = "CURRENCY_MISMATCH";
         public const string ExchangeMetadataUnobservable = "EXCHANGE_METADATA_UNOBSERVABLE";
         public const string ExchangeMismatch = "EXCHANGE_MISMATCH";
+        /// <summary>The provider path is a generic placeholder slot, so the venue cannot be confirmed.</summary>
+        public const string ProviderRouteUnresolved = "PROVIDER_ROUTE_UNRESOLVED";
         public const string CanonicalIdUnobservable = "CANONICAL_ID_UNOBSERVABLE";
         public const string CanonicalIdMismatch = "CANONICAL_ID_MISMATCH";
         public const string IncompleteMetadata = "INSTRUMENT_IDENTITY_INCOMPLETE_METADATA";
@@ -238,7 +240,28 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
             {
                 unobservable.Add(InstrumentIdentityReasonCodes.ExchangeMetadataUnobservable);
             }
-            else if (!observation.ExchangeConfirmedCme)
+            else if (observation.SelectedRouteIsGlobex && observation.ConfiguredExchangesAreGlobexOnly)
+            {
+                // The selected route and the configured exchange set are Globex-only, so the only
+                // remaining question is the provider path. A generic placeholder slot carries no
+                // vendor identity, so an unresolved provider keeps the venue unconfirmed
+                // (INCONCLUSIVE); a resolved provider that is not the required one is a definite
+                // mismatch (FAIL). ProviderRouteIsRithmicOnly is the stronger claim: it already
+                // means the provider was resolved AND matches, so it never needs ProviderRouteResolved.
+                if (observation.ProviderRouteIsRithmicOnly)
+                {
+                    // The configured route confirms the ES/CME evidence path.
+                }
+                else if (observation.ProviderRouteResolved)
+                {
+                    mismatched.Add(InstrumentIdentityReasonCodes.ExchangeMismatch);
+                }
+                else
+                {
+                    unobservable.Add(InstrumentIdentityReasonCodes.ProviderRouteUnresolved);
+                }
+            }
+            else
             {
                 mismatched.Add(InstrumentIdentityReasonCodes.ExchangeMismatch);
             }

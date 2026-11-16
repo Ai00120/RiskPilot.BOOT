@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <Compile Include="Fakes\FakeClock.cs" />
+    <Compile Include="TestHost.cs" />
     <Compile Include="Fakes\FakeDataProvider.cs" />
     <Compile Include="Fakes\FakeSecurityScanSource.cs" />
     <Compile Include="Fakes\FakeUiDispatcher.cs" />
@@ -47,6 +48,7 @@
     <Compile Include="StatusPropagationTests.cs" />
     <Compile Include="ProbeTests.cs" />
     <Compile Include="AccountIdentityTests.cs" />
+    <Compile Include="ProviderIdentityTests.cs" />
     <Compile Include="TargetAccountConnectionTests.cs" />
     <Compile Include="InstrumentIdentityTests.cs" />
     <Compile Include="EsProductSpecificationTests.cs" />

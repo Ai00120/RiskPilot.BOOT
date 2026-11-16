@@ -728,3 +728,32 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live
 at `src/RiskPilot.BOT/Stubs/NinjaTraderStubs.cs`; its two-build-mode csproj is the pattern
 mirrored here.
+
+## Provider identity — the `Provider14` contract (P2)
+
+- The real `NinjaTrader.Cbi.Provider` enum has **no** dedicated `Rithmic` member. Named members are
+  `Collective2=0 .. Yahoo=19`; an adapter without a dedicated member is assigned a **generic
+  placeholder slot** (`Provider1..Provider40` = 20..59, `Custom0..Custom45` = 1000..1045,
+  `Unknown` = 9999). The diagnostic environment reports `Provider14`, a placeholder slot that
+  carries **no vendor identity**. Never map it to Rithmic (or any vendor) by guesswork, display
+  name, or an online reference.
+- `Core/Identity/ProviderIdentity.cs` is the single host-free source of truth: `Classify`
+  (Named / PlaceholderSlot / Unobservable), `IsPlaceholderSlot`, `Resolve`, `Compare` (three-valued
+  `ProviderIdentityMatch`: `Matches` / `Differs` / `Unresolved`), `IsExpectedProvider`,
+  `IsUnresolved` and `TryAgree`. The owner-authorized slot→vendor mapping is empty by default
+  (`NoOwnerAuthorizedSlots`), so the real mapping is **BLOCKED** until runtime evidence records
+  which slot the adapter occupies.
+- Fail-closed: a definite named member that differs ⇒ `FAIL`; an unreadable value or an unresolved
+  placeholder slot ⇒ `INCONCLUSIVE` (`PROVIDER_SLOT_UNRESOLVED` / `PROVIDER_ROUTE_UNRESOLVED` /
+  `ACCOUNT_PROVIDER_UNRESOLVED` / `CONNECTION_PROVIDER_UNRESOLVED`), never a false mismatch.
+- M2 (`M2ConnectionProbe`) classifies the provider and counts account/connection provider
+  agreement three-valued: a placeholder on either side is counted as
+  `PROVIDER_AGREEMENT_UNRESOLVED` (INCONCLUSIVE), not a mismatch. The instrument verifier treats
+  an unresolved provider path as `PROVIDER_ROUTE_UNRESOLVED` so a Globex route is never confirmed
+  from an unidentified provider. `M2.ACCOUNT_CONNECTION_ASSOCIATION` additionally requires the
+  target account's own connection object to be among the host's enumerated connections
+  (`TARGET_ACCOUNT_CONNECTION_NOT_ENUMERATED`): a name match alone is not proof of association.
+- `Host/Nt8HostDataProvider` takes an optional owner-authorized slot mapping (empty by default).
+  The offline stub `Provider` enum mirrors the real surface (no `Rithmic`); tests use
+  `Provider.Provider14` and a reviewed slot mapping as a test seam. A green stub run is **not**
+  real-host proof. See `tests/RiskPilot.Diagnostics.Nt8.Tests/ProviderIdentityTests.cs`.

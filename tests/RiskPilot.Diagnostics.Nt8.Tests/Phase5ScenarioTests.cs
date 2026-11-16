@@ -1,3 +1,4 @@
+using RiskPilot.Diagnostics.Nt8.Core.Identity;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -69,7 +70,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Provider = new ProviderRecord { Name = "Rithmic", ResolutionMethod = "String", IsExpectedEvidenceProvider = true },
                 Snapshot = new DiagnosticSnapshot
                 {
-                    Provider = new ProviderEvidence { RawProviderValue = "Rithmic", ResolutionMethod = "String", ResolutionBasis = ProviderResolutionBasis.SingleConnection, MatchesExpectedProvider = true }
+                    Provider = new ProviderEvidence { RawProviderValue = "Rithmic", ResolutionMethod = "String", ResolutionBasis = ProviderResolutionBasis.SingleConnection, MatchesExpectedProvider = true, ProviderResolved = true }
                 }
             };
             provider.Connections.Add(new ConnectionRecord
@@ -92,7 +93,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Provider = new ProviderRecord { Name = "UnknownVendor", IsExpectedEvidenceProvider = false },
                 Snapshot = new DiagnosticSnapshot
                 {
-                    Provider = new ProviderEvidence { RawProviderValue = "UnknownVendor", ResolutionMethod = "String", ResolutionBasis = ProviderResolutionBasis.SingleConnection, MatchesExpectedProvider = false }
+                    Provider = new ProviderEvidence { RawProviderValue = "UnknownVendor", ResolutionMethod = "String", ResolutionBasis = ProviderResolutionBasis.SingleConnection, MatchesExpectedProvider = false, ProviderResolved = true }
                 }
             };
             provider.Connections.Add(new ConnectionRecord
@@ -747,7 +748,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     ObservedAccountCount = 1,
                     MatchingAccountCount = 1,
                     AccountProviderObservable = true,
-                    AccountProviderMatches = true,
+                    AccountProviderMatch = ProviderIdentityMatch.Matches,
                     ConnectionObserved = false
                 }
             };
@@ -777,12 +778,13 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     ConnectionCount = 1,
                     MatchingConnectionCount = 1,
                     AccountProviderObservable = true,
-                    AccountProviderMatches = true,
+                    AccountProviderMatch = ProviderIdentityMatch.Matches,
                     ConnectionObserved = true,
+                    ConnectionEnumerated = true,
                     ConnectionNameObservable = true,
                     ConnectionNameMatches = true,
                     ConnectionProviderObservable = true,
-                    ConnectionProviderMatches = true
+                    ConnectionProviderMatch = ProviderIdentityMatch.Matches
                 }
             };
 

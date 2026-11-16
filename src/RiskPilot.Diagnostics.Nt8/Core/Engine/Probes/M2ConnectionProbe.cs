@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using RiskPilot.Diagnostics.Nt8.Core.Identity;
 using RiskPilot.Diagnostics.Nt8.Core.Models;
 using RiskPilot.Diagnostics.Nt8.Core.Models.Observations;
 using RiskPilot.Diagnostics.Nt8.Core.Result;
@@ -9,10 +10,12 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
 {
     /// <summary>
     /// M2 — Connection &amp; provider identity. Reports the price/order feed states, resolves
-    /// the provider by string comparison (the provider enum has no guaranteed Rithmic member —
-    /// this is exactly what BOT PR #275 changed), distinguishes a real runtime value from a
-    /// stub/mock value, checks account-to-connection association, and counts reconnects.
-    /// Missing connections are INCONCLUSIVE, never PASS.
+    /// the provider by classifying the raw value (the provider enum has no guaranteed Rithmic
+    /// member: an adapter without a dedicated member is assigned a generic placeholder slot such
+    /// as <c>Provider14</c>, which carries no vendor identity), distinguishes a real runtime value
+    /// from a stub/mock value, checks account-to-connection association, and counts reconnects.
+    /// A generic placeholder slot is unresolved (INCONCLUSIVE), never a false PASS or FAIL. Missing
+    /// connections are INCONCLUSIVE, never PASS.
     /// </summary>
     public sealed class M2ConnectionProbe : IDiagnosticProbe
     {
@@ -135,8 +138,24 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 ? evidence.RawProviderValue
                 : (provider != null ? provider.Name : string.Empty);
             var isStub = evidence != null && evidence.IsStubOrMockValue;
-            var matches = !string.IsNullOrEmpty(rawValue)
-                && string.Equals(rawValue, ExpectedProvider, System.StringComparison.OrdinalIgnoreCase);
+            // The host layer resolved the raw value against the owner-authorized slot mapping; the
+            // probe must not re-derive it with an empty mapping (that would call a mapped slot
+            // unresolved). Fall back to classifying the raw value only when there is no evidence
+            // (a directly supplied provider record).
+            ProviderIdentityMatch providerMatch;
+            if (evidence != null)
+            {
+                providerMatch = evidence.MatchesExpectedProvider
+                    ? ProviderIdentityMatch.Matches
+                    : (evidence.ProviderResolved ? ProviderIdentityMatch.Differs : ProviderIdentityMatch.Unresolved);
+            }
+            else
+            {
+                providerMatch = ProviderIdentity.Compare(rawValue, ExpectedProvider, ProviderIdentity.OwnerAuthorizedSlots);
+            }
+
+            var matches = providerMatch == ProviderIdentityMatch.Matches;
+            var unresolved = providerMatch == ProviderIdentityMatch.Unresolved;
 
             // The provider is only attributed when it was read from the target account's own
             // connection or from a single unambiguous connection. It is never taken from the
@@ -177,14 +196,25 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 result = DiagnosticResult
                     .Pass(ModuleId, "M2.PROVIDER_IDENTITY", correlation, now)
                     .WithReasonCode("EXPECTED_PROVIDER_MATCH")
-                    .WithLimitation("Provider identity is resolved by string comparison on the provider enum's ToString(), not a guaranteed enum member.");
+                    .WithLimitation("Provider identity is classified from the provider enum's ToString(); the enum has no dedicated Rithmic member, so a match means the observed value is a verified name equal to the expected provider.");
+            }
+            else if (unresolved)
+            {
+                // A generic placeholder slot (e.g. "Provider14") carries no vendor identity and the
+                // owner-authorized slot mapping is empty by default, so the provider cannot be
+                // proven. Fail closed (INCONCLUSIVE) and mark the real mapping BLOCKED.
+                result = DiagnosticResult
+                    .Inconclusive(ModuleId, "M2.PROVIDER_IDENTITY", correlation, now)
+                    .WithReasonCode("PROVIDER_SLOT_UNRESOLVED")
+                    .WithLimitation("The observed provider is a generic NinjaTrader placeholder slot (for example \"Provider14\") that carries no vendor identity, and no owner-authorized slot->vendor mapping resolves it. The real provider mapping is BLOCKED until runtime evidence records which slot the adapter occupies; it is never assumed to be the expected provider.")
+                    .WithNextAction("Record the installed host's provider enum slot mapping (owner-authorized) from runtime evidence, then re-run.");
             }
             else
             {
                 result = DiagnosticResult
                     .Inconclusive(ModuleId, "M2.PROVIDER_IDENTITY", correlation, now)
                     .WithReasonCode("PROVIDER_NOT_EXPECTED")
-                    .WithLimitation("The observed provider is not the expected evidence provider; it is not treated as a failure of the host.");
+                    .WithLimitation("The observed provider is a verified provider that is not the expected evidence provider; it is not treated as a failure of the host.");
             }
 
             return result
@@ -193,13 +223,18 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     + " resolution=" + (evidence != null ? evidence.ResolutionMethod : "String")
                     + " attributed=" + attributed)
                 .WithSource(isStub ? FindingFactory.SourceUnobservable : FindingFactory.SourcePublicApi)
-                .WithMethod("ConnectOptions.Provider.ToString() string comparison (no guaranteed Rithmic enum member), "
+                .WithMethod("ConnectOptions.Provider.ToString() classified by Core/Identity/ProviderIdentity "
+                    + "(named member vs generic placeholder slot; no guaranteed Rithmic enum member), "
                     + "attributed to the target account's own connection rather than the first connection.")
                 .WithNextAction(isStub
                     ? "Run inside the real host."
                     : (!attributed
                         ? "Confirm the target account is bound to the required connection, then re-run."
-                        : (matches ? "None." : "Confirm which provider is configured for the evidence connection.")))
+                        : (matches
+                            ? "None."
+                            : (unresolved
+                                ? "Record the owner-authorized provider slot mapping from runtime evidence, then re-run."
+                                : "Confirm which provider is configured for the evidence connection."))))
                 .WithEvidence(
                     DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "provider=" + rawValue, now),
                     DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "resolution=" + (evidence != null ? evidence.ResolutionMethod : "String"), now),
@@ -391,13 +426,20 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             var withConnection = 0;
             var agreeing = 0;
             var mismatched = 0;
+            var unresolved = 0;
             var evidence = new List<DiagnosticEvidence>();
             foreach (var association in associations)
             {
                 if (association.HasConnection)
                 {
                     withConnection++;
-                    if (association.ProvidersAgree)
+                    if (!association.ProviderAgreementResolved)
+                    {
+                        // A placeholder slot (e.g. "Provider14") on either side leaves the agreement
+                        // unproven; it is counted separately and never treated as a mismatch.
+                        unresolved++;
+                    }
+                    else if (association.ProvidersAgree)
                     {
                         agreeing++;
                     }
@@ -414,12 +456,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     + " connection=" + (association.HasConnection
                         ? SyntheticRef.For("connection", association.ConnectionName)
                         : "none")
-                    + " providersAgree=" + association.ProvidersAgree, now));
+                    + " providersAgree=" + (association.ProviderAgreementResolved
+                        ? association.ProvidersAgree.ToString()
+                        : "UNRESOLVED"), now));
             }
 
             var result = mismatched > 0
                 ? DiagnosticResult.Fail(ModuleId, "M2.ACCOUNT_PROVIDER_AGREEMENT", ErrorClass.DataUnavailable, correlation, now)
-                : (withConnection == 0
+                : (withConnection == 0 || unresolved > 0
                     ? DiagnosticResult.Inconclusive(ModuleId, "M2.ACCOUNT_PROVIDER_AGREEMENT", correlation, now)
                     : DiagnosticResult.Pass(ModuleId, "M2.ACCOUNT_PROVIDER_AGREEMENT", correlation, now));
 
@@ -429,14 +473,21 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                     "ACCOUNTS=" + associations.Count,
                     "WITH_CONNECTION=" + withConnection,
                     "PROVIDERS_AGREE=" + agreeing,
-                    "PROVIDER_MISMATCH=" + mismatched)
-                .WithObservation("accounts=" + associations.Count + " withConnection=" + withConnection + " providerMismatch=" + mismatched)
+                    "PROVIDER_MISMATCH=" + mismatched,
+                    "PROVIDER_AGREEMENT_UNRESOLVED=" + unresolved)
+                .WithObservation("accounts=" + associations.Count + " withConnection=" + withConnection
+                    + " providerMismatch=" + mismatched + " providerAgreementUnresolved=" + unresolved)
                 .WithSource(FindingFactory.SourcePublicApi)
-                .WithMethod("Compared the account provider with the provider of its associated connection.")
-                .WithLimitation("An account with no reported connection cannot be associated and is counted separately, never assumed.")
+                .WithMethod("Compared the account provider with the provider of its associated connection, "
+                    + "classifying each raw value (named member vs generic placeholder slot).")
+                .WithLimitation("An account with no reported connection cannot be associated and is counted "
+                    + "separately, never assumed. A generic placeholder slot on either side leaves the agreement "
+                    + "unproven (INCONCLUSIVE), never a false mismatch.")
                 .WithNextAction(mismatched > 0
                     ? "Investigate the account/connection provider mismatch; the account provider must match the connection provider."
-                    : "None.")
+                    : (unresolved > 0 && agreeing == 0
+                        ? "Record the owner-authorized provider slot mapping from runtime evidence, then re-run."
+                        : "None."))
                 .WithEvidence(evidence.ToArray());
         }
     }

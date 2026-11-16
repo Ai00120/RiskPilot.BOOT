@@ -36,7 +36,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Options = new ConnectOptions
                 {
                     Name = "My Rithmic",
-                    Provider = Provider.Rithmic,
+                    Provider = Provider.Provider14,
                     Mode = Mode.Simulation
                 }
             };
@@ -69,7 +69,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument());
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.True(observation.InstrumentSurfaceObservable);
@@ -101,7 +101,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 nq.MasterInstrument.Name = "NQ";
                 Instrument.All.Add(nq);
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.Equal(0, observation.MatchingInstrumentCount);
@@ -121,7 +121,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             {
                 Connection.Connections.Add(ConnectedRithmic());
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.True(observation.InstrumentSurfaceObservable);
@@ -144,7 +144,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Instrument.All.Add(EsInstrument());
                 Instrument.All.Add(EsInstrument());
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.Equal(2, observation.MatchingInstrumentCount);
@@ -165,7 +165,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument());
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.True(observation.InstrumentSurfaceObservable);
@@ -190,7 +190,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 instrument.MasterInstrument.Exchanges = null;
                 Instrument.All.Add(instrument);
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.False(observation.ExchangeMetadataObservable);
@@ -214,7 +214,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument(Exchange.CBOT, new List<Exchange> { Exchange.CBOT }));
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.True(observation.ExchangeMetadataObservable);
@@ -243,7 +243,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 });
                 Instrument.All.Add(EsInstrument());
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.True(observation.ExchangeMetadataObservable);
@@ -265,7 +265,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument(Exchange.Globex, new List<Exchange> { Exchange.Globex, Exchange.CBOT }));
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.False(observation.ConfiguredExchangesAreGlobexOnly);
@@ -286,7 +286,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument());
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.StartsWith("instrument#", observation.InstrumentRef);
@@ -310,7 +310,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 // A live probe that starts not-ready and flips later, mirroring an AddOn constructed
                 // at State.Active that only reaches a data state afterwards.
                 var ready = false;
-                var provider = new Nt8HostDataProvider(() => ready);
+                var provider = TestHost.Provider(() => ready);
 
                 Assert.False(provider.GetSnapshot().InstrumentIdentity.RootMetadataObservable);
 
@@ -335,7 +335,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument());
 
-                var provider = new Nt8HostDataProvider(() => throw new System.InvalidOperationException("boom"));
+                var provider = TestHost.Provider(() => throw new System.InvalidOperationException("boom"));
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.False(observation.RootMetadataObservable);
@@ -358,7 +358,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
                 // No configured id: the host must attest the instrument it actually has loaded,
                 // resolved by the instrument's own FullName (never a configured string).
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().Attestation;
 
                 Assert.True(observation.HostAvailable);
@@ -386,7 +386,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 nq.MasterInstrument.Name = "NQ";
                 Instrument.All.Add(nq);
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().Attestation;
 
                 Assert.False(observation.HostAvailable);
@@ -411,7 +411,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Instrument.All.Add(front);
                 Instrument.All.Add(back);
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().Attestation;
 
                 // Two loaded ES roots cannot be disambiguated, so the target stays unresolved.
@@ -433,7 +433,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument());
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true, requestedInstrumentId: "ES 12-26");
+                var provider = TestHost.Provider(true, "ES 12-26");
                 var observation = provider.GetSnapshot().Attestation;
 
                 Assert.True(observation.HostAvailable);
@@ -457,7 +457,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument());
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().EsProductSpecification;
 
                 Assert.True(observation.InstrumentSurfaceObservable);
@@ -485,7 +485,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 mes.MasterInstrument.PointValue = 20; // MES economics, not ES.
                 Instrument.All.Add(mes);
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().EsProductSpecification;
 
                 Assert.Equal(20.0d, observation.PointValue);
@@ -505,7 +505,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             {
                 Connection.Connections.Add(ConnectedRithmic());
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().EsProductSpecification;
 
                 Assert.True(observation.InstrumentSurfaceObservable);
@@ -527,7 +527,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument());
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
                 var observation = provider.GetSnapshot().EsProductSpecification;
 
                 Assert.False(observation.InstrumentObserved);
@@ -548,7 +548,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument());
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().EsProductSpecification;
 
                 Assert.StartsWith("instrument#", observation.InstrumentRef);

@@ -89,6 +89,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         public bool ProviderRouteIsRithmicOnly { get; set; }
 
         /// <summary>
+        /// True when the sole connected provider path resolved to a verified vendor (a named enum
+        /// member, or a placeholder slot with an owner-authorized mapping). When false the provider
+        /// path is a generic placeholder slot (e.g. "Provider14") or unreadable, so the venue cannot
+        /// be confirmed: the identity stays INCONCLUSIVE (unproven), never a false FAIL.
+        /// </summary>
+        public bool ProviderRouteResolved { get; set; }
+
+        /// <summary>
         /// True when the observed configured-route metadata confirms CME. This is the D-096
         /// configured-route mapping and never a symbol-text inference.
         /// </summary>

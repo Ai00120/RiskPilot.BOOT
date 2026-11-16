@@ -381,7 +381,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 return new Account
                 {
                     Name = RiskPilot.Diagnostics.Nt8.Core.Identity.ExpectedAccountIdentity.AccountName,
-                    Provider = Provider.Rithmic,
+                    Provider = Provider.Provider14,
                     Denomination = Currency.UsDollar,
                     Connection = new Connection
                     {
@@ -390,7 +390,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                         Options = new ConnectOptions
                         {
                             Name = RiskPilot.Diagnostics.Nt8.Core.Identity.ExpectedAccountIdentity.ConnectionName,
-                            Provider = Provider.Rithmic,
+                            Provider = Provider.Provider14,
                             Mode = Mode.Simulation
                         }
                     }
@@ -405,7 +405,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 {
                     Account.All.Add(AccountWithOrders());
 
-                    var observation = new Nt8HostDataProvider(masterMetadataReady: false).GetSnapshot().OrderLifecycle;
+                    var observation = TestHost.Provider(false).GetSnapshot().OrderLifecycle;
 
                     Assert.True(observation.OrderCollectionObservable);
                     Assert.Equal(0, observation.ActiveOrderCount);
@@ -426,7 +426,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 {
                     Account.All.Add(AccountWithOrders(OrderState.Working));
 
-                    var observation = new Nt8HostDataProvider(masterMetadataReady: false).GetSnapshot().OrderLifecycle;
+                    var observation = TestHost.Provider(false).GetSnapshot().OrderLifecycle;
 
                     Assert.True(observation.OrderCollectionObservable);
                     Assert.Equal(1, observation.ActiveOrderCount);
@@ -450,7 +450,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                         OrderState.PartFilled,
                         OrderState.Submitted));
 
-                    var observation = new Nt8HostDataProvider(masterMetadataReady: false).GetSnapshot().OrderLifecycle;
+                    var observation = TestHost.Provider(false).GetSnapshot().OrderLifecycle;
 
                     Assert.Equal(4, observation.ActiveOrderCount);
                 }
@@ -471,7 +471,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                         OrderState.Cancelled,
                         OrderState.Rejected));
 
-                    var observation = new Nt8HostDataProvider(masterMetadataReady: false).GetSnapshot().OrderLifecycle;
+                    var observation = TestHost.Provider(false).GetSnapshot().OrderLifecycle;
 
                     Assert.Equal(0, observation.ActiveOrderCount);
                     Assert.Equal(1, observation.CompletedOrderCount);
@@ -498,7 +498,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                         OrderState.Cancelled,
                         OrderState.Rejected));
 
-                    var observation = new Nt8HostDataProvider(masterMetadataReady: false).GetSnapshot().OrderLifecycle;
+                    var observation = TestHost.Provider(false).GetSnapshot().OrderLifecycle;
 
                     Assert.Equal(2, observation.ActiveOrderCount);
                     Assert.Equal(1, observation.CompletedOrderCount);
@@ -523,7 +523,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     account.Orders.Add(null);
                     Account.All.Add(account);
 
-                    var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                    var provider = TestHost.Provider(false);
                     var observation = provider.GetSnapshot().OrderLifecycle;
 
                     Assert.Equal(1, observation.OrderReadFailureCount);
@@ -555,7 +555,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                         OrderState.Filled,
                         OrderState.Cancelled));
 
-                    var accounts = new Nt8HostDataProvider(masterMetadataReady: false).GetAccounts();
+                    var accounts = TestHost.Provider(false).GetAccounts();
 
                     Assert.Single(accounts);
                     Assert.Equal(2, accounts[0].WorkingOrderCount);
@@ -574,7 +574,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 {
                     Account.All.Add(AccountWithOrders());
 
-                    var accounts = new Nt8HostDataProvider(masterMetadataReady: false).GetAccounts();
+                    var accounts = TestHost.Provider(false).GetAccounts();
 
                     Assert.Single(accounts);
                     Assert.Equal(0, accounts[0].WorkingOrderCount);
@@ -610,7 +610,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     Account.All.Add(NonTargetAccount("SimOther"));
                     Account.All.Add(AccountWithOrders(OrderState.Working, OrderState.PartFilled, OrderState.Filled));
 
-                    var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                    var provider = TestHost.Provider(false);
 
                     // No throw means the non-target's Positions/Orders were never accessed.
                     var observation = provider.GetSnapshot().OrderLifecycle;
@@ -640,7 +640,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     // Only a non-target account is visible; its Portfolio throws if read.
                     Account.All.Add(NonTargetAccount("SimOther"));
 
-                    var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                    var provider = TestHost.Provider(false);
 
                     var observation = provider.GetSnapshot().OrderLifecycle;
                     var accounts = provider.GetAccounts();
@@ -672,7 +672,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     Account.All.Add(AccountWithOrders(OrderState.Working));
                     Account.All.Add(AccountWithOrders(OrderState.Working));
 
-                    var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                    var provider = TestHost.Provider(false);
 
                     var observation = provider.GetSnapshot().OrderLifecycle;
                     var accounts = provider.GetAccounts();
@@ -705,7 +705,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     account.ThrowOnPositionsRead = true;
                     Account.All.Add(account);
 
-                    var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                    var provider = TestHost.Provider(false);
 
                     var observation = provider.GetSnapshot().OrderLifecycle;
                     var accounts = provider.GetAccounts();

@@ -15,6 +15,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
         /// <summary>True when the provider is the expected evidence provider (Rithmic).</summary>
         public bool IsExpectedEvidenceProvider { get; set; }
 
+        /// <summary>
+        /// True when the provider value carries a verified vendor identity (a named enum member, or
+        /// a generic placeholder slot with an owner-authorized mapping). False for a generic slot
+        /// such as "Provider14", which is never assumed to be the expected provider.
+        /// </summary>
+        public bool ProviderResolved { get; set; }
+
         /// <summary>Always false until a documented API exposes the provider build.</summary>
         public bool ProviderBuildObservable { get; set; }
 

@@ -1,3 +1,5 @@
+using RiskPilot.Diagnostics.Nt8.Core.Identity;
+
 namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
 {
     /// <summary>
@@ -35,8 +37,12 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         /// <summary>True when the account provider was read.</summary>
         public bool AccountProviderObservable { get; set; }
 
-        /// <summary>True when the account provider equals the required provider.</summary>
-        public bool AccountProviderMatches { get; set; }
+        /// <summary>
+        /// Three-valued comparison of the account provider with the required provider
+        /// (<see cref="ProviderIdentityMatch"/>). A generic placeholder slot the host cannot resolve
+        /// stays <see cref="ProviderIdentityMatch.Unresolved"/> (unproven), never a false mismatch.
+        /// </summary>
+        public ProviderIdentityMatch AccountProviderMatch { get; set; }
 
         /// <summary>True when the matched account reported an associated connection.</summary>
         public bool ConnectionObserved { get; set; }
@@ -50,8 +56,12 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         /// <summary>True when the associated connection provider was read.</summary>
         public bool ConnectionProviderObservable { get; set; }
 
-        /// <summary>True when the associated connection provider equals the required provider.</summary>
-        public bool ConnectionProviderMatches { get; set; }
+        /// <summary>
+        /// Three-valued comparison of the associated connection provider with the required provider
+        /// (<see cref="ProviderIdentityMatch"/>). A generic placeholder slot the host cannot resolve
+        /// stays <see cref="ProviderIdentityMatch.Unresolved"/> (unproven), never a false mismatch.
+        /// </summary>
+        public ProviderIdentityMatch ConnectionProviderMatch { get; set; }
 
         /// <summary>True when the associated connection status was read.</summary>
         public bool ConnectionStatusObservable { get; set; }

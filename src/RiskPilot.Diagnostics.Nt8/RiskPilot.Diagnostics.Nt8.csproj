@@ -59,6 +59,7 @@
     <Compile Include="Core\Identity\CorrelationId.cs" />
     <Compile Include="Core\Identity\BuildIdentity.cs" />
     <Compile Include="Core\Identity\NinjaTraderCompatibility.cs" />
+    <Compile Include="Core\Identity\ProviderIdentity.cs" />
     <Compile Include="Core\Identity\AccountIdentityVerifier.cs" />
     <Compile Include="Core\Identity\TargetAccountConnectionVerifier.cs" />
     <Compile Include="Core\Identity\InstrumentIdentityVerifier.cs" />
