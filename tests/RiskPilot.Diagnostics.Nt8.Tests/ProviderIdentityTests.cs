@@ -165,6 +165,46 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void OwnerAuthorizedSlotMapping_NeverRemapsNamedProvider()
+        {
+            // A named provider already carries a real vendor identity: an owner-authorized slot
+            // mapping must not remap it, even when it carries an entry for that name.
+            var yahooToRithmic =
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { { "Yahoo", "Rithmic" } };
+
+            Assert.Null(ProviderIdentity.Resolve("Yahoo", yahooToRithmic));
+            Assert.Equal(ProviderIdentityMatch.Differs,
+                ProviderIdentity.Compare("Yahoo", "Rithmic", yahooToRithmic));
+        }
+
+        [Fact]
+        public void OwnerAuthorizedSlotMapping_ResolvesPlaceholderSlot()
+        {
+            Assert.Equal("Rithmic", ProviderIdentity.Resolve("Provider14", RithmicSlotMapping));
+            Assert.Equal(ProviderIdentityMatch.Matches,
+                ProviderIdentity.Compare("Provider14", "Rithmic", RithmicSlotMapping));
+        }
+
+        [Fact]
+        public void NamedProviders_RetainNormalIdentityBehavior()
+        {
+            Assert.Equal(ProviderIdentityMatch.Matches,
+                ProviderIdentity.Compare("Rithmic", "Rithmic", RithmicSlotMapping));
+            Assert.Equal(ProviderIdentityMatch.Differs,
+                ProviderIdentity.Compare("Simulator", "Rithmic", RithmicSlotMapping));
+        }
+
+        [Fact]
+        public void Resolve_NullOrEmptyMapping_IsFailClosed()
+        {
+            Assert.Null(ProviderIdentity.Resolve("Provider14", null));
+            Assert.Null(ProviderIdentity.Resolve("Provider14", ProviderIdentity.NoOwnerAuthorizedSlots));
+            Assert.Null(ProviderIdentity.Resolve("Provider14", ProviderIdentity.OwnerAuthorizedSlots));
+            Assert.Null(ProviderIdentity.Resolve(null, RithmicSlotMapping));
+            Assert.Null(ProviderIdentity.Resolve("   ", RithmicSlotMapping));
+        }
+
+        [Fact]
         public void ProductionMapping_IsEmpty_FailClosed()
         {
             // Production must never carry a guessed mapping.
