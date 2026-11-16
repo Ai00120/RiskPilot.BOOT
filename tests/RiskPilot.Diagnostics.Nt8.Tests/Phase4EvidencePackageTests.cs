@@ -1,3 +1,4 @@
+using RiskPilot.Diagnostics.Nt8.Core.Identity;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -325,12 +326,12 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     MatchingAccountCount = 1,
                     AccountRef = SyntheticRef.For("account", "SimRP.BOT"),
                     AccountProviderObservable = true,
-                    AccountProviderMatches = true,
+                    AccountProviderMatch = ProviderIdentityMatch.Matches,
                     ConnectionObserved = true,
                     ConnectionNameObservable = true,
                     ConnectionNameMatches = true,
                     ConnectionProviderObservable = true,
-                    ConnectionProviderMatches = true,
+                    ConnectionProviderMatch = ProviderIdentityMatch.Matches,
                     ConnectionStatusObservable = true,
                     ConnectionConnected = true,
                     ModeObservable = true,

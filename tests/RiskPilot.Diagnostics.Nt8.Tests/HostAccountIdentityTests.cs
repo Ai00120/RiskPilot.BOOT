@@ -32,7 +32,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             return new Account
             {
                 Name = name,
-                Provider = Provider.Rithmic,
+                Provider = Provider.Provider14,
                 Denomination = Currency.UsDollar,
                 Connection = new Connection
                 {
@@ -41,7 +41,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     Options = new ConnectOptions
                     {
                         Name = ExpectedConnection,
-                        Provider = Provider.Rithmic,
+                        Provider = Provider.Provider14,
                         Mode = Mode.Simulation
                     }
                 }
@@ -55,17 +55,17 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             try
             {
                 Account.All.Add(IdentityAccount(ExpectedAccount));
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
 
                 var observation = provider.GetSnapshot().AccountIdentity;
 
                 Assert.True(observation.AccountSurfaceObservable);
                 Assert.Equal(1, observation.ObservedAccountCount);
                 Assert.Equal(1, observation.MatchingAccountCount);
-                Assert.True(observation.AccountProviderMatches);
+                Assert.Equal(ProviderIdentityMatch.Matches, observation.AccountProviderMatch);
                 Assert.True(observation.ConnectionObserved);
                 Assert.True(observation.ConnectionNameMatches);
-                Assert.True(observation.ConnectionProviderMatches);
+                Assert.Equal(ProviderIdentityMatch.Matches, observation.ConnectionProviderMatch);
                 Assert.True(observation.ConnectionConnected);
                 Assert.True(observation.ModeIsSimulation);
                 Assert.True(observation.DenominationIsUsd);
@@ -85,7 +85,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             {
                 // A look-alike name (trailing character) must not count as an exact match.
                 Account.All.Add(IdentityAccount(ExpectedAccount + "2"));
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
 
                 var observation = provider.GetSnapshot().AccountIdentity;
 
@@ -106,7 +106,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             try
             {
                 Account.All.Add(IdentityAccount(ExpectedAccount.ToLowerInvariant()));
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
 
                 var observation = provider.GetSnapshot().AccountIdentity;
 
@@ -128,7 +128,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 var account = IdentityAccount(ExpectedAccount);
                 account.Connection.Options.Name = "Other Rithmic";
                 Account.All.Add(account);
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
 
                 var observation = provider.GetSnapshot().AccountIdentity;
 
@@ -153,7 +153,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 account.Connection.Options.Mode = Mode.Live;
                 account.Denomination = Currency.Euro;
                 Account.All.Add(account);
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
 
                 var observation = provider.GetSnapshot().AccountIdentity;
 
@@ -176,7 +176,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 var account = IdentityAccount(ExpectedAccount);
                 account.Connection = null;
                 Account.All.Add(account);
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
 
                 var observation = provider.GetSnapshot().AccountIdentity;
 
@@ -198,7 +198,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             {
                 Account.All.Add(IdentityAccount(ExpectedAccount));
                 Account.All.Add(IdentityAccount(ExpectedAccount));
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
 
                 var observation = provider.GetSnapshot().AccountIdentity;
 
@@ -218,7 +218,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Reset();
             try
             {
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
                 var observation = provider.GetSnapshot().AccountIdentity;
 
                 Assert.True(observation.AccountSurfaceObservable);
@@ -238,7 +238,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             try
             {
                 Account.All.Add(IdentityAccount(ExpectedAccount));
-                var provider = new Nt8HostDataProvider(masterMetadataReady: false);
+                var provider = TestHost.Provider(false);
 
                 var observation = provider.GetSnapshot().AccountIdentity;
 

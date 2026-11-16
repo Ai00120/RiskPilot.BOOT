@@ -64,12 +64,13 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 MatchingConnectionCount = 1,
                 AccountRef = SyntheticRef.For("account", ExpectedAccount),
                 AccountProviderObservable = true,
-                AccountProviderMatches = true,
+                AccountProviderMatch = ProviderIdentityMatch.Matches,
                 ConnectionObserved = true,
+                ConnectionEnumerated = true,
                 ConnectionNameObservable = true,
                 ConnectionNameMatches = true,
                 ConnectionProviderObservable = true,
-                ConnectionProviderMatches = true
+                ConnectionProviderMatch = ProviderIdentityMatch.Matches
             };
         }
 
@@ -219,7 +220,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         public void Verifier_AccountProviderMismatch_IsFail()
         {
             var observation = ExactAssociation();
-            observation.AccountProviderMatches = false;
+            observation.AccountProviderMatch = ProviderIdentityMatch.Differs;
             var verdict = TargetAccountConnectionVerifier.Evaluate(observation);
 
             Assert.Equal(DiagnosticStatus.FAIL, verdict.Status);
@@ -230,7 +231,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         public void Verifier_ConnectionProviderMismatch_IsFail()
         {
             var observation = ExactAssociation();
-            observation.ConnectionProviderMatches = false;
+            observation.ConnectionProviderMatch = ProviderIdentityMatch.Differs;
             var verdict = TargetAccountConnectionVerifier.Evaluate(observation);
 
             Assert.Equal(DiagnosticStatus.FAIL, verdict.Status);
@@ -241,7 +242,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         public void Verifier_ProviderMismatchOutranksUnobservable_IsFail()
         {
             var observation = ExactAssociation();
-            observation.ConnectionProviderMatches = false;
+            observation.ConnectionProviderMatch = ProviderIdentityMatch.Differs;
             observation.AccountProviderObservable = false;
             var verdict = TargetAccountConnectionVerifier.Evaluate(observation);
 
@@ -276,7 +277,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         public void M2_WrongProvider_Fails()
         {
             var observation = ExactAssociation();
-            observation.AccountProviderMatches = false;
+            observation.AccountProviderMatch = ProviderIdentityMatch.Differs;
             var provider = ProviderWithSnapshot(observation);
 
             var results = new M2ConnectionProbe().Evaluate(Context(provider));

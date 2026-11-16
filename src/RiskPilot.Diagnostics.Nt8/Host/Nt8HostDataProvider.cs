@@ -38,6 +38,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         private readonly string _requestedInstrumentId;
         private readonly ISecurityScanSource _securityScanSource;
         private readonly Func<HostReadinessObservation> _hostReadiness;
+        private readonly IReadOnlyDictionary<string, string> _ownerAuthorizedProviderSlots;
 
         public Nt8HostDataProvider(bool masterMetadataReady, string requestedInstrumentId = null)
             : this(() => masterMetadataReady, requestedInstrumentId)
@@ -81,10 +82,29 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             Func<IReadOnlyList<string>> lifecycleStates,
             Func<HostReadinessObservation> hostReadiness,
             string requestedInstrumentId = null)
+            : this(masterMetadataReady, lifecycleStates, hostReadiness, ProviderIdentity.OwnerAuthorizedSlots, requestedInstrumentId)
+        {
+        }
+
+        /// <summary>
+        /// Full constructor. <paramref name="ownerAuthorizedProviderSlots"/> is the Owner-authorized
+        /// placeholder-slot -&gt; vendor mapping used to resolve a generic provider slot such as
+        /// <c>Provider14</c>. It defaults to the fail-closed empty mapping
+        /// (<see cref="ProviderIdentity.OwnerAuthorizedSlots"/>); production never guesses a mapping,
+        /// so an unmapped placeholder stays unproven. The parameter exists so the mapping logic can
+        /// be exercised deterministically offline.
+        /// </summary>
+        public Nt8HostDataProvider(
+            Func<bool> masterMetadataReady,
+            Func<IReadOnlyList<string>> lifecycleStates,
+            Func<HostReadinessObservation> hostReadiness,
+            IReadOnlyDictionary<string, string> ownerAuthorizedProviderSlots,
+            string requestedInstrumentId = null)
         {
             _masterMetadataReady = masterMetadataReady ?? (() => false);
             _lifecycleStates = lifecycleStates;
             _hostReadiness = hostReadiness;
+            _ownerAuthorizedProviderSlots = ownerAuthorizedProviderSlots ?? ProviderIdentity.OwnerAuthorizedSlots;
             _requestedInstrumentId = requestedInstrumentId;
             _securityScanSource = new FileSystemSecurityScanSource();
         }
@@ -206,16 +226,16 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             }
         }
 
-        private static ProviderRecord BuildProviderRecord(string providerName)
+        private ProviderRecord BuildProviderRecord(string providerName)
         {
+            var match = ProviderIdentity.Compare(
+                providerName, Core.Engine.Probes.M2ConnectionProbe.ExpectedProvider, _ownerAuthorizedProviderSlots);
             return new ProviderRecord
             {
                 Name = providerName,
                 ResolutionMethod = "String",
-                IsExpectedEvidenceProvider = string.Equals(
-                    providerName,
-                    Core.Engine.Probes.M2ConnectionProbe.ExpectedProvider,
-                    StringComparison.OrdinalIgnoreCase),
+                IsExpectedEvidenceProvider = match == ProviderIdentityMatch.Matches,
+                ProviderResolved = match != ProviderIdentityMatch.Unresolved,
                 ProviderBuildObservable = false,
                 IngestedAtUtc = DateTime.UtcNow
             };
@@ -484,17 +504,17 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             }
         }
 
-        private static ProviderEvidence BuildProviderEvidence(string raw, string resolutionBasis)
+        private ProviderEvidence BuildProviderEvidence(string raw, string resolutionBasis)
         {
+            var match = ProviderIdentity.Compare(
+                raw, Core.Engine.Probes.M2ConnectionProbe.ExpectedProvider, _ownerAuthorizedProviderSlots);
             return new ProviderEvidence
             {
                 RawProviderValue = raw,
                 ResolutionMethod = "String",
                 ResolutionBasis = resolutionBasis,
-                MatchesExpectedProvider = string.Equals(
-                    raw,
-                    Core.Engine.Probes.M2ConnectionProbe.ExpectedProvider,
-                    StringComparison.OrdinalIgnoreCase),
+                MatchesExpectedProvider = match == ProviderIdentityMatch.Matches,
+                ProviderResolved = match != ProviderIdentityMatch.Unresolved,
                 IsStubOrMockValue = false,
                 ProviderBuildObservable = false
             };
@@ -548,7 +568,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
             var accountProvider = SafeString(() => matched.Provider.ToString());
             observation.AccountProviderObservable = !string.IsNullOrEmpty(accountProvider);
-            observation.AccountProviderMatches = ExpectedAccountIdentity.ProviderMatches(accountProvider);
+            observation.AccountProviderMatch = ProviderIdentity.Compare(
+                accountProvider, ExpectedAccountIdentity.Provider, _ownerAuthorizedProviderSlots);
 
             // USD is the only denomination the approved account identity accepts. Reduce the
             // observed NT8 Currency member directly: no generic ISO table and no conversion of a
@@ -575,7 +596,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
                 var connectionProvider = SafeString(() => options.Provider.ToString());
                 observation.ConnectionProviderObservable = !string.IsNullOrEmpty(connectionProvider);
-                observation.ConnectionProviderMatches = ExpectedAccountIdentity.ProviderMatches(connectionProvider);
+                observation.ConnectionProviderMatch = ProviderIdentity.Compare(
+                    connectionProvider, ExpectedAccountIdentity.Provider, _ownerAuthorizedProviderSlots);
 
                 var mode = SafeString(() => options.Mode.ToString());
                 observation.ModeObservable = !string.IsNullOrEmpty(mode);
@@ -701,6 +723,22 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
             observation.MatchingAccountCount = matchingCount;
 
+            // The target account's own connection object, read once (guarded) so the enumerated
+            // connection set can be checked for it by reference. A name match alone is not proof of
+            // the association.
+            Connection targetConnection = null;
+            if (matched != null)
+            {
+                try
+                {
+                    targetConnection = matched.Connection;
+                }
+                catch (Exception)
+                {
+                    targetConnection = null;
+                }
+            }
+
             var connections = Connection.Connections;
             if (connections != null)
             {
@@ -715,10 +753,20 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
                         observation.ConnectionCount++;
 
+                        if (targetConnection != null && ReferenceEquals(enumerated, targetConnection))
+                        {
+                            observation.ConnectionEnumerated = true;
+                        }
+
                         var connectionName = SafeString(() => enumerated.Options.Name);
                         var connectionProvider = SafeString(() => enumerated.Options.Provider.ToString());
+                        // A connection only counts as matching the required identity when its name
+                        // matches AND its provider is confirmed to be the required provider. A
+                        // generic placeholder slot is not confirmed, so it never counts as a match.
                         if (ExpectedAccountIdentity.ConnectionNameMatches(connectionName)
-                            && ExpectedAccountIdentity.ProviderMatches(connectionProvider))
+                            && ProviderIdentity.Compare(
+                                connectionProvider, ExpectedAccountIdentity.Provider,
+                                _ownerAuthorizedProviderSlots) == ProviderIdentityMatch.Matches)
                         {
                             observation.MatchingConnectionCount++;
                         }
@@ -737,9 +785,10 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
             var accountProvider = SafeString(() => matched.Provider.ToString());
             observation.AccountProviderObservable = !string.IsNullOrEmpty(accountProvider);
-            observation.AccountProviderMatches = ExpectedAccountIdentity.ProviderMatches(accountProvider);
+            observation.AccountProviderMatch = ProviderIdentity.Compare(
+                accountProvider, ExpectedAccountIdentity.Provider, _ownerAuthorizedProviderSlots);
 
-            var connection = matched.Connection;
+            var connection = targetConnection;
             if (connection == null)
             {
                 return observation;
@@ -756,7 +805,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
                 var connectionProvider = SafeString(() => options.Provider.ToString());
                 observation.ConnectionProviderObservable = !string.IsNullOrEmpty(connectionProvider);
-                observation.ConnectionProviderMatches = ExpectedAccountIdentity.ProviderMatches(connectionProvider);
+                observation.ConnectionProviderMatch = ProviderIdentity.Compare(
+                    connectionProvider, ExpectedAccountIdentity.Provider, _ownerAuthorizedProviderSlots);
             }
 
             return observation;
@@ -792,10 +842,12 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                         association.HasConnection = true;
                         association.ConnectionName = connection.Options.Name;
                         association.ConnectionProvider = SafeString(() => connection.Options.Provider.ToString());
-                        association.ProvidersAgree = string.Equals(
-                            association.AccountProvider,
-                            association.ConnectionProvider,
-                            StringComparison.OrdinalIgnoreCase);
+                        // A placeholder slot carries no vendor identity, so the agreement is only
+                        // resolved when both sides can be compared to a definite answer.
+                        bool agree;
+                        association.ProviderAgreementResolved = ProviderIdentity.TryAgree(
+                            association.AccountProvider, association.ConnectionProvider, _ownerAuthorizedProviderSlots, out agree);
+                        association.ProvidersAgree = agree;
                     }
 
                     list.Add(association);
@@ -1336,6 +1388,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 observation.SelectedRouteIsGlobex = exchangeMetadata.SelectedGlobex;
                 observation.ConfiguredExchangesAreGlobexOnly = exchangeMetadata.ConfiguredOnlyGlobex;
                 observation.ProviderRouteIsRithmicOnly = exchangeMetadata.RithmicOnly;
+                observation.ProviderRouteResolved = exchangeMetadata.ProviderResolved;
                 observation.ExchangeConfirmedCme = exchangeMetadata.Observable && exchangeMetadata.ConfirmedCme;
 
                 // The canonical id is derived from the host symbol and the mapped exchange. It is only
@@ -1429,13 +1482,15 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             public readonly bool SelectedGlobex;
             public readonly bool ConfiguredOnlyGlobex;
             public readonly bool RithmicOnly;
+            public readonly bool ProviderResolved;
 
-            public ExchangeRouteMetadata(bool observable, bool selectedGlobex, bool configuredOnlyGlobex, bool rithmicOnly)
+            public ExchangeRouteMetadata(bool observable, bool selectedGlobex, bool configuredOnlyGlobex, bool rithmicOnly, bool providerResolved)
             {
                 Observable = observable;
                 SelectedGlobex = selectedGlobex;
                 ConfiguredOnlyGlobex = configuredOnlyGlobex;
                 RithmicOnly = rithmicOnly;
+                ProviderResolved = providerResolved;
             }
 
             public bool ConfirmedCme
@@ -1449,24 +1504,24 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// guarded; a read failure marks the whole route metadata unobservable so the identity can
         /// never PASS on unconfirmed route data.
         /// </summary>
-        private static ExchangeRouteMetadata ReadExchangeRouteMetadata(Instrument instrument)
+        private ExchangeRouteMetadata ReadExchangeRouteMetadata(Instrument instrument)
         {
             try
             {
                 var master = instrument.MasterInstrument;
                 if (master == null || master.Exchanges == null)
                 {
-                    return new ExchangeRouteMetadata(false, false, false, false);
+                    return new ExchangeRouteMetadata(false, false, false, false, false);
                 }
 
                 var selectedGlobex = instrument.Exchange == Exchange.Globex;
                 var configuredOnlyGlobex = master.Exchanges.Count == 1 && master.Exchanges[0] == Exchange.Globex;
-                var rithmicOnly = HasOnlyConnectedRithmicProvider();
-                return new ExchangeRouteMetadata(true, selectedGlobex, configuredOnlyGlobex, rithmicOnly);
+                ReadConnectedProviderRoute(out var rithmicOnly, out var providerResolved);
+                return new ExchangeRouteMetadata(true, selectedGlobex, configuredOnlyGlobex, rithmicOnly, providerResolved);
             }
             catch (Exception)
             {
-                return new ExchangeRouteMetadata(false, false, false, false);
+                return new ExchangeRouteMetadata(false, false, false, false, false);
             }
         }
 
@@ -1494,7 +1549,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 : currencyMember;
         }
 
-        private static bool IsD096RouteCandidate(Instrument instrument)
+        private bool IsD096RouteCandidate(Instrument instrument)
         {
             try
             {
@@ -1504,7 +1559,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     && master.Exchanges != null
                     && master.Exchanges.Count == 1
                     && master.Exchanges[0] == Exchange.Globex;
-                return selectedGlobex && configuredOnlyGlobex && HasOnlyConnectedRithmicProvider();
+                ReadConnectedProviderRoute(out var rithmicOnly, out _);
+                return selectedGlobex && configuredOnlyGlobex && rithmicOnly;
             }
             catch (Exception)
             {
@@ -1512,14 +1568,24 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             }
         }
 
-        private static bool HasOnlyConnectedRithmicProvider()
+        /// <summary>
+        /// Reads the single connected provider path and classifies it. <paramref name="rithmicOnly"/>
+        /// is true only when the sole connected provider is confirmed to be the required provider;
+        /// <paramref name="resolved"/> is true when that provider carries a verified vendor identity
+        /// (a named enum member, or a placeholder slot with an owner-authorized mapping). A generic
+        /// placeholder slot such as "Provider14" leaves <paramref name="resolved"/> false, so the
+        /// caller reports the venue as unproven rather than a false mismatch.
+        /// </summary>
+        private void ReadConnectedProviderRoute(out bool rithmicOnly, out bool resolved)
         {
+            rithmicOnly = false;
+            resolved = false;
             try
             {
                 var connections = Connection.Connections;
                 if (connections == null)
                 {
-                    return false;
+                    return;
                 }
 
                 lock (connections)
@@ -1535,15 +1601,27 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                         }
                     }
 
-                    return connectedCount == 1
-                        && only != null
-                        && only.Options != null
-                        && string.Equals(only.Options.Provider.ToString(), "Rithmic", StringComparison.OrdinalIgnoreCase);
+                    if (connectedCount != 1 || only == null || only.Options == null)
+                    {
+                        return;
+                    }
+
+                    var provider = SafeString(() => only.Options.Provider.ToString());
+                    if (string.IsNullOrEmpty(provider))
+                    {
+                        return;
+                    }
+
+                    var match = ProviderIdentity.Compare(
+                        provider, ExpectedAccountIdentity.Provider, _ownerAuthorizedProviderSlots);
+                    resolved = match != ProviderIdentityMatch.Unresolved;
+                    rithmicOnly = match == ProviderIdentityMatch.Matches;
                 }
             }
             catch (Exception)
             {
-                return false;
+                rithmicOnly = false;
+                resolved = false;
             }
         }
 

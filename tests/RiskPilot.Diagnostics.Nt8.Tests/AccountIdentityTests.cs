@@ -60,12 +60,12 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 MatchingAccountCount = 1,
                 AccountRef = SyntheticRef.For("account", ExpectedAccount),
                 AccountProviderObservable = true,
-                AccountProviderMatches = true,
+                AccountProviderMatch = ProviderIdentityMatch.Matches,
                 ConnectionObserved = true,
                 ConnectionNameObservable = true,
                 ConnectionNameMatches = true,
                 ConnectionProviderObservable = true,
-                ConnectionProviderMatches = true,
+                ConnectionProviderMatch = ProviderIdentityMatch.Matches,
                 ConnectionStatusObservable = true,
                 ConnectionConnected = true,
                 ModeObservable = true,
@@ -269,7 +269,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             // A definite contradiction (wrong provider) must be FAIL even when another field
             // could not be observed: the identity is proven wrong, not merely unproven.
             var observation = ExactIdentity();
-            observation.AccountProviderMatches = false;
+            observation.AccountProviderMatch = ProviderIdentityMatch.Differs;
             observation.ModeObservable = false;
             var verdict = AccountIdentityVerifier.Evaluate(observation);
 

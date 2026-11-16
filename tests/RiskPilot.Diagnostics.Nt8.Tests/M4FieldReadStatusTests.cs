@@ -46,7 +46,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Options = new ConnectOptions
                 {
                     Name = "My Rithmic",
-                    Provider = Provider.Rithmic,
+                    Provider = Provider.Provider14,
                     Mode = Mode.Simulation
                 }
             };
@@ -145,7 +145,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Instrument.All.Add(instrument);
 
                 // A configured id lets the target resolve without reading the throwing root field.
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true, requestedInstrumentId: "ES 12-26");
+                var provider = TestHost.Provider(true, "ES 12-26");
                 var metadata = provider.GetSnapshot().Attestation.Metadata;
 
                 Assert.NotNull(metadata);
@@ -170,7 +170,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 instrument.MasterInstrument.ThrowOnTickSizeRead = true;
                 Instrument.All.Add(instrument);
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var metadata = provider.GetSnapshot().Attestation.Metadata;
 
                 // The failed field is recorded; the other fields remain successfully read.
@@ -200,7 +200,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument());
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var metadata = provider.GetSnapshot().Attestation.Metadata;
 
                 Assert.False(metadata.HasReadFailures);
@@ -230,7 +230,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 instrument.MasterInstrument.ThrowOnPointValueRead = true;
                 Instrument.All.Add(instrument);
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var results = new M4InstrumentAttestationProbe().Evaluate(Context(provider));
 
                 var field = Find(results, "M4.FIELD_METADATA");
@@ -256,7 +256,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument());
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var results = new M4InstrumentAttestationProbe().Evaluate(Context(provider));
 
                 var field = Find(results, "M4.FIELD_METADATA");
@@ -359,7 +359,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 instrument.MasterInstrument.ThrowOnNameRead = true;
                 Instrument.All.Add(instrument);
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.False(observation.RootMetadataObservable);
@@ -383,7 +383,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 instrument.MasterInstrument.ThrowOnCurrencyRead = true;
                 Instrument.All.Add(instrument);
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.False(observation.CurrencyObservable);
@@ -409,7 +409,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 instrument.MasterInstrument.ThrowOnPointValueRead = true;
                 Instrument.All.Add(instrument);
 
-                var provider = new Nt8HostDataProvider(masterMetadataReady: true);
+                var provider = TestHost.Provider(true);
                 var observation = provider.GetSnapshot().EsProductSpecification;
 
                 Assert.True(observation.InstrumentObserved);

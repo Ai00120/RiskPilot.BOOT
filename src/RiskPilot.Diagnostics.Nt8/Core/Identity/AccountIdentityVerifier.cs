@@ -42,13 +42,16 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
         }
 
         /// <summary>
-        /// Provider match. The provider enum has no guaranteed Rithmic member, so the host
-        /// renders it as a string; that rendering is compared case-insensitively (RiskPilot.BOT
-        /// PR #275).
+        /// Provider match. The provider enum has no guaranteed Rithmic member, so the host renders
+        /// it as a string. This Boolean is only a convenience for callers that need "definitely the
+        /// expected provider": a generic placeholder slot (e.g. "Provider14") is NOT the expected
+        /// provider here. Identity decisions use the three-valued
+        /// <see cref="ProviderIdentity.Compare"/> so an unresolved slot stays unproven instead of
+        /// becoming a false mismatch.
         /// </summary>
         public static bool ProviderMatches(string observed)
         {
-            return string.Equals(observed, Provider, StringComparison.OrdinalIgnoreCase);
+            return ProviderIdentity.IsExpectedProvider(observed);
         }
 
         /// <summary>True when the rendered connection mode is the required simulation mode.</summary>
@@ -75,11 +78,15 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
         public const string NameMismatch = "ACCOUNT_NAME_MISMATCH";
         public const string AccountProviderMismatch = "ACCOUNT_PROVIDER_MISMATCH";
         public const string AccountProviderUnobservable = "ACCOUNT_PROVIDER_UNOBSERVABLE";
+        /// <summary>The account provider was read but is an unresolved generic placeholder slot.</summary>
+        public const string AccountProviderUnresolved = "ACCOUNT_PROVIDER_UNRESOLVED";
         public const string ConnectionNotObserved = "CONNECTION_NOT_OBSERVED";
         public const string ConnectionNameMismatch = "CONNECTION_NAME_MISMATCH";
         public const string ConnectionNameUnobservable = "CONNECTION_NAME_UNOBSERVABLE";
         public const string ConnectionProviderMismatch = "CONNECTION_PROVIDER_MISMATCH";
         public const string ConnectionProviderUnobservable = "CONNECTION_PROVIDER_UNOBSERVABLE";
+        /// <summary>The connection provider was read but is an unresolved generic placeholder slot.</summary>
+        public const string ConnectionProviderUnresolved = "CONNECTION_PROVIDER_UNRESOLVED";
         public const string ConnectionStatusUnobservable = "CONNECTION_STATUS_UNOBSERVABLE";
         public const string ConnectionNotConnected = "CONNECTION_NOT_CONNECTED";
         public const string ModeMismatch = "MODE_MISMATCH";
@@ -193,9 +200,15 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
             {
                 unobservable.Add(AccountIdentityReasonCodes.AccountProviderUnobservable);
             }
-            else if (!observation.AccountProviderMatches)
+            else if (observation.AccountProviderMatch == ProviderIdentityMatch.Differs)
             {
                 mismatched.Add(AccountIdentityReasonCodes.AccountProviderMismatch);
+            }
+            else if (observation.AccountProviderMatch == ProviderIdentityMatch.Unresolved)
+            {
+                // A generic placeholder slot (e.g. "Provider14") carries no vendor identity, so the
+                // provider cannot be proven. Fail closed (INCONCLUSIVE), never a false mismatch.
+                unobservable.Add(AccountIdentityReasonCodes.AccountProviderUnresolved);
             }
 
             if (!observation.ConnectionObserved)
@@ -217,9 +230,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
                 {
                     unobservable.Add(AccountIdentityReasonCodes.ConnectionProviderUnobservable);
                 }
-                else if (!observation.ConnectionProviderMatches)
+                else if (observation.ConnectionProviderMatch == ProviderIdentityMatch.Differs)
                 {
                     mismatched.Add(AccountIdentityReasonCodes.ConnectionProviderMismatch);
+                }
+                else if (observation.ConnectionProviderMatch == ProviderIdentityMatch.Unresolved)
+                {
+                    unobservable.Add(AccountIdentityReasonCodes.ConnectionProviderUnresolved);
                 }
 
                 if (!observation.ConnectionStatusObservable)
