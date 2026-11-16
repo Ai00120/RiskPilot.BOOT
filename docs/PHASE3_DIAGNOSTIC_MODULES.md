@@ -102,6 +102,7 @@ CONNECTION یک عضو `State` نیست و به‌صراحت به **M2** واگ�
 | `M1.CAPABILITY_MATRIX` | Available / Unavailable / Unobservable برای هر قابلیت |
 | `M1.LIFECYCLE` | دنبالهٔ حالت‌های مشاهده‌شده و اعتبارسنجی ترتیب آن‌ها |
 | `M1.LIFECYCLE_PHASES` | فازهای مشاهده‌شده (INITIALIZATION/STARTUP/RUNTIME/SHUTDOWN)؛ CONNECTION به M2 واگذار |
+| `M1.HOST_READINESS` | پنج واقعیتِ جدا (AddOn lifecycle / host / instrument / metadata / market-data subscription)؛ فقط با هر پنج ⇒ `PASS` |
 | `M1.BUILD_MODE` | `UseStubs` و `TargetFramework` |
 | `M1.ENVIRONMENT_CLASS` | Live / Simulation / Unknown |
 | `M1.HOST_VERSION` | همیشه `INCONCLUSIVE` (Unobservable) |
@@ -112,9 +113,25 @@ CONNECTION یک عضو `State` نیست و به‌صراحت به **M2** واگ�
 نبود INITIALIZATION یا STARTUP ⇒ `INCONCLUSIVE`؛ فقط دنبالهٔ مرتبی که به startup رسیده `PASS` است.
 Shutdown اختیاری است (ابزار معمولاً در حین اجرا فعال است) اما اگر مشاهده شود باید آخرین حالت باشد.
 
+**مدل آمادگی میزبان (Host Readiness):** افزونهٔ NT8 از سیستم «Active state» استفاده می‌کند و مسیر
+`SetDefaults → Configure → Active → Terminated` را طی می‌کند؛ حالت‌های `DataLoaded`/`Historical`/
+`Transition`/`Realtime` مخصوص Indicator/Strategy هستند و افزونه **هرگز** به آن‌ها نمی‌رسد. پیش از این
+یک بولی واحد `HostIsLive` فقط آن حالت‌ها را می‌پذیرفت و در نتیجه برای همیشه `false` می‌ماند و هیچ
+metadata/instrument/market-data مشاهده نمی‌شد. اکنون پنج مفهوم **جدا** گزارش می‌شوند:
+`Core/Identity/AddOnLifecycle.cs` (تصمیم lifecycle، `Active` عملیاتی است)،
+`Core/Run/HostReadiness.cs` (`HostReadinessFacts` + `HostReadinessEvaluator` + `HostReadinessTracker` +
+`HostReadinessRetryPolicy`) و `Core/Models/Observations/HostReadinessObservation.cs`.
+حالت‌ها: `NOT_OBSERVED` / `ADDON_NOT_OPERATIONAL` / `ADDON_SHUTTING_DOWN` / `AWAITING_HOST` /
+`AWAITING_INSTRUMENT` / `AWAITING_METADATA` / `AWAITING_SUBSCRIPTION` / `READY`. تنها با هر پنج واقعیت
+`READY` می‌شود؛ رسیدن به `Active` هرگز به‌تنهایی «آماده» گزارش نمی‌شود (fail-closed). افزونه در `Active`
+یک حلقهٔ retry کران‌دار (backoff هندسی، حداکثر ~۲ دقیقه) آغاز می‌کند تا اگر instrument پس از `Active`
+بارگذاری شد، آماده شود؛ حلقه idempotent است و هرگز اشتراک تکراری نمی‌سازد. بلوک `hostReadiness` در
+`environment.json` نوشته می‌شود.
+
 **مرجع API:** `NinjaTrader.NinjaScript.AddOnBase`, `State`/`OnStateChange`, `System.Environment`.
-**تست‌ها:** `LifecycleDiagnosticsTests` (verifier + M1 probe + host adapter)، `Phase3ModuleTests.M1_*`،
-`ProbeTests.M1_*`.
+**تست‌ها:** `LifecycleDiagnosticsTests` (verifier + M1 probe + host adapter)، `HostReadinessTests`
+(evaluator/tracker/retry policy)، `AddOnLifecycleReadinessTests` (AddOn lifecycle + readiness + capture
+روی سطح stub آفلاین)، `Phase3ModuleTests.M1_*`، `ProbeTests.M1_*`.
 **محدودیت:** نسخهٔ دقیق Runtime میزبان و نسخهٔ provider با API عمومی **قابل مشاهده نیست**؛ از روی
 نام فایل یا BuildId **حدس زده نمی‌شود**. فقط گذارهای مشاهده‌شده گزارش می‌شوند؛ حالت ثبت‌نشده
 «مشاهده‌نشده» گزارش می‌شود و هرگز استنتاج نمی‌شود.

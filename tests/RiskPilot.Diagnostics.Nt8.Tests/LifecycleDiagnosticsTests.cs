@@ -275,6 +275,101 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.NotEqual(DiagnosticStatus.PASS, Find(results, "M1.LIFECYCLE_PHASES").Status);
         }
 
+        private static HostReadinessObservation Ready()
+        {
+            return new HostReadinessObservation
+            {
+                SurfaceObservable = true,
+                AddOnState = "Active",
+                LifecycleOperational = true,
+                HostAvailable = true,
+                InstrumentReady = true,
+                MetadataReady = true,
+                MarketDataSubscribed = true,
+                FullyReady = true,
+                State = HostReadinessState.Ready
+            };
+        }
+
+        [Fact]
+        public void M1_HostReadiness_AllFiveFacts_IsPass()
+        {
+            var provider = new FakeDataProvider
+            {
+                Snapshot = new DiagnosticSnapshot { HostReadiness = Ready() }
+            };
+
+            var results = new M1EnvironmentProbe().Evaluate(Context(provider));
+            var check = Find(results, "M1.HOST_READINESS");
+            Assert.Equal(DiagnosticStatus.PASS, check.Status);
+            Assert.Contains("state=READY", check.Observation);
+            Assert.Contains("addOnState=Active", check.Observation);
+            Assert.Contains("hostAvailable=True", check.Observation);
+        }
+
+        [Fact]
+        public void M1_HostReadiness_ActiveOnly_IsInconclusive_NotPass()
+        {
+            // The core regression: the AddOn reached Active but nothing else is proven yet. The
+            // readiness check must NOT be PASS, and the outstanding fact must be reported.
+            var provider = new FakeDataProvider
+            {
+                Snapshot = new DiagnosticSnapshot
+                {
+                    HostReadiness = new HostReadinessObservation
+                    {
+                        SurfaceObservable = true,
+                        AddOnState = "Active",
+                        LifecycleOperational = true,
+                        HostAvailable = true,
+                        InstrumentReady = false,
+                        MetadataReady = false,
+                        MarketDataSubscribed = false,
+                        FullyReady = false,
+                        State = HostReadinessState.AwaitingInstrument
+                    }
+                }
+            };
+
+            var results = new M1EnvironmentProbe().Evaluate(Context(provider));
+            var check = Find(results, "M1.HOST_READINESS");
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, check.Status);
+            Assert.Contains("state=AWAITING_INSTRUMENT", check.Observation);
+            Assert.Contains("instrumentReady=False", check.Observation);
+        }
+
+        [Fact]
+        public void M1_HostReadiness_NoSurface_IsInconclusive()
+        {
+            var provider = new FakeDataProvider();
+            var results = new M1EnvironmentProbe().Evaluate(Context(provider));
+            var check = Find(results, "M1.HOST_READINESS");
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, check.Status);
+            Assert.Contains("NOT OBSERVED", check.Observation);
+        }
+
+        [Fact]
+        public void M1_HostReadiness_ShuttingDown_IsNeverPass()
+        {
+            var provider = new FakeDataProvider
+            {
+                Snapshot = new DiagnosticSnapshot
+                {
+                    HostReadiness = new HostReadinessObservation
+                    {
+                        SurfaceObservable = true,
+                        AddOnState = "Terminated",
+                        ShuttingDown = true,
+                        FullyReady = false,
+                        State = HostReadinessState.ShuttingDown
+                    }
+                }
+            };
+
+            var results = new M1EnvironmentProbe().Evaluate(Context(provider));
+            Assert.NotEqual(DiagnosticStatus.PASS, Find(results, "M1.HOST_READINESS").Status);
+        }
+
         // ---------------- Host adapter (offline stub surface) ----------------
 
         [Collection("StubHostState")]

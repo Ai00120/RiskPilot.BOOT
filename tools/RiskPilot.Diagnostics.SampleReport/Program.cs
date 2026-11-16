@@ -277,6 +277,19 @@ namespace RiskPilot.Diagnostics.SampleReport
             dataset.Snapshot = new DiagnosticSnapshot
             {
                 Lifecycle = BuildSampleLifecycle(),
+                HostReadiness = new HostReadinessObservation
+                {
+                    SurfaceObservable = true,
+                    AddOnState = "Active",
+                    LifecycleOperational = true,
+                    HostAvailable = true,
+                    InstrumentReady = true,
+                    MetadataReady = true,
+                    MarketDataSubscribed = true,
+                    FullyReady = true,
+                    State = HostReadinessState.Ready,
+                    ReasonCodes = new System.Collections.Generic.List<string> { HostReadinessReasonCodes.Ready }
+                },
                 TargetAccountConnection = new TargetAccountConnectionObservation
                 {
                     AccountSurfaceObservable = true,

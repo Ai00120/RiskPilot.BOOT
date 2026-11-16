@@ -37,6 +37,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         private readonly Func<IReadOnlyList<string>> _lifecycleStates;
         private readonly string _requestedInstrumentId;
         private readonly ISecurityScanSource _securityScanSource;
+        private readonly Func<HostReadinessObservation> _hostReadiness;
 
         public Nt8HostDataProvider(bool masterMetadataReady, string requestedInstrumentId = null)
             : this(() => masterMetadataReady, requestedInstrumentId)
@@ -63,9 +64,27 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// as INCONCLUSIVE.
         /// </summary>
         public Nt8HostDataProvider(Func<bool> masterMetadataReady, Func<IReadOnlyList<string>> lifecycleStates, string requestedInstrumentId = null)
+            : this(masterMetadataReady, lifecycleStates, null, requestedInstrumentId)
+        {
+        }
+
+        /// <summary>
+        /// Creates the provider with the live readiness probe. <paramref name="hostReadiness"/> is
+        /// evaluated on each read to derive the separated readiness observation (AddOn lifecycle,
+        /// host availability, metadata readiness, instrument readiness, market-data subscription).
+        /// It is a probe rather than a captured value because the host reaches those facts while the
+        /// provider lives. A null or throwing probe leaves the readiness surface unobservable, which
+        /// M1 reports as INCONCLUSIVE, never as ready.
+        /// </summary>
+        public Nt8HostDataProvider(
+            Func<bool> masterMetadataReady,
+            Func<IReadOnlyList<string>> lifecycleStates,
+            Func<HostReadinessObservation> hostReadiness,
+            string requestedInstrumentId = null)
         {
             _masterMetadataReady = masterMetadataReady ?? (() => false);
             _lifecycleStates = lifecycleStates;
+            _hostReadiness = hostReadiness;
             _requestedInstrumentId = requestedInstrumentId;
             _securityScanSource = new FileSystemSecurityScanSource();
         }
@@ -317,6 +336,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             {
                 Runtime = BuildRuntimeObservation(),
                 Lifecycle = BuildLifecycleObservation(),
+                HostReadiness = BuildHostReadinessObservation(),
                 Provider = BuildProviderEvidence(),
                 AccountAssociations = BuildAccountAssociations(),
                 AccountIdentity = BuildAccountIdentityObservation(),
@@ -392,6 +412,33 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             catch (Exception)
             {
                 return new LifecycleObservation { LifecycleSurfaceObservable = false };
+            }
+        }
+
+        /// <summary>
+        /// Builds the separated host-readiness observation for M1. It reads the live readiness probe
+        /// supplied by the AddOn and overlays the market-data subscription fact, so the observation
+        /// always reflects the current host position rather than a value captured at construction.
+        /// When no probe is supplied the surface is unobservable (INCONCLUSIVE), never ready. A
+        /// throwing probe fails closed the same way.
+        /// </summary>
+        private HostReadinessObservation BuildHostReadinessObservation()
+        {
+            if (_hostReadiness == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                // The probe derives every fact (including the market-data subscription, which the
+                // capture adapter records on the same tracker), so the observation is always a
+                // consistent, current snapshot rather than a mix of a probe and a second read.
+                return _hostReadiness();
+            }
+            catch (Exception)
+            {
+                return null;
             }
         }
 

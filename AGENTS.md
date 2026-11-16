@@ -497,15 +497,17 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   (`LifecyclePhases`: INITIALIZATION / STARTUP / RUNTIME / SHUTDOWN / UNKNOWN) and validates the
   sequence. No verdict logic lives in the host layer.
 - The lifecycle is supplied to the provider as a **live probe** (`new Nt8HostDataProvider(() =>
-  HostIsLive, () => LifecycleStates)`), not a captured list: the provider is built at `State.Active`,
-  before the host reaches `DataLoaded`/`Realtime`, so a captured list would freeze at the states seen
-  up to `Active`. The previous untyped `RuntimeObservation.LifecycleStates` list was never populated
-  by the host, so M1 could not see the lifecycle at all; it was removed in favour of the dedicated
-  observation + `DiagnosticSnapshot.Lifecycle`.
-- Two M1 checks: `M1.LIFECYCLE` (the observed sequence + verdict) and `M1.LIFECYCLE_PHASES` (which
-  phases were confirmed). The **connection phase is deferred to M2** (`connectionPhase=DEFERRED_TO_M2`)
-  because no `State` member carries it — M1 never infers it and never reports it PASS, so there is no
-  duplicate lifecycle/connection reporting across modules.
+  HostIsLive, () => LifecycleStates, () => _readiness.Observe())`), not a captured list: the provider
+  is built at `State.Active` and the host reaches its operational state (and loads its instrument)
+  while the provider lives, so a captured list would freeze at the states seen up to `Active`. The
+  previous untyped `RuntimeObservation.LifecycleStates` list was never populated by the host, so M1
+  could not see the lifecycle at all; it was removed in favour of the dedicated observation +
+  `DiagnosticSnapshot.Lifecycle`.
+- Three M1 checks: `M1.LIFECYCLE` (the observed sequence + verdict), `M1.LIFECYCLE_PHASES` (which
+  phases were confirmed) and `M1.HOST_READINESS` (the five separated readiness facts). The
+  **connection phase is deferred to M2** (`connectionPhase=DEFERRED_TO_M2`) because no `State` member
+  carries it — M1 never infers it and never reports it PASS, so there is no duplicate
+  lifecycle/connection reporting across modules.
 - Fail-closed contract (`LifecycleVerifier`): no/unobservable surface, a stub/mock value, an
   unrecognised `State` member, or a missing INITIALIZATION/STARTUP ⇒ `INCONCLUSIVE`; a backwards
   transition (rank decrease) or any state after `Terminated` ⇒ `FAIL`; only an ordered sequence that
@@ -518,6 +520,46 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   `LifecycleDiagnosticsTests` (verifier + M1 probe + host adapter over the offline stub surface) and
   the M1 cases in `Phase3ModuleTests` / `Phase4EvidencePackageTests`; a green stub run is **not**
   real-host proof.
+
+## AddOn lifecycle / host readiness (root-cause fix)
+
+- **The root cause:** a NinjaTrader 8 AddOn uses the **"Active state"** management system —
+  `SetDefaults → Configure → Active → Terminated` — and **never** reaches `DataLoaded`/`Historical`/
+  `Transition`/`Realtime` (those belong to Indicators/Strategies). The old `HostIsLive` accepted only
+  the data-processing states, so it was permanently `false`, and host metadata, the selected
+  instrument and market data were never observed. Never gate AddOn readiness on a data-processing
+  state again.
+- **One source of truth for the lifecycle predicate:** `Core/Identity/AddOnLifecycle.cs`
+  (`IsOperational` accepts `Active` plus the data-processing states defensively; an unknown/null
+  state is not operational). `DiagnosticAddOn.HostIsLive` reads the state recorded on the tracker, so
+  the probe and the readiness model can never disagree, and the lifecycle is drivable offline via
+  `DiagnosticAddOn.ApplyLifecycleState(string)` (which `OnStateChange` delegates to — the offline stub
+  surface cannot raise the host callback).
+- **Five separate readiness facts, never one Boolean:** `Core/Run/HostReadiness.cs`
+  (`HostReadinessFacts`, `HostReadinessEvaluator`, `HostReadinessTracker`, `HostReadinessRetryPolicy`)
+  + `Core/Models/Observations/HostReadinessObservation.cs`. States: `NOT_OBSERVED`,
+  `ADDON_NOT_OPERATIONAL`, `ADDON_SHUTTING_DOWN`, `AWAITING_HOST`, `AWAITING_INSTRUMENT`,
+  `AWAITING_METADATA`, `AWAITING_SUBSCRIPTION`, `READY`. Only all five hold ⇒ `READY`. Reaching
+  `Active` alone is **never** ready (fail-closed). The tracker takes one private lock; the observation
+  is derived on each read.
+- **Delayed host readiness is handled by a bounded, idempotent retry loop.** The AddOn runs the first
+  probe synchronously on the `Active` transition and schedules retries with geometric backoff
+  (`HostReadinessRetryPolicy`, ~2 min budget) on a `System.Threading.Timer`; the loop stops once
+  fully ready, on shutdown, or when the budget is exhausted. `MarketDataCapture.TrySubscribe` is
+  idempotent, so a repeated probe never creates a duplicate subscription. `ReadinessRetryEnabled`
+  (default true) is the deterministic test seam — tests set it false so no background thread races
+  them; the first synchronous probe still runs.
+- **The readiness observation reaches both paths:** the provider exposes it as a live probe
+  (`() => _readiness.Observe()`), so `GetSnapshot().HostReadiness` feeds the live `M1.HOST_READINESS`
+  probe and the exported `environment.json` `hostReadiness` block from one derivation.
+- **Detach is exact:** `MarketDataCapture.Detach()` (driven by `SafeDispose` on `Terminated`) removes
+  the host handlers and records the subscription fact false; `SafeDispose` stops the retry loop
+  first so no timer callback re-subscribes after teardown. Tests: `HostReadinessTests` (evaluator /
+  tracker / retry policy, incl. concurrency), `AddOnLifecycleReadinessTests` (AddOn lifecycle over
+  the offline stub surface: Active, late instrument, no instrument, duplicate-subscription guard,
+  terminate/detach, idempotent Active, concurrency, disposal), and the M1/evidence cases in
+  `LifecycleDiagnosticsTests` / `Phase4EvidencePackageTests`. A green stub run is **not** real-host
+  proof: the real `OnStateChange` timing and host object model are only provable inside NinjaTrader 8.
 
 ## NinjaTrader version compatibility (Prompt 10)
 

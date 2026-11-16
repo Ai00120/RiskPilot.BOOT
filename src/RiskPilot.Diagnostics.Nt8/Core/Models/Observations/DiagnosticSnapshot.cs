@@ -114,6 +114,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         /// </summary>
         public LifecycleObservation Lifecycle { get; set; }
 
+        /// <summary>
+        /// Host-readiness observation for M1. It reports the five readiness concepts separately
+        /// (AddOn lifecycle, host availability, metadata readiness, instrument readiness and
+        /// market-data subscription) so the tool never conflates them into one Boolean. A null
+        /// member means no readiness surface was supplied, which M1 reports as INCONCLUSIVE.
+        /// </summary>
+        public HostReadinessObservation HostReadiness { get; set; }
+
         public ProviderEvidence Provider { get; set; }
 
         public IList<AccountConnectionAssociation> AccountAssociations { get; set; }

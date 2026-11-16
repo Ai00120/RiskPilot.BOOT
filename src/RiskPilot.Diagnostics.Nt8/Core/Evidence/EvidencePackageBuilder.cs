@@ -258,6 +258,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             }
 
             WriteLifecycleBlock(writer, dataset);
+            WriteHostReadinessBlock(writer, dataset);
             WriteCompatibilityBlock(writer);
 
             writer.EndObject();
@@ -319,6 +320,35 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             writer.WriteStringArrayProperty("observedStates", SecretRedactor.RedactArray(ToArray(verdict.ObservedStates)));
             writer.WriteStringArrayProperty("unclassifiedStates", SecretRedactor.RedactArray(ToArray(verdict.UnknownStates)));
             writer.WriteStringArrayProperty("reasonCodes", SecretRedactor.RedactArray(ToArray(verdict.ReasonCodes)));
+            writer.EndObject();
+        }
+
+        /// <summary>
+        /// Writes the M1 host-readiness block: the five separated readiness facts and the derived
+        /// state. It re-evaluates nothing — the observation is already derived by the host-free
+        /// tracker — but it writes each fact individually so a reader sees exactly which one is
+        /// outstanding. With no readiness surface the block is written as UNOBSERVABLE, never
+        /// fabricated.
+        /// </summary>
+        private static void WriteHostReadinessBlock(JsonWriter writer, EvidenceDataset dataset)
+        {
+            var observation = dataset.Snapshot != null ? dataset.Snapshot.HostReadiness : null;
+            if (observation == null || !observation.SurfaceObservable)
+            {
+                writer.WriteProperty("hostReadiness", "UNOBSERVABLE");
+                return;
+            }
+
+            writer.BeginObject("hostReadiness");
+            writer.WriteProperty("state", observation.State);
+            writer.WriteProperty("addOnState", SecretRedactor.Redact(observation.AddOnState));
+            writer.WriteProperty("lifecycleOperational", observation.LifecycleOperational);
+            writer.WriteProperty("hostAvailable", observation.HostAvailable);
+            writer.WriteProperty("instrumentReady", observation.InstrumentReady);
+            writer.WriteProperty("metadataReady", observation.MetadataReady);
+            writer.WriteProperty("marketDataSubscribed", observation.MarketDataSubscribed);
+            writer.WriteProperty("fullyReady", observation.FullyReady);
+            writer.WriteStringArrayProperty("reasonCodes", SecretRedactor.RedactArray(ToArray(observation.ReasonCodes)));
             writer.EndObject();
         }
 
