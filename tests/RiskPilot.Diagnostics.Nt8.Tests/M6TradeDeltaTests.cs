@@ -579,7 +579,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
                     var session = Session();
                     var consumer = new M6TradeDeltaConsumer(session);
-                    var capture = new MarketDataCapture(r => { consumer.Consume(r); return true; }, () => true, "ES 12-26");
+                    var capture = new MarketDataCapture(r => { consumer.Consume(r); return true; }, () => true, () => "ES 12-26");
                     Assert.True(capture.TrySubscribe());
 
                     // The host reports a print at the ask with the BBO attached to the same event.
@@ -616,7 +616,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
                     var session = Session();
                     var consumer = new M6TradeDeltaConsumer(session);
-                    var capture = new MarketDataCapture(r => { consumer.Consume(r); return true; }, () => true, "ES 12-26");
+                    var capture = new MarketDataCapture(r => { consumer.Consume(r); return true; }, () => true, () => "ES 12-26");
                     Assert.True(capture.TrySubscribe());
 
                     instrument.MarketDepth.RaiseUpdate(new MarketDepthEventArgs

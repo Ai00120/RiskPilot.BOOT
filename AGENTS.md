@@ -745,6 +745,55 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   timing) is **not** provable offline and still needs the manual NT8 acceptance tests in
   `docs/LIFECYCLE_INTEGRATION_AUDIT.md`.
 
+## Operator target-instrument selection & verified environment class (targeted remediation)
+
+- **The target instrument is chosen explicitly by the operator, never auto-discovered.** The
+  host-free model is `Core/Instruments/TargetInstrumentSelection.cs` (observable selected id +
+  available list + `Changed`), the decision rule is the existing
+  `Core/Instruments/InstrumentSelector.cs`, and `Core/Run/IInstrumentSelectionController.cs` is the
+  minimal surface the Diagnostic Center drives. `DiagnosticAddOn` implements it over the
+  read-only `Instrument.All` discovery surface (`Nt8HostDataProvider.TryEnumerateLoadedInstrumentNames`).
+  No component ever picks the first/nearest-expiry contract.
+- **One selection source of truth, read live.** The AddOn owns one `TargetInstrumentSelection` and
+  threads `() => _instrumentSelection.SelectedInstrumentId` (a **live probe**, never a captured
+  string) into both `Nt8HostDataProvider` and `MarketDataCapture`, so a selection the operator makes
+  *after* the AddOn is constructed (at `State.Active`) is honoured by the very next resolution.
+  `RequestedInstrumentId` on the AddOn is now a thin proxy over the same model.
+- **Fail-closed selection statuses** (`InstrumentSelectionStatus`): no selection ⇒ `NOT_CONFIGURED`;
+  a selected contract that is not loaded ⇒ `NOT_LOADED`; an insufficiently specific selection
+  matching >1 loaded contract ⇒ `MULTIPLE_CANDIDATES`; a surface that cannot be enumerated ⇒
+  `SURFACE_UNAVAILABLE`; a stub/mock value ⇒ `STUB_OR_MOCK`. Only an exact, unique match ⇒ `RESOLVED`.
+  A null or **throwing** selection probe is treated as "no selection" (never an implicit instrument).
+- **Re-targeting is idempotent and never duplicates a subscription.** `MarketDataCapture.TrySubscribe`
+  is a no-op while already subscribed to the resolved instrument; on a selection change it calls
+  `DetachInstrumentLocked` before subscribing to the new contract, so two contracts are never
+  subscribed at once. Clearing the selection (or a selection that no longer resolves) detaches and
+  reports the instrument fact unresolved. `Detach()` and the locked helper are the only detach paths.
+- **The picker lives in `Core/Run`.** The WPF `DiagnosticCenterWindow` only renders the shared model
+  (a ComboBox of exact FullNames + a Refresh button + a status line) and writes the operator's
+  choice through the controller; a programmatic repopulation runs under a guard so it is never
+  mistaken for an operator action, and a refresh never changes the current selection. The WPF files
+  are `UseStubs != true`-only, so this is verified by review, not by the offline stub build.
+- **The environment class is derived from the M2-verified target account's own connection mode.**
+  `Core/Identity/EnvironmentClassifier.cs` (`Classify`) is the host-free rule:
+  `Nt8HostDataProvider.DetectEnvironment` resolves the verified target (`TryGetVerifiedTargetAccount`)
+  and classifies from `target.Connection.Options.Mode`; the same helper now backs
+  `AccountRecord.AccountClass`. The previous first-account "Sim*" name heuristic is gone. Fail-closed:
+  no verified target, no connection/options, or an unreadable mode ⇒ `EnvironmentClass.Unknown`
+  (M1 `INCONCLUSIVE`), never a guess and never taken from an unrelated account.
+- Tests: `EnvironmentClassificationTests` (classifier + host adapter over the offline stub surface:
+  verified Simulation ⇒ Simulation; no verified target / unverified Live target / no connection /
+  no accounts ⇒ Unknown; first-account-not-target never drives the class) and the new cases in
+  `InstrumentSelectionTests` (selection model, AddOn refresh/select flow, live probe sees a
+  post-construction selection, throwing probe fails closed, re-target detaches the previous
+  instrument). A green stub run is **not** real-host proof.
+- **Known pre-existing flake (not caused by this work):** `M7StrategyTests.RuntimeIntegration_
+  IngestedStrategyRecord_DrivesM7ObservationAndEvidence` can observe `M7.STRATEGY_SURFACE=INCONCLUSIVE`
+  because `DiagnosticRuntime.Process` increments `Session.RecordProcessed()` **before**
+  `dispatcher.Dispatch(record)`, so a test waiting on `ProcessedCount` may read the accumulator
+  before the M7 consumer wrote it. Reproduced on the untouched baseline (~1/25 runs); left as-is
+  (out of scope).
+
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live

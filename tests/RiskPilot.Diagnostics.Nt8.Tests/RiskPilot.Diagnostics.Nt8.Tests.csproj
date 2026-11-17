@@ -78,6 +78,7 @@
     <Compile Include="NinjaTraderCompatibilityTests.cs" />
     <Compile Include="CompilationRegressionTests.cs" />
     <Compile Include="ZeroDefaultTests.cs" />
+    <Compile Include="EnvironmentClassificationTests.cs" />
   </ItemGroup>
 
 </Project>

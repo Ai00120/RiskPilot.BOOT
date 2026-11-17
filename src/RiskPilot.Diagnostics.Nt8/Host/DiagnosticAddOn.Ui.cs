@@ -42,7 +42,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 {
                     if (_windowManager == null && _viewState != null && _coordinator != null)
                     {
-                        _windowManager = new DiagnosticCenterWindowManager(_viewState, _coordinator, BuildEvidenceSink(), ExportLastRunEvidence);
+                        _windowManager = new DiagnosticCenterWindowManager(_viewState, _coordinator, BuildEvidenceSink(), ExportLastRunEvidence, this);
                     }
 
                     manager = _windowManager;

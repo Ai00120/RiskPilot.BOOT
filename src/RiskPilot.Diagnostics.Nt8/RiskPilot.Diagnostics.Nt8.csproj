@@ -60,6 +60,7 @@
     <Compile Include="Core\Identity\BuildIdentity.cs" />
     <Compile Include="Core\Identity\NinjaTraderCompatibility.cs" />
     <Compile Include="Core\Identity\ProviderIdentity.cs" />
+    <Compile Include="Core\Identity\EnvironmentClassifier.cs" />
     <Compile Include="Core\Identity\AccountIdentityVerifier.cs" />
     <Compile Include="Core\Identity\TargetAccountConnectionVerifier.cs" />
     <Compile Include="Core\Identity\InstrumentIdentityVerifier.cs" />
@@ -103,6 +104,7 @@
     <Compile Include="Core\Models\Observations\DiagnosticSnapshot.cs" />
     <Compile Include="Core\Instruments\CanonicalInstrumentId.cs" />
     <Compile Include="Core\Instruments\InstrumentSelector.cs" />
+    <Compile Include="Core\Instruments\TargetInstrumentSelection.cs" />
     <Compile Include="Core\Session\SessionId.cs" />
     <Compile Include="Core\Session\SessionContext.cs" />
     <Compile Include="Core\Session\RuntimeCounters.cs" />
@@ -127,6 +129,7 @@
     <Compile Include="Core\Run\DiagnosticRunProgress.cs" />
     <Compile Include="Core\Run\DiagnosticRunResult.cs" />
     <Compile Include="Core\Run\IUiDispatcher.cs" />
+    <Compile Include="Core\Run\IInstrumentSelectionController.cs" />
     <Compile Include="Core\Run\SwitchableUiDispatcher.cs" />
     <Compile Include="Core\Run\HostReadiness.cs" />
     <Compile Include="Core\Run\MenuOwnershipRegistry.cs" />

@@ -375,14 +375,14 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
                 // Both components are given the SAME explicit selection.
                 var provider = TestHost.Provider(true, "ES 03-27");
-                var capture = new MarketDataCapture(r => true, () => true, "ES 03-27");
+                var capture = new MarketDataCapture(r => true, () => true, () => "ES 03-27");
 
                 Assert.True(capture.TrySubscribe());
 
                 // The capture subscribed to the selected (back) contract, not the first loaded one.
                 var captured = new List<NormalizedRecord>();
                 var capturingCapture = new MarketDataCapture(
-                    r => { captured.Add(r); return true; }, () => true, "ES 03-27");
+                    r => { captured.Add(r); return true; }, () => true, () => "ES 03-27");
                 Assert.True(capturingCapture.TrySubscribe());
 
                 back.MarketData.RaiseUpdate(new MarketDataEventArgs
@@ -506,6 +506,399 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Assert.Equal(HostReadinessState.AwaitingInstrument, addOn.Readiness.State);
 
                 addOn.SafeDispose();
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        // ---------------- operator selection model (host-free) ----------------
+
+        [Fact]
+        public void SelectionModel_StartsUnselected_NeverPicksFirst()
+        {
+            var model = new TargetInstrumentSelection();
+            model.Refresh(new List<string> { "ES 12-26", "ES 03-27" }, true);
+
+            Assert.False(model.HasSelection);
+            Assert.Null(model.SelectedInstrumentId);
+            Assert.Equal(InstrumentSelectionStatus.NotConfigured, model.Resolution.Status);
+        }
+
+        [Fact]
+        public void SelectionModel_ExplicitSelection_Resolves()
+        {
+            var model = new TargetInstrumentSelection();
+            model.Refresh(new List<string> { "ES 12-26", "ES 03-27" }, true);
+
+            Assert.True(model.Select("ES 03-27"));
+            Assert.True(model.HasSelection);
+            Assert.Equal(InstrumentSelectionStatus.Resolved, model.Resolution.Status);
+            Assert.Equal(1, model.Resolution.SelectedIndex);
+        }
+
+        [Fact]
+        public void SelectionModel_Refresh_DoesNotChangeSelection()
+        {
+            var model = new TargetInstrumentSelection();
+            model.Refresh(new List<string> { "ES 12-26", "ES 03-27" }, true);
+            model.Select("ES 12-26");
+
+            // The available list changes (the selected contract is still present): the selection is
+            // preserved, never silently switched to another contract.
+            model.Refresh(new List<string> { "ES 12-26", "ES 03-27", "ES 06-27" }, true);
+
+            Assert.Equal("ES 12-26", model.SelectedInstrumentId);
+            Assert.Equal(InstrumentSelectionStatus.Resolved, model.Resolution.Status);
+        }
+
+        [Fact]
+        public void SelectionModel_SelectedContractRemoved_IsNotLoaded_NeverReplaced()
+        {
+            var model = new TargetInstrumentSelection();
+            model.Refresh(new List<string> { "ES 12-26", "ES 03-27" }, true);
+            model.Select("ES 12-26");
+
+            model.Refresh(new List<string> { "ES 03-27" }, true);
+
+            Assert.Equal("ES 12-26", model.SelectedInstrumentId);
+            Assert.Equal(InstrumentSelectionStatus.NotLoaded, model.Resolution.Status);
+        }
+
+        [Fact]
+        public void SelectionModel_SurfaceUnavailable_IsSurfaceUnavailable()
+        {
+            var model = new TargetInstrumentSelection();
+            model.Refresh(new List<string>(), false);
+            model.Select("ES 12-26");
+
+            Assert.Equal(InstrumentSelectionStatus.SurfaceUnavailable, model.Resolution.Status);
+        }
+
+        [Fact]
+        public void SelectionModel_Changed_RaisedOnSelectAndRefresh()
+        {
+            var model = new TargetInstrumentSelection();
+            var raised = 0;
+            model.Changed += () => raised++;
+
+            model.Refresh(new List<string> { "ES 12-26" }, true);
+            model.Select("ES 12-26");
+            // A repeat selection of the same value is not a change.
+            model.Select("ES 12-26");
+
+            Assert.Equal(2, raised);
+        }
+
+        [Fact]
+        public void SelectionModel_Clear_DropsSelection()
+        {
+            var model = new TargetInstrumentSelection();
+            model.Refresh(new List<string> { "ES 12-26" }, true);
+            model.Select("ES 12-26");
+
+            Assert.True(model.Clear());
+            Assert.False(model.HasSelection);
+            Assert.Equal(InstrumentSelectionStatus.NotConfigured, model.Resolution.Status);
+        }
+
+        // ---------------- AddOn operator flow over the offline host surface ----------------
+
+        [Fact]
+        public void AddOn_RefreshAvailableInstruments_ListsLoadedContracts()
+        {
+            Reset();
+            try
+            {
+                Instrument.All.Add(EsInstrument("ES 12-26"));
+                Instrument.All.Add(EsInstrument("ES 03-27"));
+
+                var addOn = new DiagnosticAddOn { ReadinessRetryEnabled = false };
+                addOn.ApplyLifecycleState("Active");
+
+                var resolution = addOn.RefreshAvailableInstruments();
+
+                Assert.True(addOn.InstrumentSelection.SurfaceObservable);
+                Assert.Equal(2, addOn.InstrumentSelection.AvailableInstrumentIds.Count);
+                Assert.Contains("ES 12-26", addOn.InstrumentSelection.AvailableInstrumentIds);
+                Assert.Contains("ES 03-27", addOn.InstrumentSelection.AvailableInstrumentIds);
+                Assert.Equal(InstrumentSelectionStatus.NotConfigured, resolution.Status);
+
+                addOn.SafeDispose();
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void AddOn_SelectInstrument_Resolves_AndThreadsToProviderAndCapture()
+        {
+            Reset();
+            try
+            {
+                var front = EsInstrument("ES 12-26");
+                var back = EsInstrument("ES 03-27");
+                Instrument.All.Add(front);
+                Instrument.All.Add(back);
+                Connection.Connections.Add(ConnectedRithmic());
+
+                var addOn = new DiagnosticAddOn { ReadinessRetryEnabled = false };
+                addOn.ApplyLifecycleState("Active");
+                addOn.RefreshAvailableInstruments();
+
+                // The operator explicitly selects the back contract.
+                addOn.SelectInstrument("ES 03-27");
+
+                Assert.Equal("ES 03-27", addOn.RequestedInstrumentId);
+
+                // The live host provider observes the SAME selected contract.
+                var observation = addOn.Provider.GetSnapshot().InstrumentIdentity;
+                Assert.Equal(InstrumentSelectionStatus.Resolved, observation.SelectionStatus);
+                Assert.Equal(1, observation.MatchingInstrumentCount);
+
+                addOn.SafeDispose();
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void AddOn_SelectionMadeAfterConstruction_IsHonouredByLiveProbe()
+        {
+            Reset();
+            try
+            {
+                Instrument.All.Add(EsInstrument("ES 12-26"));
+                Connection.Connections.Add(ConnectedRithmic());
+
+                var addOn = new DiagnosticAddOn { ReadinessRetryEnabled = false };
+                addOn.ApplyLifecycleState("Active");
+
+                // No selection yet: the identity is unproven.
+                Assert.Equal(InstrumentSelectionStatus.NotConfigured,
+                    addOn.Provider.GetSnapshot().InstrumentIdentity.SelectionStatus);
+
+                // The operator selects after the provider was constructed; the live probe must see it.
+                addOn.SelectInstrument("ES 12-26");
+
+                var observation = addOn.Provider.GetSnapshot().InstrumentIdentity;
+                Assert.Equal(InstrumentSelectionStatus.Resolved, observation.SelectionStatus);
+                Assert.Equal(1, observation.MatchingInstrumentCount);
+
+                addOn.SafeDispose();
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void AddOn_SelectUnloadedContract_IsNotLoaded_NeverPass()
+        {
+            Reset();
+            try
+            {
+                Instrument.All.Add(EsInstrument("ES 03-27"));
+                Connection.Connections.Add(ConnectedRithmic());
+
+                var addOn = new DiagnosticAddOn { ReadinessRetryEnabled = false };
+                addOn.ApplyLifecycleState("Active");
+                addOn.RefreshAvailableInstruments();
+                addOn.SelectInstrument("ES 12-26");
+
+                var observation = addOn.Provider.GetSnapshot().InstrumentIdentity;
+                Assert.Equal(InstrumentSelectionStatus.NotLoaded, observation.SelectionStatus);
+                Assert.NotEqual(DiagnosticStatus.PASS, InstrumentIdentityVerifier.Evaluate(observation).Status);
+
+                addOn.SafeDispose();
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void AddOn_ClearSelection_FailsClosed()
+        {
+            Reset();
+            try
+            {
+                Instrument.All.Add(EsInstrument("ES 12-26"));
+                Connection.Connections.Add(ConnectedRithmic());
+
+                var addOn = new DiagnosticAddOn { ReadinessRetryEnabled = false };
+                addOn.ApplyLifecycleState("Active");
+                addOn.SelectInstrument("ES 12-26");
+                addOn.SelectInstrument(null);
+
+                Assert.False(addOn.InstrumentSelection.HasSelection);
+                Assert.Equal(InstrumentSelectionStatus.NotConfigured,
+                    addOn.Provider.GetSnapshot().InstrumentIdentity.SelectionStatus);
+
+                addOn.SafeDispose();
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void AddOn_SelectInstrument_ReTargetsCaptureWithoutDuplicateSubscription()
+        {
+            Reset();
+            try
+            {
+                var front = EsInstrument("ES 12-26");
+                var back = EsInstrument("ES 03-27");
+                Instrument.All.Add(front);
+                Instrument.All.Add(back);
+                Connection.Connections.Add(ConnectedRithmic());
+
+                var addOn = new DiagnosticAddOn { ReadinessRetryEnabled = false };
+                addOn.ApplyLifecycleState("Active");
+
+                // First selection: the capture subscribes to the front contract.
+                addOn.SelectInstrument("ES 12-26");
+                Assert.True(addOn.MarketDataCapture.IsSubscribed);
+
+                // Re-target: the capture detaches the front and subscribes to the back, leaving only
+                // one live subscription (never two contracts at once).
+                addOn.SelectInstrument("ES 03-27");
+                Assert.True(addOn.MarketDataCapture.IsSubscribed);
+
+                // Clearing the selection detaches and fails closed.
+                addOn.SelectInstrument(null);
+                Assert.False(addOn.MarketDataCapture.IsSubscribed);
+
+                addOn.SafeDispose();
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void MarketDataCapture_ReTarget_DetachesPreviousInstrument()
+        {
+            Reset();
+            try
+            {
+                var front = EsInstrument("ES 12-26");
+                var back = EsInstrument("ES 03-27");
+                Instrument.All.Add(front);
+                Instrument.All.Add(back);
+
+                var selected = "ES 12-26";
+                var captured = new List<NormalizedRecord>();
+                var capture = new MarketDataCapture(
+                    r => { captured.Add(r); return true; }, () => true, () => selected);
+
+                Assert.True(capture.TrySubscribe());
+
+                // Re-target to the back contract; the front subscription must be removed.
+                selected = "ES 03-27";
+                Assert.True(capture.TrySubscribe());
+
+                front.MarketData.RaiseUpdate(new MarketDataEventArgs
+                {
+                    Instrument = front,
+                    MarketDataType = MarketDataType.Last,
+                    Price = 5000.0,
+                    Time = new System.DateTime(2026, 11, 12, 8, 0, 0, System.DateTimeKind.Utc)
+                });
+                back.MarketData.RaiseUpdate(new MarketDataEventArgs
+                {
+                    Instrument = back,
+                    MarketDataType = MarketDataType.Last,
+                    Price = 5100.0,
+                    Time = new System.DateTime(2026, 11, 12, 8, 0, 0, System.DateTimeKind.Utc)
+                });
+
+                // Only the newly selected contract's stream was captured.
+                Assert.Single(captured);
+                Assert.Equal("ES 03-27", captured.OfType<MarketDataRecord>().Single().InstrumentId);
+
+                capture.Detach();
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void MarketDataCapture_SelectionCleared_Detaches()
+        {
+            Reset();
+            try
+            {
+                var front = EsInstrument("ES 12-26");
+                Instrument.All.Add(front);
+
+                var selected = "ES 12-26";
+                var capture = new MarketDataCapture(r => true, () => true, () => selected);
+
+                Assert.True(capture.TrySubscribe());
+
+                selected = null;
+                Assert.False(capture.TrySubscribe());
+                Assert.False(capture.IsSubscribed);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Provider_LiveSelectionProbe_SeesSelectionChangedAfterConstruction()
+        {
+            Reset();
+            try
+            {
+                Instrument.All.Add(EsInstrument("ES 12-26"));
+                Instrument.All.Add(EsInstrument("ES 03-27"));
+
+                var selected = "ES 12-26";
+                var provider = TestHost.Provider(() => true, () => selected);
+
+                Assert.Equal(InstrumentSelectionStatus.Resolved,
+                    provider.GetSnapshot().InstrumentIdentity.SelectionStatus);
+
+                selected = "ES 03-27";
+                var observation = provider.GetSnapshot().InstrumentIdentity;
+
+                Assert.Equal(InstrumentSelectionStatus.Resolved, observation.SelectionStatus);
+                Assert.Equal(1, observation.MatchingInstrumentCount);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Provider_ThrowingSelectionProbe_FailsClosed()
+        {
+            Reset();
+            try
+            {
+                Instrument.All.Add(EsInstrument("ES 12-26"));
+
+                var provider = TestHost.Provider(() => true, () => throw new System.InvalidOperationException("boom"));
+                var observation = provider.GetSnapshot().InstrumentIdentity;
+
+                Assert.Equal(InstrumentSelectionStatus.NotConfigured, observation.SelectionStatus);
+                Assert.NotEqual(DiagnosticStatus.PASS, InstrumentIdentityVerifier.Evaluate(observation).Status);
             }
             finally
             {

@@ -35,13 +35,13 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
         private readonly Func<bool> _masterMetadataReady;
         private readonly Func<IReadOnlyList<string>> _lifecycleStates;
-        private readonly string _requestedInstrumentId;
+        private readonly Func<string> _requestedInstrumentIdProbe;
         private readonly ISecurityScanSource _securityScanSource;
         private readonly Func<HostReadinessObservation> _hostReadiness;
         private readonly IReadOnlyDictionary<string, string> _ownerAuthorizedProviderSlots;
 
-        public Nt8HostDataProvider(bool masterMetadataReady, string requestedInstrumentId = null)
-            : this(() => masterMetadataReady, requestedInstrumentId)
+        public Nt8HostDataProvider(bool masterMetadataReady, Func<string> requestedInstrumentIdProbe = null)
+            : this(() => masterMetadataReady, requestedInstrumentIdProbe)
         {
         }
 
@@ -51,8 +51,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// read rather than captured when the AddOn is constructed — an AddOn is constructed at
         /// <c>State.Active</c>, before that point, so a captured value would stay false forever.
         /// </summary>
-        public Nt8HostDataProvider(Func<bool> masterMetadataReady, string requestedInstrumentId = null)
-            : this(masterMetadataReady, null, requestedInstrumentId)
+        public Nt8HostDataProvider(Func<bool> masterMetadataReady, Func<string> requestedInstrumentIdProbe = null)
+            : this(masterMetadataReady, null, requestedInstrumentIdProbe)
         {
         }
 
@@ -63,9 +63,16 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// through its states while the provider lives, so a captured value would freeze at the
         /// first read. A null or throwing probe leaves the lifecycle unobservable, which M1 reports
         /// as INCONCLUSIVE.
+        /// <para>
+        /// <paramref name="requestedInstrumentIdProbe"/> is likewise a live probe: the operator
+        /// selects the target instrument in the Diagnostic Center <em>after</em> the AddOn is
+        /// constructed, so a captured id would never see the selection. It is evaluated on each
+        /// resolution so the operator's current choice always applies. A null or throwing probe is
+        /// treated as "no selection", which fails closed.
+        /// </para>
         /// </summary>
-        public Nt8HostDataProvider(Func<bool> masterMetadataReady, Func<IReadOnlyList<string>> lifecycleStates, string requestedInstrumentId = null)
-            : this(masterMetadataReady, lifecycleStates, null, requestedInstrumentId)
+        public Nt8HostDataProvider(Func<bool> masterMetadataReady, Func<IReadOnlyList<string>> lifecycleStates, Func<string> requestedInstrumentIdProbe = null)
+            : this(masterMetadataReady, lifecycleStates, null, requestedInstrumentIdProbe)
         {
         }
 
@@ -81,8 +88,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             Func<bool> masterMetadataReady,
             Func<IReadOnlyList<string>> lifecycleStates,
             Func<HostReadinessObservation> hostReadiness,
-            string requestedInstrumentId = null)
-            : this(masterMetadataReady, lifecycleStates, hostReadiness, ProviderIdentity.OwnerAuthorizedSlots, requestedInstrumentId)
+            Func<string> requestedInstrumentIdProbe = null)
+            : this(masterMetadataReady, lifecycleStates, hostReadiness, ProviderIdentity.OwnerAuthorizedSlots, requestedInstrumentIdProbe)
         {
         }
 
@@ -99,14 +106,34 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             Func<IReadOnlyList<string>> lifecycleStates,
             Func<HostReadinessObservation> hostReadiness,
             IReadOnlyDictionary<string, string> ownerAuthorizedProviderSlots,
-            string requestedInstrumentId = null)
+            Func<string> requestedInstrumentIdProbe = null)
         {
             _masterMetadataReady = masterMetadataReady ?? (() => false);
             _lifecycleStates = lifecycleStates;
             _hostReadiness = hostReadiness;
             _ownerAuthorizedProviderSlots = ownerAuthorizedProviderSlots ?? ProviderIdentity.OwnerAuthorizedSlots;
-            _requestedInstrumentId = requestedInstrumentId;
+            _requestedInstrumentIdProbe = requestedInstrumentIdProbe;
             _securityScanSource = new FileSystemSecurityScanSource();
+        }
+
+        /// <summary>
+        /// The operator's current explicit target instrument, evaluated live so a selection made
+        /// after the provider was constructed is honoured. A null or throwing probe is "no
+        /// selection" (fail closed), never an implicit instrument.
+        /// </summary>
+        private string RequestedInstrumentId
+        {
+            get
+            {
+                try
+                {
+                    return _requestedInstrumentIdProbe != null ? _requestedInstrumentIdProbe() : null;
+                }
+                catch (Exception)
+                {
+                    return null;
+                }
+            }
         }
 
         /// <summary>
@@ -264,7 +291,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             list.Add(new AccountRecord
             {
                 AccountRef = SyntheticRef.For("account", target.Name),
-                AccountClass = ClassifyAccount(target.Name),
+                AccountClass = ClassifyTargetAccountEnvironment(target),
                 Denomination = SafeString(() => target.Denomination.ToString()),
                 ProviderName = SafeString(() => target.Provider.ToString()),
                 PositionCount = ReadPositionCount(target),
@@ -1229,7 +1256,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// </summary>
         private Instrument ResolveAttestationInstrument()
         {
-            return ResolveLoadedInstrument(_requestedInstrumentId, () => MasterMetadataReady);
+            return ResolveLoadedInstrument(RequestedInstrumentId, () => MasterMetadataReady);
         }
 
         /// <summary>
@@ -1245,6 +1272,53 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             bool surfaceObservable;
             SelectLoadedInstrument(requestedInstrumentId, masterMetadataReady, out resolved, out surfaceObservable);
             return resolved;
+        }
+
+        /// <summary>
+        /// Read-only enumeration of the currently loaded instrument full names, for the operator's
+        /// Diagnostic Center picker. It reads only <c>Instrument.FullName</c> (never the master
+        /// metadata, so it is safe before the data-processing states) and never mutates anything.
+        /// Returns false with an empty list when the discovery surface cannot be enumerated, so the
+        /// UI reports the surface as unobservable rather than showing an empty, misleading list.
+        /// Never throws.
+        /// </summary>
+        public static bool TryEnumerateLoadedInstrumentNames(out IReadOnlyList<string> fullNames)
+        {
+            fullNames = new List<string>();
+            try
+            {
+                var loaded = Instrument.All;
+                if (loaded == null)
+                {
+                    return false;
+                }
+
+                var names = new List<string>();
+                lock (loaded)
+                {
+                    foreach (var instrument in loaded)
+                    {
+                        if (instrument == null)
+                        {
+                            continue;
+                        }
+
+                        var fullName = SafeString(() => instrument.FullName);
+                        if (!string.IsNullOrEmpty(fullName))
+                        {
+                            names.Add(fullName);
+                        }
+                    }
+                }
+
+                fullNames = names;
+                return true;
+            }
+            catch (Exception)
+            {
+                fullNames = new List<string>();
+                return false;
+            }
         }
 
         /// <summary>
@@ -1343,7 +1417,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 Instrument matched;
                 bool surfaceObservable;
                 var selection = SelectLoadedInstrument(
-                    _requestedInstrumentId, () => MasterMetadataReady, out matched, out surfaceObservable);
+                    RequestedInstrumentId, () => MasterMetadataReady, out matched, out surfaceObservable);
 
                 observation.InstrumentSurfaceObservable = surfaceObservable;
                 observation.SelectionStatus = selection.Status;
@@ -1433,7 +1507,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 Instrument instrument;
                 bool surfaceObservable;
                 SelectLoadedInstrument(
-                    _requestedInstrumentId, () => MasterMetadataReady, out instrument, out surfaceObservable);
+                    RequestedInstrumentId, () => MasterMetadataReady, out instrument, out surfaceObservable);
 
                 if (instrument == null)
                 {
@@ -1699,40 +1773,53 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             }
         }
 
-        private static EnvironmentClass DetectEnvironment()
+        /// <summary>
+        /// Derives the environment class from the M2-verified target account's own connection mode.
+        /// The class is a property of the connection mode, and the only account this tool is scoped
+        /// to is the verified target, so the class is never taken from the first enumerated account
+        /// (the previous behaviour, which could PASS from an unrelated account's name). When no
+        /// target is verified, or its mode cannot be read, the class is Unknown (INCONCLUSIVE),
+        /// never a guess.
+        /// </summary>
+        private EnvironmentClass DetectEnvironment()
         {
-            var accounts = Account.All;
-            if (accounts == null)
+            if (!TryGetVerifiedTargetAccount(out var target) || target == null)
             {
                 return EnvironmentClass.Unknown;
             }
 
-            lock (accounts)
-            {
-                foreach (var account in accounts)
-                {
-                    if (account == null || string.IsNullOrEmpty(account.Name))
-                    {
-                        continue;
-                    }
-
-                    return ClassifyAccount(account.Name);
-                }
-            }
-
-            return EnvironmentClass.Unknown;
+            return ClassifyTargetAccountEnvironment(target);
         }
 
-        private static EnvironmentClass ClassifyAccount(string accountName)
+        /// <summary>
+        /// Classifies the environment class of a verified target account from its own connection
+        /// mode. Fail-closed: an unreadable connection, options or mode yields Unknown. The account
+        /// name is never consulted, so a "Sim*" naming convention can never fabricate a class.
+        /// </summary>
+        private static EnvironmentClass ClassifyTargetAccountEnvironment(Account target)
         {
-            if (string.IsNullOrEmpty(accountName))
+            if (target == null)
             {
                 return EnvironmentClass.Unknown;
             }
 
-            return accountName.StartsWith("Sim", StringComparison.OrdinalIgnoreCase)
-                ? EnvironmentClass.Simulation
-                : EnvironmentClass.Live;
+            var connection = target.Connection;
+            if (connection == null)
+            {
+                return EnvironmentClass.Unknown;
+            }
+
+            var options = connection.Options;
+            if (options == null)
+            {
+                return EnvironmentClass.Unknown;
+            }
+
+            var mode = SafeString(() => options.Mode.ToString());
+            var modeObservable = !string.IsNullOrEmpty(mode);
+            var modeIsSimulation = ExpectedAccountIdentity.ModeIsSimulation(mode);
+
+            return EnvironmentClassifier.Classify(true, modeObservable, modeIsSimulation);
         }
 
         private static ConnectionState MapConnectionState(ConnectionStatus status)

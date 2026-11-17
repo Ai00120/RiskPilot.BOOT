@@ -104,7 +104,7 @@ CONNECTION یک عضو `State` نیست و به‌صراحت به **M2** واگ�
 | `M1.LIFECYCLE_PHASES` | فازهای مشاهده‌شده (INITIALIZATION/STARTUP/RUNTIME/SHUTDOWN)؛ CONNECTION به M2 واگذار |
 | `M1.HOST_READINESS` | پنج واقعیتِ جدا (AddOn lifecycle / host / instrument / metadata / market-data subscription)؛ فقط با هر پنج ⇒ `PASS` |
 | `M1.BUILD_MODE` | `UseStubs` و `TargetFramework` |
-| `M1.ENVIRONMENT_CLASS` | Live / Simulation / Unknown |
+| `M1.ENVIRONMENT_CLASS` | Live / Simulation / Unknown — از mode اتصال حساب هدفِ تأییدشدهٔ M2 (نه از نام حساب)؛ بدون هدف تأییدشده ⇒ `Unknown` |
 | `M1.HOST_VERSION` | همیشه `INCONCLUSIVE` (Unobservable) |
 | `M1.HOST_COMPATIBILITY` | وضعیت سازگاری اعلام‌شده (نسخهٔ هدف/حداقل پشتیبانی‌شده)؛ همیشه `INCONCLUSIVE` تا راستی‌آزمایی روی میزبان واقعی (هرگز `PASS` با تغییر داکیومنت) |
 

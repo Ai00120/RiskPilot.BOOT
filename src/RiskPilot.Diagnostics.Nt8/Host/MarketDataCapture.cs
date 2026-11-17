@@ -22,15 +22,15 @@ namespace RiskPilot.Diagnostics.Nt8.Host
     {
         private readonly Func<NormalizedRecord, bool> _ingest;
         private readonly Func<bool> _masterMetadataReady;
-        private readonly string _requestedInstrumentId;
+        private readonly Func<string> _requestedInstrumentIdProbe;
         private readonly Core.Run.HostReadinessTracker _readiness;
 
         private readonly object _gate = new object();
         private Instrument _instrument;
         private bool _subscribed;
 
-        public MarketDataCapture(Func<NormalizedRecord, bool> ingest, Func<bool> masterMetadataReady, string requestedInstrumentId = null)
-            : this(ingest, masterMetadataReady, requestedInstrumentId, null)
+        public MarketDataCapture(Func<NormalizedRecord, bool> ingest, Func<bool> masterMetadataReady, Func<string> requestedInstrumentIdProbe = null)
+            : this(ingest, masterMetadataReady, requestedInstrumentIdProbe, null)
         {
         }
 
@@ -39,37 +39,62 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// readiness fact becomes true (instrument resolved, master metadata readable, streams
         /// attached), so the host can report exactly which fact is still outstanding instead of a
         /// single conflated Boolean.
+        /// <para>
+        /// <paramref name="requestedInstrumentIdProbe"/> is a live probe: the operator selects the
+        /// target instrument in the Diagnostic Center after the capture is constructed, so the
+        /// current selection must be read on each subscription attempt, not captured.
+        /// </para>
         /// </summary>
         public MarketDataCapture(
             Func<NormalizedRecord, bool> ingest,
             Func<bool> masterMetadataReady,
-            string requestedInstrumentId,
+            Func<string> requestedInstrumentIdProbe,
             Core.Run.HostReadinessTracker readiness)
         {
             _ingest = ingest;
             _masterMetadataReady = masterMetadataReady ?? (() => false);
-            _requestedInstrumentId = requestedInstrumentId;
+            _requestedInstrumentIdProbe = requestedInstrumentIdProbe;
             _readiness = readiness;
+        }
+
+        /// <summary>
+        /// The operator's current explicit target instrument, evaluated live. A null or throwing
+        /// probe is "no selection" (fail closed), never an implicit instrument.
+        /// </summary>
+        private string RequestedInstrumentId
+        {
+            get
+            {
+                try
+                {
+                    return _requestedInstrumentIdProbe != null ? _requestedInstrumentIdProbe() : null;
+                }
+                catch (Exception)
+                {
+                    return null;
+                }
+            }
         }
 
         /// <summary>True once the capture subscribed to a resolved instrument's data streams.</summary>
         public bool IsSubscribed { get { lock (_gate) { return _subscribed; } } }
 
         /// <summary>
-        /// Resolves the loaded ES instrument and subscribes to its Level I and Level II streams.
-        /// Returns false (without throwing) when no single ES instrument is loaded yet, so the
-        /// caller can retry once the host reaches a data state. Idempotent: a second call after a
-        /// successful subscription is a no-op.
+        /// Resolves the explicitly selected instrument and subscribes to its Level I and Level II
+        /// streams. Returns false (without throwing) when no single instrument is selected/loaded
+        /// yet, so the caller can retry once the host reaches a data state.
+        /// <para>
+        /// Idempotent for the same target: a repeated call while already subscribed to the resolved
+        /// instrument is a no-op, so the readiness retry loop can never create a duplicate
+        /// subscription. When the operator changes the selection to a different loaded contract,
+        /// the capture detaches from the previous instrument before subscribing to the new one, so
+        /// a re-target never leaves two live subscriptions behind.
+        /// </para>
         /// </summary>
         public bool TrySubscribe()
         {
             lock (_gate)
             {
-                if (_subscribed && _instrument != null)
-                {
-                    return true;
-                }
-
                 try
                 {
                     // The master-metadata readiness gate decides whether MasterInstrument.* is safe to
@@ -91,9 +116,13 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                         _readiness.RecordMetadataReady(metadataReady);
                     }
 
-                    var instrument = Nt8HostDataProvider.ResolveLoadedInstrument(_requestedInstrumentId, _masterMetadataReady);
+                    var instrument = Nt8HostDataProvider.ResolveLoadedInstrument(RequestedInstrumentId, _masterMetadataReady);
                     if (instrument == null)
                     {
+                        // The explicit selection no longer resolves (removed, ambiguous or unset). Detach
+                        // any previous subscription so a stale stream is not kept, and report the
+                        // instrument fact as unresolved (fail closed) rather than keeping a stale one.
+                        DetachInstrumentLocked();
                         if (_readiness != null)
                         {
                             _readiness.RecordInstrumentResolved(false);
@@ -106,6 +135,16 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     {
                         _readiness.RecordInstrumentResolved(true);
                     }
+
+                    // Already subscribed to this exact instrument: nothing to do.
+                    if (_subscribed && ReferenceEquals(_instrument, instrument))
+                    {
+                        return true;
+                    }
+
+                    // The selection changed (or this is the first subscription): drop any previous
+                    // subscription first so two contracts are never subscribed at once.
+                    DetachInstrumentLocked();
 
                     var marketData = instrument.MarketData;
                     var marketDepth = instrument.MarketDepth;
@@ -164,20 +203,27 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// <summary>Detaches from the host events. Safe to call when never subscribed.</summary>
         public void Detach()
         {
-            Instrument instrument;
-            bool subscribed;
             lock (_gate)
             {
-                instrument = _instrument;
-                subscribed = _subscribed;
-                _instrument = null;
-                _subscribed = false;
+                DetachInstrumentLocked();
             }
 
             if (_readiness != null)
             {
                 _readiness.RecordMarketDataSubscribed(false);
             }
+        }
+
+        /// <summary>
+        /// Clears the tracked instrument and detaches its host handlers. Caller must hold
+        /// <see cref="_gate"/>. Safe when never subscribed. Never throws.
+        /// </summary>
+        private void DetachInstrumentLocked()
+        {
+            var instrument = _instrument;
+            var subscribed = _subscribed;
+            _instrument = null;
+            _subscribed = false;
 
             if (!subscribed || instrument == null)
             {
