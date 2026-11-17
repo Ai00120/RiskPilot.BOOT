@@ -260,9 +260,44 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
             WriteLifecycleBlock(writer, dataset);
             WriteHostReadinessBlock(writer, dataset);
             WriteCompatibilityBlock(writer);
+            WriteEnvironmentVerificationChainBlock(writer, dataset);
 
             writer.EndObject();
             return writer.ToString();
+        }
+
+        /// <summary>
+        /// Writes the environment verification chain
+        /// <c>Target Account → Verified Connection → Provider Identity → Environment Classification</c>.
+        /// Each link is written as a boolean plus the chain reason codes, so a reader can see
+        /// exactly which link (if any) is unresolved. The environment class is only reported as
+        /// verified when every link holds; a partial chain writes <c>verified:false</c> and the
+        /// class stays UNKNOWN. It re-evaluates the host-free chain from the snapshot so the
+        /// exported evidence matches the live M1 probe. No raw identity is written.
+        /// </summary>
+        private static void WriteEnvironmentVerificationChainBlock(JsonWriter writer, EvidenceDataset dataset)
+        {
+            var environment = dataset.Environment;
+            var environmentClass = environment != null ? environment.Environment : EnvironmentClass.Unknown;
+            var chain = EnvironmentVerificationChain.Evaluate(
+                dataset.Snapshot != null ? dataset.Snapshot.AccountIdentity : null,
+                dataset.Snapshot != null ? dataset.Snapshot.TargetAccountConnection : null,
+                environmentClass);
+
+            writer.BeginObject("environmentVerificationChain");
+            writer.WriteProperty("verified", chain.FullyVerified);
+            // The class is only reported as verified when every link holds; a partial chain
+            // reports UNKNOWN, so an unresolved link can never present a verified environment.
+            writer.WriteProperty("verifiedEnvironmentClass",
+                chain.FullyVerified ? environmentClass.ToWire() : EnvironmentClass.Unknown.ToWire());
+            writer.BeginObject("links");
+            writer.WriteProperty("targetAccount", chain.AccountVerified);
+            writer.WriteProperty("connectionAssociation", chain.ConnectionVerified);
+            writer.WriteProperty("providerIdentity", chain.ProviderVerified);
+            writer.WriteProperty("environmentClassification", chain.EnvironmentEstablished);
+            writer.EndObject();
+            writer.WriteStringArrayProperty("reasonCodes", SecretRedactor.RedactArray(ToArray(chain.ReasonCodes)));
+            writer.EndObject();
         }
 
         /// <summary>

@@ -37,5 +37,33 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
 
             return connectionModeIsSimulation ? EnvironmentClass.Simulation : EnvironmentClass.Live;
         }
+
+        /// <summary>
+        /// Classifies the environment from the full verification chain
+        /// <c>Target Account → Verified Connection → Provider Identity → Environment</c>. The
+        /// environment class is only established once <b>both</b> the target account identity
+        /// <em>and</em> its connection association are proven: a verified account whose own
+        /// connection binding is unproven (missing, ambiguous, a different connection, a
+        /// disconnected connection or an unreadable mode) stays
+        /// <see cref="EnvironmentClass.Unknown"/>. This is what keeps a class from being
+        /// reported off the back of a partial chain.
+        /// </summary>
+        /// <param name="targetAccountIdentityVerified">True only when the M2 account identity verdict PASSed.</param>
+        /// <param name="connectionAssociationVerified">True only when the M2 association verdict PASSed.</param>
+        /// <param name="connectionModeObservable">True when the target connection's mode was read.</param>
+        /// <param name="connectionModeIsSimulation">The observed mode, when observable.</param>
+        public static EnvironmentClass ClassifyVerifiedChain(
+            bool targetAccountIdentityVerified,
+            bool connectionAssociationVerified,
+            bool connectionModeObservable,
+            bool connectionModeIsSimulation)
+        {
+            if (!targetAccountIdentityVerified || !connectionAssociationVerified)
+            {
+                return EnvironmentClass.Unknown;
+            }
+
+            return Classify(true, connectionModeObservable, connectionModeIsSimulation);
+        }
     }
 }

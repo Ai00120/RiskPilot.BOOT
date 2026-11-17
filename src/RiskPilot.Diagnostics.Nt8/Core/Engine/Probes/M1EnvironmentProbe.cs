@@ -59,22 +59,48 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             results.Add(apiCheck);
 
             var environment = context.DataProvider.GetEnvironment() ?? new EnvironmentRecord();
-            var environmentObserved = environment.Environment != EnvironmentClass.Unknown;
-            var envCheck = (environmentObserved
+
+            // The environment class is only a proven fact when the whole chain holds:
+            // Target Account → Verified Connection → Provider Identity → Environment. The class is
+            // reported PASS only when every link is verified; a class derived from an unresolved
+            // chain stays INCONCLUSIVE (never a verified environment).
+            var chain = EnvironmentVerificationChain.Evaluate(
+                snapshot != null ? snapshot.AccountIdentity : null,
+                snapshot != null ? snapshot.TargetAccountConnection : null,
+                environment.Environment);
+            var chainVerified = chain.FullyVerified;
+
+            var envCheck = (chainVerified
                     ? DiagnosticResult.Pass(ModuleId, "M1.ENVIRONMENT_CLASS", correlation, now)
                     : DiagnosticResult.Inconclusive(ModuleId, "M1.ENVIRONMENT_CLASS", correlation, now))
-                .WithReasonCode(environmentObserved ? "ENVIRONMENT_CLASS_OBSERVED" : "ENVIRONMENT_CLASS_UNKNOWN")
-                .WithObservation("environment=" + environment.Environment.ToWire())
+                .WithReasonCode(ToArray(chain.ReasonCodes, "CHAIN_TARGET_ACCOUNT_VERIFIED=" + chain.AccountVerified,
+                    "CHAIN_CONNECTION_ASSOCIATION_VERIFIED=" + chain.ConnectionVerified,
+                    "CHAIN_PROVIDER_IDENTITY_VERIFIED=" + chain.ProviderVerified,
+                    "CHAIN_ENVIRONMENT_ESTABLISHED=" + chain.EnvironmentEstablished))
+                .WithObservation("environment=" + environment.Environment.ToWire()
+                    + " chain=" + EnvironmentVerificationChain.TargetAccountLink
+                    + "->" + EnvironmentVerificationChain.ConnectionAssociationLink
+                    + "->" + EnvironmentVerificationChain.ProviderIdentityLink
+                    + "->" + EnvironmentVerificationChain.EnvironmentClassificationLink)
                 .WithSource(FindingFactory.SourcePublicApi)
-                .WithMethod("Derived from the M2-verified target account's own connection mode (Simulation/Live).")
-                .WithLimitation("The environment class is taken only from the verified target account's connection mode; with no verified target it is Unknown, never inferred from an account name.")
-                .WithNextAction(environmentObserved
+                .WithMethod("Derived from the M2-verified target account's own connection mode (Simulation/Live), "
+                    + "gated on the verified chain Target Account → Verified Connection → Provider Identity → Environment.")
+                .WithLimitation("The environment class is taken only from the verified target account's connection "
+                    + "mode and only when its connection association and provider identity are also verified; with no "
+                    + "verified target, an unproven association, or an unresolved provider it is Unknown, never inferred "
+                    + "from an account name or a connection display name.")
+                .WithNextAction(chainVerified
                     ? "None."
-                    : "Verify the target account and its connection so the environment class becomes observable.")
+                    : "Verify the target account and its connection association so the environment class becomes observable.")
                 .WithEvidence(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "environment=" + environment.Environment.ToWire(), now))
-                .WithRemediation(environmentObserved
+                .WithEvidence(
+                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "chainTargetAccountVerified=" + chain.AccountVerified, now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "chainConnectionAssociationVerified=" + chain.ConnectionVerified, now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "chainProviderIdentityVerified=" + chain.ProviderVerified, now),
+                    DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "chainEnvironmentEstablished=" + chain.EnvironmentEstablished, now))
+                .WithRemediation(chainVerified
                     ? "Environment class recorded from the verified target account's connection mode."
-                    : "No verified target account exposed the environment class; it cannot be proven.");
+                    : "The environment verification chain is incomplete; the class cannot be proven.");
             results.Add(envCheck);
 
             results.Add(BuildHostVersionCheck(correlation, now));
@@ -408,6 +434,23 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             }
 
             return array;
+        }
+
+        /// <summary>Concatenates the chain reason codes with the extra codes (no truncation).</summary>
+        private static string[] ToArray(IList<string> values, params string[] extra)
+        {
+            var list = new List<string>();
+            if (values != null)
+            {
+                list.AddRange(values);
+            }
+
+            if (extra != null)
+            {
+                list.AddRange(extra);
+            }
+
+            return list.ToArray();
         }
 
         private DiagnosticResult BuildCapabilityCheck(RuntimeObservation runtime, string correlation, DateTime now)
