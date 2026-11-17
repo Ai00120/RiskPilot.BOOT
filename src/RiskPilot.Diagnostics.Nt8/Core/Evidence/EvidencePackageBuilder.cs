@@ -359,11 +359,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
         }
 
         /// <summary>
-        /// Writes the M1 host-readiness block: the five separated readiness facts and the derived
-        /// state. It re-evaluates nothing — the observation is already derived by the host-free
-        /// tracker — but it writes each fact individually so a reader sees exactly which one is
-        /// outstanding. With no readiness surface the block is written as UNOBSERVABLE, never
-        /// fabricated.
+        /// Writes the M1 host-readiness block: the separated readiness facts, each with its own
+        /// three-valued state, and the derived state. It re-evaluates nothing — the observation is
+        /// already derived by the host-free tracker — but it writes each fact individually so a
+        /// reader sees exactly which one is outstanding. With no readiness surface the block is
+        /// written as UNOBSERVABLE, never fabricated.
         /// </summary>
         private static void WriteHostReadinessBlock(JsonWriter writer, EvidenceDataset dataset)
         {
@@ -376,12 +376,17 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
 
             writer.BeginObject("hostReadiness");
             writer.WriteProperty("state", observation.State);
+            writer.WriteProperty("epoch", observation.Epoch);
             writer.WriteProperty("addOnState", SecretRedactor.Redact(observation.AddOnState));
-            writer.WriteProperty("lifecycleOperational", observation.LifecycleOperational);
-            writer.WriteProperty("hostAvailable", observation.HostAvailable);
-            writer.WriteProperty("instrumentReady", observation.InstrumentReady);
-            writer.WriteProperty("metadataReady", observation.MetadataReady);
-            writer.WriteProperty("marketDataSubscribed", observation.MarketDataSubscribed);
+            writer.WriteProperty("hostOperational", observation.HostOperational.ToWire());
+            writer.WriteProperty("hostAvailable", observation.HostAvailable.ToWire());
+            writer.WriteProperty("metadataReadAllowed", observation.MetadataReadAllowed.ToWire());
+            writer.WriteProperty("instrumentResolved", observation.InstrumentResolved.ToWire());
+            writer.WriteProperty("metadataObserved", observation.MetadataObserved.ToWire());
+            writer.WriteProperty("accountVerified", observation.AccountVerified.ToWire());
+            writer.WriteProperty("connectionVerified", observation.ConnectionVerified.ToWire());
+            writer.WriteProperty("marketDataSubscribed", observation.MarketDataSubscribed.ToWire());
+            writer.WriteProperty("marketDataObserved", observation.MarketDataObserved.ToWire());
             writer.WriteProperty("fullyReady", observation.FullyReady);
             writer.WriteStringArrayProperty("reasonCodes", SecretRedactor.RedactArray(ToArray(observation.ReasonCodes)));
             writer.EndObject();

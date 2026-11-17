@@ -456,8 +456,10 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Instrument.All.Add(EsInstrument("ES 12-26"));
 
                 var readiness = addOn.PollReadinessOnce();
-                Assert.True(readiness.InstrumentReady);
-                Assert.True(readiness.FullyReady);
+                Assert.True(readiness.InstrumentResolved.IsSatisfied());
+                Assert.True(readiness.MetadataObserved.IsSatisfied());
+                // Readiness as a whole still requires the account/connection and observed market data.
+                Assert.False(readiness.FullyReady);
 
                 addOn.SafeDispose();
             }

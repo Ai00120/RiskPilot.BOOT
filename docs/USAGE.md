@@ -52,9 +52,46 @@ package.
 | **M4** | Instrument attestation / D-078 field approval. |
 | **M5** | DOM & market data: snapshot sync, out-of-bounds updates, data integrity. |
 | **M6** | TradeDelta / OrderFlow: trade-stream observability, direction provenance, completeness, readiness. |
-| **M7** | Strategies / risk gate: strategy surface and candidate rejection. |
+| **M7** | Strategies / risk gate: strategy surface and candidate rejection. BOOT ships no strategy producer, so M7 reports `INCONCLUSIVE` until an external read-only source is supplied (see `docs/M7_STRATEGY_INTEGRATION.md`). |
 | **M8** | Safety / acceptance: trading-disabled evidence, read-only posture, static safety scan. |
 | **M9** | Post-trade audit: order/execution/position surface and correlation timing. |
+
+## Host readiness semantics
+
+`M1.HOST_READINESS` is not a single Boolean. It reports **nine independent facts**, each with its
+own three-valued state (`SATISFIED` / `UNSATISFIED` / `UNKNOWN`), and is `PASS` only when every fact
+holds. Reaching `Active` never implies the metadata was read; a resolved instrument never implies
+market data arrived; a successful subscription never implies events; an account in `Account.All`
+never implies verification; a connected provider never implies a verified target-account
+association.
+
+| Fact | Proven by |
+| --- | --- |
+| `hostOperational` | the AddOn reached its operational lifecycle state (`Active`) |
+| `hostAvailable` | the NinjaTrader host object model is reachable |
+| `metadataReadAllowed` | the lifecycle permits attempting the metadata read |
+| `instrumentResolved` | the **explicitly selected** target instrument resolved uniquely |
+| `metadataObserved` | the required metadata was actually read from the host adapter |
+| `accountVerified` | the target account's identity evidence was verified (M2) |
+| `connectionVerified` | the account→connection association and connection state were verified (M2) |
+| `marketDataSubscribed` | the Level I/II subscriptions were established |
+| `marketDataObserved` | actual market-data events were received |
+
+The overall state is one of `NOT_OBSERVED`, `ADDON_NOT_OPERATIONAL`, `ADDON_SHUTTING_DOWN`,
+`AWAITING_HOST`, `AWAITING_METADATA_READ`, `AWAITING_INSTRUMENT`, `AWAITING_METADATA`,
+`AWAITING_ACCOUNT`, `AWAITING_CONNECTION`, `AWAITING_SUBSCRIPTION`, `AWAITING_MARKET_DATA` or
+`READY`. A restart begins a new lifecycle **epoch** that discards every fact observed before
+termination, and a reconnect invalidates the connection/stream facts, so readiness is never
+`PASS` on stale or invalidated evidence. The same facts are exported in `environment.json` under
+`hostReadiness`.
+
+## Verifying against a real host
+
+The step-by-step BOOT-only NinjaTrader acceptance procedure is in
+`docs/NT8_ACCEPTANCE_RUNBOOK.md`. It covers AddOn load, lifecycle, explicit instrument selection,
+identity/venue, multiple contracts, account and connection association, provider identity,
+LIVE/SIM classification, Level I/II observation, reconnect, shutdown/restart, evidence export and
+fail-closed behavior. It never asks the operator to submit an order or enable trading.
 
 ## Exporting the evidence package
 

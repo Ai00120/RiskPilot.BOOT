@@ -40,6 +40,16 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// <summary>Always true: this tool never enables trading.</summary>
         public const bool TradingDisabled = true;
 
+        /// <summary>
+        /// The Owner-authorized provider placeholder-slot → vendor mapping. It defaults to the
+        /// fail-closed empty mapping (<see cref="Core.Identity.ProviderIdentity.OwnerAuthorizedSlots"/>),
+        /// so production never resolves a generic slot (for example <c>Provider14</c>) to a vendor.
+        /// A host or a test may set a reviewed mapping before the AddOn initialises; it is only ever
+        /// a lookup, never a mutation of the host connection.
+        /// </summary>
+        public System.Collections.Generic.IReadOnlyDictionary<string, string> OwnerAuthorizedProviderSlots { get; set; }
+            = Core.Identity.ProviderIdentity.OwnerAuthorizedSlots;
+
         protected override void OnStateChange()
         {
             ApplyLifecycleState(State.ToString());
@@ -65,6 +75,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 return;
             }
 
+            var previousState = _readiness.AddOnState;
+
             lock (_gate)
             {
                 _lifecycleStates.Add(state);
@@ -76,6 +88,10 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             switch (state)
             {
                 case "SetDefaults":
+                    // The start of a lifecycle sequence begins a new readiness epoch: every fact
+                    // observed in a previous epoch is discarded, so a restarted AddOn can never be
+                    // reported ready on stale facts.
+                    _readiness.BeginEpoch();
                     Name = BuildIdentity.ProductName;
                     Description = "Read-only diagnostics and host acceptance for NinjaTrader 8. Trading=Disabled.";
                     break;
@@ -86,20 +102,28 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     break;
 
                 case "Active":
+                    // A restart after termination begins a new epoch too (an AddOn may be
+                    // re-initialised without a fresh SetDefaults).
+                    if (Core.Identity.AddOnLifecycle.IsShutdown(previousState))
+                    {
+                        _readiness.BeginEpoch();
+                        _readiness.RecordAddOnState(state);
+                    }
+
                     SafeInitialize();
                     SafeStart();
                     // The host object model is reachable from Active onward. Record it and begin the
                     // bounded readiness loop, because the instrument/market-data surface can appear
                     // after Active (the host loads instruments asynchronously). The loop is
                     // idempotent and stops once fully ready or the budget is exhausted.
-                    _readiness.RecordHostAvailable(true);
+                    _readiness.RecordHostAvailable(Core.Models.Observations.ReadinessFactState.Satisfied);
                     _hostReachable = true;
                     StartReadinessLoop();
                     break;
 
                 case "Terminated":
                     StopReadinessLoop();
-                    _readiness.RecordHostAvailable(false);
+                    _readiness.RecordHostAvailable(Core.Models.Observations.ReadinessFactState.Unsatisfied);
                     _hostReachable = false;
                     SafeStop();
                     SafeDispose();
@@ -207,10 +231,15 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     //
                     // The lifecycle transitions are likewise supplied as a live probe so M1 sees the
                     // states the AddOn has reached by the time each pass runs.
+                    //
+                    // OwnerAuthorizedProviderSlots is the Owner-authorized placeholder-slot -> vendor
+                    // mapping. It defaults to the fail-closed empty mapping (production never guesses a
+                    // slot -> vendor identity); a reviewed mapping can be supplied before Active.
                     var provider = new Nt8HostDataProvider(
                         () => HostIsLive,
                         () => LifecycleStates,
                         () => _readiness.Observe(),
+                        OwnerAuthorizedProviderSlots,
                         () => _instrumentSelection.SelectedInstrumentId);
                     _provider = provider;
                     _runtime = new DiagnosticRuntime(provider, SystemClock.Instance, 4096, 8192);
@@ -385,13 +414,57 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         }
 
         /// <summary>
+        /// Invalidates the connection- and stream-dependent readiness facts after a connection
+        /// loss/reconnect, and detaches the market-data capture so the next probe re-subscribes to a
+        /// fresh stream. Readiness can never remain satisfied on a subscription or a connection that
+        /// no longer holds. It is read-only: it only detaches event handlers and clears facts.
+        /// </summary>
+        public void InvalidateReadinessForReconnect()
+        {
+            MarketDataCapture capture;
+            lock (_gate)
+            {
+                capture = _marketDataCapture;
+            }
+
+            if (capture != null)
+            {
+                try
+                {
+                    capture.Detach();
+                }
+                catch (Exception)
+                {
+                    // Detach never throws; a failure leaves the process to exit with the host.
+                }
+            }
+
+            _readiness.InvalidateStreamFacts();
+        }
+
+        /// <summary>
         /// The live readiness observation for M1. It reflects the separated readiness facts
-        /// (AddOn lifecycle, host availability, metadata readiness, instrument readiness and
-        /// market-data subscription). Exposed so the window/tests can read the exact state.
+        /// (AddOn lifecycle, host availability, metadata-read permission, instrument resolution,
+        /// metadata observation, account/connection verification, market-data subscription and
+        /// market-data observation). Exposed so the window/tests can read the exact state.
         /// </summary>
         public Core.Models.Observations.HostReadinessObservation Readiness
         {
-            get { return _readiness.Observe(); }
+            get
+            {
+                Nt8HostDataProvider provider;
+                lock (_gate)
+                {
+                    provider = _provider;
+                }
+
+                // Single source of truth: once the provider exists, the readiness the operator sees is
+                // the same observation the snapshot exports (tracker facts plus the derived
+                // account/connection verification). Before Active there is no provider yet, so the raw
+                // tracker observation is reported (never ready: the lifecycle is not operational).
+                var observation = provider != null ? provider.ReadHostReadiness() : null;
+                return observation ?? _readiness.Observe();
+            }
         }
 
         /// <summary>

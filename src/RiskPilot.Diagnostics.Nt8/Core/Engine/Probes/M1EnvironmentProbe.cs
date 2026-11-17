@@ -327,12 +327,17 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
 
         /// <summary>
         /// Reports the separated host-readiness facts: the AddOn lifecycle state, whether the
-        /// NinjaTrader host object model is reachable, whether the resolved instrument's master
-        /// metadata is readable, whether a target instrument was resolved and whether the Level I/II
-        /// market-data streams are attached. The five concepts are reported <b>individually</b> so a
-        /// reader can see exactly which one is outstanding; the check is PASS only when all five
-        /// hold, and INCONCLUSIVE (never PASS) when no readiness surface was supplied. This is the
-        /// explicit guard against reporting the host ready merely because the AddOn was constructed.
+        /// NinjaTrader host object model is reachable, whether the lifecycle permits reading host
+        /// metadata, whether the explicitly selected target instrument was resolved, whether the
+        /// required metadata was actually read, whether the target account and its connection were
+        /// verified, whether the Level I/II streams are attached and whether actual market-data
+        /// events were received. The facts are reported <b>individually</b> and each carries its own
+        /// three-valued state so a reader can see exactly which one is outstanding; the check is
+        /// PASS only when every fact holds, and INCONCLUSIVE (never PASS) when no readiness surface
+        /// was supplied. This is the explicit guard against reporting the host ready merely because
+        /// the AddOn was constructed: reaching Active never implies the metadata was read, a resolved
+        /// instrument never implies market data arrived, and an account in <c>Account.All</c> never
+        /// implies verification.
         /// </summary>
         private DiagnosticResult BuildHostReadinessCheck(DiagnosticSnapshot snapshot, string correlation, DateTime now)
         {
@@ -354,11 +359,15 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             var evidence = new List<DiagnosticEvidence>
             {
                 DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "addOnState=" + (string.IsNullOrEmpty(observation.AddOnState) ? "UNKNOWN" : observation.AddOnState), now),
-                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "lifecycleOperational=" + observation.LifecycleOperational, now),
-                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "hostAvailable=" + observation.HostAvailable, now),
-                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "instrumentReady=" + observation.InstrumentReady, now),
-                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "metadataReady=" + observation.MetadataReady, now),
-                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "marketDataSubscribed=" + observation.MarketDataSubscribed, now)
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "hostOperational=" + observation.HostOperational.ToWire(), now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "hostAvailable=" + observation.HostAvailable.ToWire(), now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "metadataReadAllowed=" + observation.MetadataReadAllowed.ToWire(), now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "instrumentResolved=" + observation.InstrumentResolved.ToWire(), now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "metadataObserved=" + observation.MetadataObserved.ToWire(), now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "accountVerified=" + observation.AccountVerified.ToWire(), now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "connectionVerified=" + observation.ConnectionVerified.ToWire(), now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "marketDataSubscribed=" + observation.MarketDataSubscribed.ToWire(), now),
+                DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "marketDataObserved=" + observation.MarketDataObserved.ToWire(), now)
             };
 
             var ready = observation.FullyReady;
@@ -371,21 +380,29 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 .WithReasonCode(ToArray(observation.ReasonCodes))
                 .WithObservation("state=" + observation.State
                     + " addOnState=" + (string.IsNullOrEmpty(observation.AddOnState) ? "UNKNOWN" : observation.AddOnState)
-                    + " lifecycleOperational=" + observation.LifecycleOperational
-                    + " hostAvailable=" + observation.HostAvailable
-                    + " instrumentReady=" + observation.InstrumentReady
-                    + " metadataReady=" + observation.MetadataReady
-                    + " marketDataSubscribed=" + observation.MarketDataSubscribed)
+                    + " hostOperational=" + observation.HostOperational.ToWire()
+                    + " hostAvailable=" + observation.HostAvailable.ToWire()
+                    + " metadataReadAllowed=" + observation.MetadataReadAllowed.ToWire()
+                    + " instrumentResolved=" + observation.InstrumentResolved.ToWire()
+                    + " metadataObserved=" + observation.MetadataObserved.ToWire()
+                    + " accountVerified=" + observation.AccountVerified.ToWire()
+                    + " connectionVerified=" + observation.ConnectionVerified.ToWire()
+                    + " marketDataSubscribed=" + observation.MarketDataSubscribed.ToWire()
+                    + " marketDataObserved=" + observation.MarketDataObserved.ToWire())
                 .WithSource(FindingFactory.SourcePublicApi)
-                .WithMethod("Evaluated the five separated readiness facts (AddOn lifecycle, host availability, "
-                    + "instrument readiness, metadata readiness and market-data subscription) reported by the host layer.")
-                .WithLimitation("Readiness is only ever what the observed facts prove. A run before the instrument is "
-                    + "loaded, or before its metadata is readable, stays INCONCLUSIVE; the AddOn reaching Active alone is "
-                    + "never treated as readiness.")
+                .WithMethod("Evaluated the separated readiness facts (AddOn lifecycle, host availability, "
+                    + "metadata-read permission, instrument resolution, metadata observation, target account "
+                    + "verification, connection verification, market-data subscription and market-data "
+                    + "observation) reported by the host layer. No fact is derived from another without evidence.")
+                .WithLimitation("Readiness is only ever what the observed facts prove. An AddOn reaching Active "
+                    + "never implies the metadata was read; a resolved instrument never implies market data was "
+                    + "received; an account in Account.All never implies verification. Any unobserved fact keeps "
+                    + "the check INCONCLUSIVE.")
                 .WithNextAction(ready
                     ? "None."
-                    : "Wait for the host to load the target instrument and its metadata, then re-run (the readiness loop "
-                        + "retries automatically while the AddOn is live).")
+                    : "Wait for the host to load the target instrument and its metadata, verify the account and "
+                        + "connection, and observe market data, then re-run (the readiness loop retries "
+                        + "automatically while the AddOn is live).")
                 .WithEvidence(evidence.ToArray());
         }
 

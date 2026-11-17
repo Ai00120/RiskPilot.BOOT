@@ -509,6 +509,42 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   a missing/empty BOOT directory (unavailable, never PASS); an unreadable directory/file (incomplete,
   never PASS); and M8 reporting `INCONCLUSIVE` for an incomplete source set.
 
+## P4 host-readiness evidence (nine facts, epochs, invalidation)
+
+- `M1.HOST_READINESS` is not a Boolean. `Core/Run/HostReadiness.cs` defines the independent facts
+  (`HostReadinessFacts`), the host-free derivation (`HostReadinessDerivation.AccountVerified` /
+  `.ConnectionVerified`), the evaluator (`HostReadinessEvaluator`) and the thread-safe
+  `HostReadinessTracker`. `Core/Models/Observations/HostReadinessObservation.cs` carries the
+  three-valued `ReadinessFactState` (`Unknown`/`Satisfied`/`Unsatisfied`) and the `HostReadinessState`
+  labels. Nine facts: `hostOperational`, `hostAvailable`, `metadataReadAllowed`, `instrumentResolved`,
+  `metadataObserved`, `accountVerified`, `connectionVerified`, `marketDataSubscribed`,
+  `marketDataObserved`. **No fact is derived from another without evidence** — the old model recorded
+  `metadataReady` from the lifecycle gate, so Active alone looked metadata-ready. `FullyReady` is true
+  only when every fact is `Satisfied`.
+- Who records what: the AddOn records `hostOperational` (via `AddOnState`) and `hostAvailable`
+  (`ApplyLifecycleState`); `MarketDataCapture.TrySubscribe` records `metadataReadAllowed`
+  (the lifecycle gate), `instrumentResolved` and `metadataObserved` (via `ReadMetadataObserved`,
+  which returns Unsatisfied on a throwing getter) and `marketDataSubscribed`; `OnMarketData`/
+  `OnMarketDepth` record `marketDataObserved`; `Detach` clears the subscription+observed facts.
+  `Nt8HostDataProvider.BuildHostReadinessObservation` overlays `accountVerified`/`connectionVerified`
+  from the M2 `AccountIdentityObservation` / `TargetAccountConnectionObservation` (so an account in
+  `Account.All` is never verification and a connected provider is never a verified association) and
+  re-derives the overall state.
+- **Epoch + invalidation.** `BeginEpoch` (driven from `SetDefaults` and from `Active` after a
+  `Terminated`) clears every fact, so a restart never inherits readiness. `InvalidateStreamFacts`
+  (driven by `DiagnosticAddOn.InvalidateReadinessForReconnect`) clears `connectionVerified` /
+  `marketDataSubscribed` / `marketDataObserved`. The exported `hostReadiness` block carries `epoch`.
+- `DiagnosticAddOn.Readiness` delegates to `Nt8HostDataProvider.ReadHostReadiness()` once the
+  provider exists (single source of truth with the snapshot/evidence); before Active it reports the
+  raw tracker observation. `OwnerAuthorizedProviderSlots` is a new AddOn input, **default empty**
+  (fail-closed), threaded into the provider so the AddOn is never a slot-mapping leak.
+- `environment.json` `hostReadiness` writes each fact as its `SATISFIED`/`UNSATISFIED`/`UNKNOWN`
+  wire string (`ReadinessFactStates.ToWire`), never a Boolean.
+- M7 ships no producer: `DiagnosticAddOn.StrategyDiagnosticSource` is null by default, so M7 stays
+  `INCONCLUSIVE` (never a fabricated PASS). The read-only boundary and producer responsibilities are
+  in `docs/M7_STRATEGY_INTEGRATION.md`. The real-host acceptance procedure is
+  `docs/NT8_ACCEPTANCE_RUNBOOK.md` (procedure only — not executed from the offline build env).
+
 ## M1 lifecycle diagnostics (P9 — lifecycle ownership)
 
 - M1 is the **single owner** of the AddOn lifecycle surface. The host records every `State` it sees

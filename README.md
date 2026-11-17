@@ -163,6 +163,20 @@ Acceptance is reported as three independent subjects and never collapsed into on
 
 A successful tool build is **not** a RiskPilot.BOT acceptance.
 
+### Host readiness and real-host verification
+
+`M1.HOST_READINESS` reports nine independent, evidence-based readiness facts (each three-valued:
+`SATISFIED` / `UNSATISFIED` / `UNKNOWN`) and is `PASS` only when every fact holds — reaching `Active`
+never implies the metadata was read, a resolved instrument never implies market data, and an account
+in `Account.All` never implies verification. See [`docs/USAGE.md`](docs/USAGE.md) for the fact list.
+A restart discards stale facts (a new lifecycle epoch) and a reconnect invalidates the connection
+and stream facts, so readiness is never `PASS` on invalidated evidence.
+
+The step-by-step BOOT-only real-host procedure is
+[`docs/NT8_ACCEPTANCE_RUNBOOK.md`](docs/NT8_ACCEPTANCE_RUNBOOK.md). M7 stays `INCONCLUSIVE` because
+BOOT ships no strategy producer; the neutral read-only integration boundary is
+[`docs/M7_STRATEGY_INTEGRATION.md`](docs/M7_STRATEGY_INTEGRATION.md).
+
 ## Target environment
 
 NinjaTrader 8.1.9.0 (64-bit) — minimum supported 8.1.8.4 — / .NET Framework 4.8 / C# 8.0, CME ES

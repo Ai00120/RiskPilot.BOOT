@@ -281,18 +281,22 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             {
                 SurfaceObservable = true,
                 AddOnState = "Active",
-                LifecycleOperational = true,
-                HostAvailable = true,
-                InstrumentReady = true,
-                MetadataReady = true,
-                MarketDataSubscribed = true,
+                HostOperational = ReadinessFactState.Satisfied,
+                HostAvailable = ReadinessFactState.Satisfied,
+                MetadataReadAllowed = ReadinessFactState.Satisfied,
+                InstrumentResolved = ReadinessFactState.Satisfied,
+                MetadataObserved = ReadinessFactState.Satisfied,
+                AccountVerified = ReadinessFactState.Satisfied,
+                ConnectionVerified = ReadinessFactState.Satisfied,
+                MarketDataSubscribed = ReadinessFactState.Satisfied,
+                MarketDataObserved = ReadinessFactState.Satisfied,
                 FullyReady = true,
                 State = HostReadinessState.Ready
             };
         }
 
         [Fact]
-        public void M1_HostReadiness_AllFiveFacts_IsPass()
+        public void M1_HostReadiness_AllFacts_IsPass()
         {
             var provider = new FakeDataProvider
             {
@@ -304,7 +308,8 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.Equal(DiagnosticStatus.PASS, check.Status);
             Assert.Contains("state=READY", check.Observation);
             Assert.Contains("addOnState=Active", check.Observation);
-            Assert.Contains("hostAvailable=True", check.Observation);
+            Assert.Contains("hostAvailable=SATISFIED", check.Observation);
+            Assert.Contains("metadataObserved=SATISFIED", check.Observation);
         }
 
         [Fact]
@@ -320,13 +325,17 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     {
                         SurfaceObservable = true,
                         AddOnState = "Active",
-                        LifecycleOperational = true,
-                        HostAvailable = true,
-                        InstrumentReady = false,
-                        MetadataReady = false,
-                        MarketDataSubscribed = false,
+                        HostOperational = ReadinessFactState.Satisfied,
+                        HostAvailable = ReadinessFactState.Satisfied,
+                        MetadataReadAllowed = ReadinessFactState.Unknown,
+                        InstrumentResolved = ReadinessFactState.Unknown,
+                        MetadataObserved = ReadinessFactState.Unknown,
+                        AccountVerified = ReadinessFactState.Unknown,
+                        ConnectionVerified = ReadinessFactState.Unknown,
+                        MarketDataSubscribed = ReadinessFactState.Unknown,
+                        MarketDataObserved = ReadinessFactState.Unknown,
                         FullyReady = false,
-                        State = HostReadinessState.AwaitingInstrument
+                        State = HostReadinessState.AwaitingMetadataRead
                     }
                 }
             };
@@ -334,8 +343,8 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             var results = new M1EnvironmentProbe().Evaluate(Context(provider));
             var check = Find(results, "M1.HOST_READINESS");
             Assert.Equal(DiagnosticStatus.INCONCLUSIVE, check.Status);
-            Assert.Contains("state=AWAITING_INSTRUMENT", check.Observation);
-            Assert.Contains("instrumentReady=False", check.Observation);
+            Assert.Contains("state=AWAITING_METADATA_READ", check.Observation);
+            Assert.Contains("metadataObserved=UNKNOWN", check.Observation);
         }
 
         [Fact]

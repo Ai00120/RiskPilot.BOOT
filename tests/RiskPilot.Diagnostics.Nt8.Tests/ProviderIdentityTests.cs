@@ -9,6 +9,7 @@ using RiskPilot.Diagnostics.Nt8.Core.Result;
 using RiskPilot.Diagnostics.Nt8.Core.Security;
 using RiskPilot.Diagnostics.Nt8.Core.Session;
 using RiskPilot.Diagnostics.Nt8.Core.Status;
+using RiskPilot.Diagnostics.Nt8.Host;
 using RiskPilot.Diagnostics.Nt8.Tests.Fakes;
 using Xunit;
 
@@ -209,6 +210,17 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         {
             // Production must never carry a guessed mapping.
             Assert.Empty(ProviderIdentity.OwnerAuthorizedSlots);
+        }
+
+        [Fact]
+        public void AddOn_DefaultSlotMapping_IsEmpty_FailClosed()
+        {
+            // The AddOn's slot mapping is the production default (empty) unless a host/test supplies
+            // one, so the AddOn itself is never a mapping leak and Provider14 stays unresolved.
+            var addOn = new DiagnosticAddOn();
+            Assert.Empty(addOn.OwnerAuthorizedProviderSlots);
+            Assert.Equal(ProviderIdentityMatch.Unresolved,
+                ProviderIdentity.Compare("Provider14", "Rithmic", addOn.OwnerAuthorizedProviderSlots));
         }
 
         // ---------------- provider agreement across components ----------------

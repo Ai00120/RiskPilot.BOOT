@@ -19,6 +19,9 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
     [Collection("StubHostState")]
     public class AddOnLifecycleReadinessTests
     {
+        private const string ExpectedAccount = "SimRP.BOT";
+        private const string ExpectedConnection = "My Rithmic";
+
         private static void Reset()
         {
             Instrument.All.Clear();
@@ -26,13 +29,49 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Connection.Connections.Clear();
         }
 
-        private static Instrument EsInstrument()
+        private static Instrument EsInstrument(bool faultMetadata = false)
         {
             return new Instrument
             {
                 FullName = "ES 12-26",
                 Exchange = Exchange.Globex,
-                MasterInstrument = new MasterInstrument { Name = "ES", InstrumentType = InstrumentType.Future, Currency = Currency.UsDollar }
+                MasterInstrument = new MasterInstrument
+                {
+                    Name = faultMetadata ? null : "ES",
+                    InstrumentType = InstrumentType.Future,
+                    Currency = Currency.UsDollar,
+                    PointValue = 50d,
+                    TickSize = 0.25d,
+                    ThrowOnNameRead = faultMetadata
+                }
+            };
+        }
+
+        /// <summary>
+        /// A verified target account bound to a connected required connection. The verified identity
+        /// and association are what make the accountVerified/connectionVerified facts satisfiable.
+        /// </summary>
+        private static Account TargetAccount(bool connected = true)
+        {
+            var connection = new Connection
+            {
+                Status = connected ? ConnectionStatus.Connected : ConnectionStatus.Disconnected,
+                PriceStatus = connected ? ConnectionStatus.Connected : ConnectionStatus.Disconnected,
+                Options = new ConnectOptions
+                {
+                    Name = ExpectedConnection,
+                    Provider = Provider.Provider14,
+                    Mode = Mode.Simulation
+                }
+            };
+            Connection.Connections.Add(connection);
+
+            return new Account
+            {
+                Name = ExpectedAccount,
+                Provider = Provider.Provider14,
+                Denomination = Currency.UsDollar,
+                Connection = connection
             };
         }
 
@@ -41,7 +80,26 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             // Disable the background retry timer so the test drives every probe deterministically;
             // the first probe still runs synchronously inside ApplyLifecycleState("Active").
             // The target instrument is set explicitly (the only supported selection mechanism).
-            return new DiagnosticAddOn { ReadinessRetryEnabled = false, RequestedInstrumentId = "ES 12-26" };
+            // The reviewed owner-authorized slot mapping mirrors how production would resolve the
+            // generic Provider14 slot once runtime evidence records the mapping; production defaults
+            // to the empty (fail-closed) mapping.
+            return new DiagnosticAddOn
+            {
+                ReadinessRetryEnabled = false,
+                RequestedInstrumentId = "ES 12-26",
+                OwnerAuthorizedProviderSlots = TestHost.RithmicSlotMapping
+            };
+        }
+
+        private static void RaiseLastTrade(Instrument instrument)
+        {
+            instrument.MarketData.RaiseUpdate(new MarketDataEventArgs
+            {
+                Instrument = instrument,
+                MarketDataType = MarketDataType.Last,
+                Price = 5000.25,
+                Time = new DateTime(2026, 11, 12, 8, 0, 0, DateTimeKind.Utc)
+            });
         }
 
         [Fact]
@@ -54,7 +112,6 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 addOn.ApplyLifecycleState("SetDefaults");
                 addOn.ApplyLifecycleState("Configure");
 
-                // Before Active the AddOn is not operational.
                 Assert.Equal(HostReadinessState.NotOperational, addOn.Readiness.State);
 
                 addOn.ApplyLifecycleState("Active");
@@ -84,7 +141,9 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
                 // The core regression guard: reaching Active alone is never "ready".
                 var readiness = addOn.Readiness;
-                Assert.True(readiness.HostAvailable);
+                Assert.True(readiness.HostAvailable.IsSatisfied());
+                Assert.True(readiness.MetadataReadAllowed.IsSatisfied());
+                Assert.False(readiness.InstrumentResolved.IsSatisfied());
                 Assert.False(readiness.FullyReady);
                 Assert.Equal(HostReadinessState.AwaitingInstrument, readiness.State);
 
@@ -97,25 +156,77 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
-        public void Lifecycle_InstrumentBecomingAvailableLate_BecomesReadyOnRepeatedProbe()
+        public void Lifecycle_ActiveWithNoMetadataReadAllowed_StaysAwaitingMetadataRead()
+        {
+            Reset();
+            try
+            {
+                // The AddOn's metadata-read gate is the operational lifecycle predicate, which is
+                // satisfied at Active. Drive the tracker directly to prove the two facts are distinct:
+                // host operational + host reachable, but metadataReadAllowed unknown.
+                var tracker = new Core.Run.HostReadinessTracker();
+                tracker.RecordAddOnState("Active");
+                tracker.RecordHostAvailable(ReadinessFactState.Satisfied);
+
+                var observation = tracker.Observe();
+
+                Assert.False(observation.FullyReady);
+                Assert.Equal(HostReadinessState.AwaitingMetadataRead, observation.State);
+                Assert.Equal(ReadinessFactState.Unknown, observation.MetadataObserved);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Lifecycle_InstrumentBecomingAvailableLate_ObservesMetadataButNotReadyUntilData()
         {
             Reset();
             try
             {
                 var addOn = NewAddOn();
                 addOn.ApplyLifecycleState("Active");
-                Assert.Equal(HostReadinessState.AwaitingInstrument, addOn.Readiness.State);
 
                 // The host loads the instrument after Active (asynchronously in the real host).
                 Instrument.All.Add(EsInstrument());
 
                 var readiness = addOn.PollReadinessOnce();
 
-                Assert.True(readiness.InstrumentReady);
-                Assert.True(readiness.MetadataReady);
-                Assert.True(readiness.MarketDataSubscribed);
-                Assert.True(readiness.FullyReady);
-                Assert.Equal(HostReadinessState.Ready, readiness.State);
+                Assert.True(readiness.InstrumentResolved.IsSatisfied());
+                Assert.True(readiness.MetadataReadAllowed.IsSatisfied());
+                Assert.True(readiness.MetadataObserved.IsSatisfied());
+                Assert.True(readiness.MarketDataSubscribed.IsSatisfied());
+                // No account/connection and no market data yet, so still not ready.
+                Assert.False(readiness.FullyReady);
+
+                addOn.SafeDispose();
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Lifecycle_MetadataReadFails_IsNotReady()
+        {
+            Reset();
+            try
+            {
+                // The instrument resolves but its metadata getter throws, so metadataObserved must
+                // stay unsatisfied even though the read was permitted.
+                Instrument.All.Add(EsInstrument(faultMetadata: true));
+
+                var addOn = NewAddOn();
+                addOn.ApplyLifecycleState("Active");
+
+                var readiness = addOn.Readiness;
+                Assert.True(readiness.InstrumentResolved.IsSatisfied());
+                Assert.False(readiness.MetadataObserved.IsSatisfied());
+                Assert.False(readiness.FullyReady);
+                Assert.Equal(HostReadinessState.AwaitingMetadata, readiness.State);
 
                 addOn.SafeDispose();
             }
@@ -131,14 +242,13 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Reset();
             try
             {
-                // A metadata gate that never becomes ready models a host whose instrument metadata
-                // is unreadable. Readiness must stay INCONCLUSIVE, never PASS.
                 Instrument.All.Add(EsInstrument());
                 var tracker = new Core.Run.HostReadinessTracker();
                 tracker.RecordAddOnState("Active");
-                tracker.RecordHostAvailable(true);
-                tracker.RecordInstrumentResolved(true);
-                tracker.RecordMetadataReady(false);
+                tracker.RecordHostAvailable(ReadinessFactState.Satisfied);
+                tracker.RecordMetadataReadAllowed(ReadinessFactState.Satisfied);
+                tracker.RecordInstrumentResolved(ReadinessFactState.Satisfied);
+                tracker.RecordMetadataObserved(ReadinessFactState.Unsatisfied);
 
                 var observation = tracker.Observe();
                 Assert.False(observation.FullyReady);
@@ -159,12 +269,10 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 var addOn = NewAddOn();
                 addOn.ApplyLifecycleState("Active");
 
-                // Repeated probes with no instrument never fabricate readiness.
                 for (var i = 0; i < 5; i++)
                 {
                     var readiness = addOn.PollReadinessOnce();
                     Assert.False(readiness.FullyReady);
-                    Assert.Equal(HostReadinessState.AwaitingInstrument, readiness.State);
                 }
 
                 addOn.SafeDispose();
@@ -186,22 +294,14 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
                 var addOn = NewAddOn();
                 addOn.ApplyLifecycleState("Active");
-                Assert.True(addOn.Readiness.MarketDataSubscribed);
+                Assert.True(addOn.Readiness.MarketDataSubscribed.IsSatisfied());
 
-                // Several more probes must not attach a second handler. The subscription is
-                // idempotent, so the readiness stays subscribed and ready without a duplicate.
                 addOn.PollReadinessOnce();
                 addOn.PollReadinessOnce();
 
-                instrument.MarketData.RaiseUpdate(new MarketDataEventArgs
-                {
-                    Instrument = instrument,
-                    MarketDataType = MarketDataType.Last,
-                    Price = 5000.25,
-                    Time = new DateTime(2026, 11, 12, 8, 0, 0, DateTimeKind.Utc)
-                });
+                RaiseLastTrade(instrument);
 
-                Assert.True(addOn.Readiness.FullyReady);
+                Assert.True(addOn.Readiness.MarketDataObserved.IsSatisfied());
 
                 addOn.SafeDispose();
             }
@@ -220,9 +320,97 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 var addOn = NewAddOn();
                 addOn.ApplyLifecycleState("Active");
 
-                // No instrument -> no subscription -> not ready (INCONCLUSIVE), never PASS.
-                Assert.False(addOn.Readiness.MarketDataSubscribed);
+                Assert.False(addOn.Readiness.MarketDataSubscribed.IsSatisfied());
                 Assert.False(addOn.Readiness.FullyReady);
+
+                addOn.SafeDispose();
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Lifecycle_FullyVerifiedHostWithMarketData_IsReady()
+        {
+            Reset();
+            try
+            {
+                var instrument = EsInstrument();
+                Instrument.All.Add(instrument);
+                Account.All.Add(TargetAccount());
+
+                var addOn = NewAddOn();
+                addOn.ApplyLifecycleState("Active");
+                addOn.PollReadinessOnce();
+
+                // The subscription is established, but no event has been observed yet.
+                Assert.False(addOn.Readiness.FullyReady);
+                Assert.Equal(HostReadinessState.AwaitingMarketData, addOn.Readiness.State);
+
+                RaiseLastTrade(instrument);
+
+                var readiness = addOn.Readiness;
+                Assert.True(readiness.AccountVerified.IsSatisfied());
+                Assert.True(readiness.ConnectionVerified.IsSatisfied());
+                Assert.True(readiness.MarketDataObserved.IsSatisfied());
+                Assert.True(readiness.FullyReady);
+                Assert.Equal(HostReadinessState.Ready, readiness.State);
+
+                addOn.SafeDispose();
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Lifecycle_MarketDataObservedButAccountUnresolved_IsNotReady()
+        {
+            Reset();
+            try
+            {
+                var instrument = EsInstrument();
+                Instrument.All.Add(instrument);
+
+                var addOn = NewAddOn();
+                addOn.ApplyLifecycleState("Active");
+                RaiseLastTrade(instrument);
+
+                var readiness = addOn.Readiness;
+                Assert.True(readiness.MarketDataObserved.IsSatisfied());
+                Assert.False(readiness.AccountVerified.IsSatisfied());
+                Assert.False(readiness.FullyReady);
+                Assert.Equal(HostReadinessState.AwaitingAccount, readiness.State);
+
+                addOn.SafeDispose();
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Lifecycle_VerifiedAccountWithDisconnectedConnection_IsNotReady()
+        {
+            Reset();
+            try
+            {
+                var instrument = EsInstrument();
+                Instrument.All.Add(instrument);
+                Account.All.Add(TargetAccount(connected: false));
+
+                var addOn = NewAddOn();
+                addOn.ApplyLifecycleState("Active");
+                addOn.PollReadinessOnce();
+                RaiseLastTrade(instrument);
+
+                var readiness = addOn.Readiness;
+                Assert.False(readiness.ConnectionVerified.IsSatisfied());
+                Assert.False(readiness.FullyReady);
 
                 addOn.SafeDispose();
             }
@@ -243,7 +431,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
                 var addOn = NewAddOn();
                 addOn.ApplyLifecycleState("Active");
-                Assert.True(addOn.Readiness.MarketDataSubscribed);
+                Assert.True(addOn.Readiness.MarketDataSubscribed.IsSatisfied());
 
                 addOn.ApplyLifecycleState("Terminated");
 
@@ -251,7 +439,79 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Assert.True(readiness.ShuttingDown);
                 Assert.False(readiness.FullyReady);
                 Assert.Equal(HostReadinessState.ShuttingDown, readiness.State);
-                Assert.False(readiness.MarketDataSubscribed);
+                Assert.False(readiness.MarketDataSubscribed.IsSatisfied());
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Lifecycle_ShutdownAndRestart_DiscardsStaleFacts()
+        {
+            Reset();
+            try
+            {
+                var instrument = EsInstrument();
+                Instrument.All.Add(instrument);
+                Account.All.Add(TargetAccount());
+
+                var addOn = NewAddOn();
+                addOn.ApplyLifecycleState("Active");
+                addOn.PollReadinessOnce();
+                RaiseLastTrade(instrument);
+                Assert.True(addOn.Readiness.FullyReady);
+
+                // Shut down, then restart. A restart must not inherit the previous epoch's readiness.
+                addOn.ApplyLifecycleState("Terminated");
+                addOn.ApplyLifecycleState("Active");
+
+                var readiness = addOn.Readiness;
+                Assert.False(readiness.FullyReady);
+                // A same-instance restart begins a new epoch: the facts observed before termination
+                // are discarded, so the restarted AddOn is never reported ready on stale evidence.
+                Assert.True(readiness.Epoch >= 1);
+                Assert.False(readiness.MarketDataObserved.IsSatisfied());
+                Assert.False(readiness.MarketDataSubscribed.IsSatisfied());
+                addOn.SafeDispose();
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Lifecycle_ReconnectInvalidatesReadiness()
+        {
+            Reset();
+            try
+            {
+                var instrument = EsInstrument();
+                Instrument.All.Add(instrument);
+                var account = TargetAccount();
+                Account.All.Add(account);
+
+                var addOn = NewAddOn();
+                addOn.ApplyLifecycleState("Active");
+                addOn.PollReadinessOnce();
+                RaiseLastTrade(instrument);
+                Assert.True(addOn.Readiness.FullyReady);
+
+                // The provider drops the connection, then the tool is told to invalidate the
+                // stream-dependent facts. Readiness can never remain satisfied on a connection or a
+                // subscription that no longer holds.
+                account.Connection.Status = ConnectionStatus.Disconnected;
+                account.Connection.PriceStatus = ConnectionStatus.Disconnected;
+                addOn.InvalidateReadinessForReconnect();
+
+                var readiness = addOn.Readiness;
+                Assert.False(readiness.FullyReady);
+                Assert.Equal(ReadinessFactState.Unsatisfied, readiness.ConnectionVerified);
+                Assert.False(readiness.MarketDataObserved.IsSatisfied());
+
+                addOn.SafeDispose();
             }
             finally
             {
@@ -271,7 +531,6 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 addOn.ApplyLifecycleState("Active");
 
                 Assert.True(addOn.Readiness.LifecycleOperational);
-                // SafeInitialize/SafeStart are guarded exactly-once; no exception, still not ready.
                 Assert.False(addOn.Readiness.FullyReady);
 
                 addOn.SafeDispose();
@@ -323,7 +582,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 }
 
                 Assert.Empty(errors);
-                Assert.True(addOn.Readiness.FullyReady);
+                Assert.True(addOn.Readiness.MarketDataSubscribed.IsSatisfied());
 
                 addOn.SafeDispose();
             }
@@ -343,11 +602,9 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 addOn.ApplyLifecycleState("Active");
                 addOn.ApplyLifecycleState("Terminated");
 
-                // Repeated disposal must not throw.
                 addOn.SafeDispose();
                 addOn.SafeDispose();
 
-                // Polling after disposal must not throw or subscribe.
                 var readiness = addOn.PollReadinessOnce();
                 Assert.NotNull(readiness);
             }
