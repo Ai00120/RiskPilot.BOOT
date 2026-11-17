@@ -61,6 +61,7 @@
     <Compile Include="Core\Identity\NinjaTraderCompatibility.cs" />
     <Compile Include="Core\Identity\ProviderIdentity.cs" />
     <Compile Include="Core\Identity\EnvironmentClassifier.cs" />
+    <Compile Include="Core\Identity\EnvironmentVerificationChain.cs" />
     <Compile Include="Core\Identity\AccountIdentityVerifier.cs" />
     <Compile Include="Core\Identity\TargetAccountConnectionVerifier.cs" />
     <Compile Include="Core\Identity\InstrumentIdentityVerifier.cs" />

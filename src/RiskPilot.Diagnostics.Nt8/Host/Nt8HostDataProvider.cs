@@ -1774,12 +1774,14 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         }
 
         /// <summary>
-        /// Derives the environment class from the M2-verified target account's own connection mode.
-        /// The class is a property of the connection mode, and the only account this tool is scoped
-        /// to is the verified target, so the class is never taken from the first enumerated account
-        /// (the previous behaviour, which could PASS from an unrelated account's name). When no
-        /// target is verified, or its mode cannot be read, the class is Unknown (INCONCLUSIVE),
-        /// never a guess.
+        /// Derives the environment class from the full verification chain
+        /// <c>Target Account → Verified Connection → Provider Identity → Environment</c>. The class
+        /// is only established once the target account identity is verified AND its own connection
+        /// association is verified, so it is never taken from the first enumerated account (the
+        /// previous behaviour, which could PASS from an unrelated account's name) and never from a
+        /// verified account whose connection binding is unproven (missing, ambiguous, a different
+        /// connection or a disconnected connection). When any link is unresolved the class is
+        /// Unknown (INCONCLUSIVE), never a guess.
         /// </summary>
         private EnvironmentClass DetectEnvironment()
         {
@@ -1793,12 +1795,30 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
         /// <summary>
         /// Classifies the environment class of a verified target account from its own connection
-        /// mode. Fail-closed: an unreadable connection, options or mode yields Unknown. The account
-        /// name is never consulted, so a "Sim*" naming convention can never fabricate a class.
+        /// mode, but only once the target's connection association is itself proven. Fail-closed:
+        /// an unverified association, an unreadable connection, options or mode yields Unknown. The
+        /// account name is never consulted, so a "Sim*" naming convention can never fabricate a
+        /// class, and a connected market-data connection is never mistaken for a verified account
+        /// connection.
         /// </summary>
-        private static EnvironmentClass ClassifyTargetAccountEnvironment(Account target)
+        private EnvironmentClass ClassifyTargetAccountEnvironment(Account target)
         {
             if (target == null)
+            {
+                return EnvironmentClass.Unknown;
+            }
+
+            // The chain requires the target's own connection binding to be proven; an account that
+            // is merely name-matched but whose association is unproven must not yield a class.
+            var associationVerified = TargetAccountConnectionVerifier
+                .Evaluate(BuildTargetAccountConnectionObservation()).Status == DiagnosticStatus.PASS;
+
+            return ClassifyTargetAccountEnvironment(target, associationVerified);
+        }
+
+        private static EnvironmentClass ClassifyTargetAccountEnvironment(Account target, bool connectionAssociationVerified)
+        {
+            if (target == null || !connectionAssociationVerified)
             {
                 return EnvironmentClass.Unknown;
             }
@@ -1819,7 +1839,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             var modeObservable = !string.IsNullOrEmpty(mode);
             var modeIsSimulation = ExpectedAccountIdentity.ModeIsSimulation(mode);
 
-            return EnvironmentClassifier.Classify(true, modeObservable, modeIsSimulation);
+            return EnvironmentClassifier.ClassifyVerifiedChain(
+                true, connectionAssociationVerified, modeObservable, modeIsSimulation);
         }
 
         private static ConnectionState MapConnectionState(ConnectionStatus status)

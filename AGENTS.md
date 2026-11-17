@@ -774,16 +774,38 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   choice through the controller; a programmatic repopulation runs under a guard so it is never
   mistaken for an operator action, and a refresh never changes the current selection. The WPF files
   are `UseStubs != true`-only, so this is verified by review, not by the offline stub build.
-- **The environment class is derived from the M2-verified target account's own connection mode.**
-  `Core/Identity/EnvironmentClassifier.cs` (`Classify`) is the host-free rule:
-  `Nt8HostDataProvider.DetectEnvironment` resolves the verified target (`TryGetVerifiedTargetAccount`)
-  and classifies from `target.Connection.Options.Mode`; the same helper now backs
-  `AccountRecord.AccountClass`. The previous first-account "Sim*" name heuristic is gone. Fail-closed:
-  no verified target, no connection/options, or an unreadable mode ⇒ `EnvironmentClass.Unknown`
-  (M1 `INCONCLUSIVE`), never a guess and never taken from an unrelated account.
-- Tests: `EnvironmentClassificationTests` (classifier + host adapter over the offline stub surface:
-  verified Simulation ⇒ Simulation; no verified target / unverified Live target / no connection /
-  no accounts ⇒ Unknown; first-account-not-target never drives the class) and the new cases in
+- **The environment class is derived from the full verified chain
+  `Target Account → Verified Connection → Provider Identity → Environment Classification`.** It is
+  never taken from the first `Account.All` entry (the previous "Sim*" name heuristic is gone) and
+  never from a verified account whose *connection association* is unproven. The links:
+  - `Core/Identity/EnvironmentClassifier.cs` (`Classify` and `ClassifyVerifiedChain`) is the
+    host-free rule: any unresolved link ⇒ `EnvironmentClass.Unknown`, never `LIVE`/`SIM`.
+  - `Core/Identity/EnvironmentVerificationChain.cs` evaluates the four links from the M2
+    `AccountIdentityObservation`, the `TargetAccountConnectionObservation` and the derived class,
+    and reports per-link booleans + reason codes (`ENVIRONMENT_CHAIN_ACCOUNT_UNVERIFIED` /
+    `_CONNECTION_UNVERIFIED` / `_PROVIDER_UNVERIFIED` / `_CLASS_UNKNOWN`; `ENVIRONMENT_CHAIN_VERIFIED`
+    when every link holds). A link with a null/unobservable observation fails closed.
+  - `Nt8HostDataProvider.DetectEnvironment` / `ClassifyTargetAccountEnvironment` resolve the verified
+    target (`TryGetVerifiedTargetAccount`) **and** require its own association verdict
+    (`TargetAccountConnectionVerifier.Evaluate(BuildTargetAccountConnectionObservation()) == PASS`)
+    before reading `target.Connection.Options.Mode`. A connected market-data connection is never
+    mistaken for a verified account connection; a disconnected/ambiguous/different-connection target
+    stays `Unknown`. The same helper backs `AccountRecord.AccountClass`.
+  - `M1.ENVIRONMENT_CLASS` PASSes only with a fully verified chain; otherwise `INCONCLUSIVE` with the
+    chain reason codes (`CHAIN_*_VERIFIED=...` booleans in the reason codes). `environment.json`
+    gains an `environmentVerificationChain` block (`verified`, `verifiedEnvironmentClass`, the four
+    `links` booleans, `reasonCodes`); an unresolved link always writes `verified:false` and
+    `verifiedEnvironmentClass:UNKNOWN`, so a verified environment is never reported off a partial
+    chain. The block is re-evaluated from `dataset.Snapshot` (the same derivation as the live probe).
+  - Fail-closed: no verified target, an unproven/ambiguous/disconnected association, an unresolved
+    provider, or an unreadable mode ⇒ `Unknown` (M1 `INCONCLUSIVE`), never a guess.
+- Tests: `EnvironmentClassificationTests` (classifier + `ClassifyVerifiedChain` + host adapter over
+  the offline stub surface: verified Simulation ⇒ Simulation; verified Live ⇒ Live at the classifier
+  level; no verified target / unverified Live target / no connection / no accounts / disconnected
+  target connection / ambiguous accounts / ambiguous connections / different connection / connection
+  not enumerated ⇒ Unknown; first-account-not-target never drives the class; enumeration order never
+  changes the result; the M1 check PASSes only with a fully verified chain and stays INCONCLUSIVE
+  otherwise; the exported `environment.json` chain block) and the new cases in
   `InstrumentSelectionTests` (selection model, AddOn refresh/select flow, live probe sees a
   post-construction selection, throwing probe fails closed, re-target detaches the previous
   instrument). A green stub run is **not** real-host proof.

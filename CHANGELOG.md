@@ -11,6 +11,34 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ### Changed
 
+- **Environment classification is bound to the verified account chain
+  `Target Account → Verified Connection → Provider Identity → Environment`.** The class was already
+  derived from the M2-verified target account's own connection mode rather than the first
+  `Account.All` entry, but it could still be established from a verified account whose *connection
+  association* was unproven (a name-matched account bound to a connection the host did not
+  enumerate, an ambiguous connection, or a disconnected target connection). The class is now only
+  established once the whole chain holds:
+  - New host-free `Core/Identity/EnvironmentVerificationChain.cs` evaluates the four links from the
+    M2 `AccountIdentityObservation`, the `TargetAccountConnectionObservation` and the derived class.
+    It reports per-link booleans plus reason codes (`ENVIRONMENT_CHAIN_ACCOUNT_UNVERIFIED` /
+    `_CONNECTION_UNVERIFIED` / `_PROVIDER_UNVERIFIED` / `_CLASS_UNKNOWN`, and
+    `ENVIRONMENT_CHAIN_VERIFIED` when every link holds).
+  - `Core/Identity/EnvironmentClassifier.ClassifyVerifiedChain` is the fail-closed rule: any
+    unresolved link (account identity, connection association, provider identity, or an unreadable
+    mode) yields `Unknown`, never `LIVE`/`SIM`.
+  - `Host/Nt8HostDataProvider.DetectEnvironment` now gates the class on the target account's own
+    association verdict (`TargetAccountConnectionVerifier`), so a connected market-data connection
+    is never mistaken for a verified account connection.
+  - `M1.ENVIRONMENT_CLASS` PASSes only with a fully verified chain; otherwise it is `INCONCLUSIVE`
+    and carries the chain reason codes. `environment.json` gains an `environmentVerificationChain`
+    block (`verified`, `verifiedEnvironmentClass`, the four `links` booleans, `reasonCodes`); an
+    unresolved link always writes `verified:false` and `verifiedEnvironmentClass:UNKNOWN`.
+  - Regression coverage: `EnvironmentClassificationTests` (verified SIM, verified LIVE, multiple
+    accounts with different environments, target not found, connection missing, different
+    connection, ambiguous accounts, ambiguous connections, disconnected connection, unknown
+    environment, first account ≠ target, unresolved identity, enumeration-order independence, the
+    M1 check and the exported chain block). No raw identity is emitted.
+
 - **Deterministic target-instrument selection (P18): the diagnostic never auto-discovers an ES
   contract.** Previously the host resolved its target by scanning `Instrument.All` for an instrument
   whose root symbol matched the permanent ES root, so with a real host that has many loaded ES

@@ -299,12 +299,33 @@ namespace RiskPilot.Diagnostics.SampleReport
                     MatchingConnectionCount = 1,
                     AccountRef = SyntheticRef.For("account", "SAMPLE-ACCOUNT"),
                     AccountProviderObservable = true,
-                    AccountProviderMatches = true,
+                    AccountProviderMatch = ProviderIdentityMatch.Matches,
+                    ConnectionObserved = true,
+                    ConnectionEnumerated = true,
+                    ConnectionNameObservable = true,
+                    ConnectionNameMatches = true,
+                    ConnectionProviderObservable = true,
+                    ConnectionProviderMatch = ProviderIdentityMatch.Matches
+                },
+                AccountIdentity = new AccountIdentityObservation
+                {
+                    AccountSurfaceObservable = true,
+                    ObservedAccountCount = 1,
+                    MatchingAccountCount = 1,
+                    AccountRef = SyntheticRef.For("account", "SAMPLE-ACCOUNT"),
+                    AccountProviderObservable = true,
+                    AccountProviderMatch = ProviderIdentityMatch.Matches,
                     ConnectionObserved = true,
                     ConnectionNameObservable = true,
                     ConnectionNameMatches = true,
                     ConnectionProviderObservable = true,
-                    ConnectionProviderMatches = true
+                    ConnectionProviderMatch = ProviderIdentityMatch.Matches,
+                    ConnectionStatusObservable = true,
+                    ConnectionConnected = true,
+                    ModeObservable = true,
+                    ModeIsSimulation = true,
+                    DenominationObservable = true,
+                    DenominationIsUsd = true
                 },
                 DomMarketData = new DomMarketDataObservation
                 {
