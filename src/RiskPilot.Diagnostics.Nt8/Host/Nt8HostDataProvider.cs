@@ -35,13 +35,13 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
         private readonly Func<bool> _masterMetadataReady;
         private readonly Func<IReadOnlyList<string>> _lifecycleStates;
-        private readonly string _requestedInstrumentId;
+        private readonly Func<string> _requestedInstrumentIdProbe;
         private readonly ISecurityScanSource _securityScanSource;
         private readonly Func<HostReadinessObservation> _hostReadiness;
         private readonly IReadOnlyDictionary<string, string> _ownerAuthorizedProviderSlots;
 
-        public Nt8HostDataProvider(bool masterMetadataReady, string requestedInstrumentId = null)
-            : this(() => masterMetadataReady, requestedInstrumentId)
+        public Nt8HostDataProvider(bool masterMetadataReady, Func<string> requestedInstrumentIdProbe = null)
+            : this(() => masterMetadataReady, requestedInstrumentIdProbe)
         {
         }
 
@@ -51,8 +51,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// read rather than captured when the AddOn is constructed — an AddOn is constructed at
         /// <c>State.Active</c>, before that point, so a captured value would stay false forever.
         /// </summary>
-        public Nt8HostDataProvider(Func<bool> masterMetadataReady, string requestedInstrumentId = null)
-            : this(masterMetadataReady, null, requestedInstrumentId)
+        public Nt8HostDataProvider(Func<bool> masterMetadataReady, Func<string> requestedInstrumentIdProbe = null)
+            : this(masterMetadataReady, null, requestedInstrumentIdProbe)
         {
         }
 
@@ -63,9 +63,16 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// through its states while the provider lives, so a captured value would freeze at the
         /// first read. A null or throwing probe leaves the lifecycle unobservable, which M1 reports
         /// as INCONCLUSIVE.
+        /// <para>
+        /// <paramref name="requestedInstrumentIdProbe"/> is likewise a live probe: the operator
+        /// selects the target instrument in the Diagnostic Center <em>after</em> the AddOn is
+        /// constructed, so a captured id would never see the selection. It is evaluated on each
+        /// resolution so the operator's current choice always applies. A null or throwing probe is
+        /// treated as "no selection", which fails closed.
+        /// </para>
         /// </summary>
-        public Nt8HostDataProvider(Func<bool> masterMetadataReady, Func<IReadOnlyList<string>> lifecycleStates, string requestedInstrumentId = null)
-            : this(masterMetadataReady, lifecycleStates, null, requestedInstrumentId)
+        public Nt8HostDataProvider(Func<bool> masterMetadataReady, Func<IReadOnlyList<string>> lifecycleStates, Func<string> requestedInstrumentIdProbe = null)
+            : this(masterMetadataReady, lifecycleStates, null, requestedInstrumentIdProbe)
         {
         }
 
@@ -81,8 +88,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             Func<bool> masterMetadataReady,
             Func<IReadOnlyList<string>> lifecycleStates,
             Func<HostReadinessObservation> hostReadiness,
-            string requestedInstrumentId = null)
-            : this(masterMetadataReady, lifecycleStates, hostReadiness, ProviderIdentity.OwnerAuthorizedSlots, requestedInstrumentId)
+            Func<string> requestedInstrumentIdProbe = null)
+            : this(masterMetadataReady, lifecycleStates, hostReadiness, ProviderIdentity.OwnerAuthorizedSlots, requestedInstrumentIdProbe)
         {
         }
 
@@ -99,14 +106,34 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             Func<IReadOnlyList<string>> lifecycleStates,
             Func<HostReadinessObservation> hostReadiness,
             IReadOnlyDictionary<string, string> ownerAuthorizedProviderSlots,
-            string requestedInstrumentId = null)
+            Func<string> requestedInstrumentIdProbe = null)
         {
             _masterMetadataReady = masterMetadataReady ?? (() => false);
             _lifecycleStates = lifecycleStates;
             _hostReadiness = hostReadiness;
             _ownerAuthorizedProviderSlots = ownerAuthorizedProviderSlots ?? ProviderIdentity.OwnerAuthorizedSlots;
-            _requestedInstrumentId = requestedInstrumentId;
+            _requestedInstrumentIdProbe = requestedInstrumentIdProbe;
             _securityScanSource = new FileSystemSecurityScanSource();
+        }
+
+        /// <summary>
+        /// The operator's current explicit target instrument, evaluated live so a selection made
+        /// after the provider was constructed is honoured. A null or throwing probe is "no
+        /// selection" (fail closed), never an implicit instrument.
+        /// </summary>
+        private string RequestedInstrumentId
+        {
+            get
+            {
+                try
+                {
+                    return _requestedInstrumentIdProbe != null ? _requestedInstrumentIdProbe() : null;
+                }
+                catch (Exception)
+                {
+                    return null;
+                }
+            }
         }
 
         /// <summary>
@@ -264,7 +291,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             list.Add(new AccountRecord
             {
                 AccountRef = SyntheticRef.For("account", target.Name),
-                AccountClass = ClassifyAccount(target.Name),
+                AccountClass = ClassifyTargetAccountEnvironment(target),
                 Denomination = SafeString(() => target.Denomination.ToString()),
                 ProviderName = SafeString(() => target.Provider.ToString()),
                 PositionCount = ReadPositionCount(target),
@@ -1221,74 +1248,156 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         }
 
         /// <summary>
-        /// Resolves the instrument the attestation should target. An explicitly configured id wins;
-        /// otherwise the actual loaded discovery surface (<c>Instrument.All</c>) is consulted and the
-        /// instrument is used only when its root symbol matches the permanent ES root. The instrument
-        /// returned is the host's own object, so the metadata that is read is the real selected
-        /// instrument's, never one constructed from a configured string. Ambiguous (more than one ES
-        /// root) or absent roots resolve to null so the attestation fails closed. Never throws.
+        /// Resolves the instrument the attestation should target using the deterministic
+        /// explicit-selection rule. The target is only ever the explicitly selected instrument; the
+        /// instrument returned is the host's own object, so the metadata that is read is the real
+        /// selected instrument's, never one constructed from a configured string. An unset, unloaded
+        /// or ambiguous selection resolves to null so the attestation fails closed. Never throws.
         /// </summary>
         private Instrument ResolveAttestationInstrument()
         {
-            return ResolveLoadedInstrument(_requestedInstrumentId, () => MasterMetadataReady);
+            return ResolveLoadedInstrument(RequestedInstrumentId, () => MasterMetadataReady);
         }
 
         /// <summary>
-        /// Resolves the loaded ES instrument from the host discovery surface. An explicitly
-        /// configured id wins; otherwise the actual loaded surface (<c>Instrument.All</c>) is
-        /// consulted and the instrument is used only when its root symbol matches the permanent
-        /// ES root. Ambiguous (more than one ES root) or absent roots resolve to null so the
-        /// caller fails closed rather than binding to an arbitrary instrument. Never throws.
+        /// Resolves the target instrument from the loaded discovery surface using the deterministic
+        /// explicit-selection rule. The target is only ever the instrument the operator/host
+        /// explicitly selected; there is no auto-discovery, no "first instrument" and no
+        /// root-substring inference. Returns the resolved instrument, or null when the target is
+        /// unset, not loaded, ambiguous or the surface is unreadable (fail closed). Never throws.
         /// </summary>
         public static Instrument ResolveLoadedInstrument(string requestedInstrumentId, Func<bool> masterMetadataReady)
         {
+            Instrument resolved;
+            bool surfaceObservable;
+            SelectLoadedInstrument(requestedInstrumentId, masterMetadataReady, out resolved, out surfaceObservable);
+            return resolved;
+        }
+
+        /// <summary>
+        /// Read-only enumeration of the currently loaded instrument full names, for the operator's
+        /// Diagnostic Center picker. It reads only <c>Instrument.FullName</c> (never the master
+        /// metadata, so it is safe before the data-processing states) and never mutates anything.
+        /// Returns false with an empty list when the discovery surface cannot be enumerated, so the
+        /// UI reports the surface as unobservable rather than showing an empty, misleading list.
+        /// Never throws.
+        /// </summary>
+        public static bool TryEnumerateLoadedInstrumentNames(out IReadOnlyList<string> fullNames)
+        {
+            fullNames = new List<string>();
             try
             {
-                var ready = masterMetadataReady != null && SafeBool(masterMetadataReady) == true;
-
-                if (!string.IsNullOrEmpty(requestedInstrumentId))
-                {
-                    return Instrument.GetInstrument(requestedInstrumentId);
-                }
-
                 var loaded = Instrument.All;
                 if (loaded == null)
                 {
-                    return null;
+                    return false;
                 }
 
-                Instrument resolved = null;
-                var matches = 0;
+                var names = new List<string>();
+                lock (loaded)
+                {
+                    foreach (var instrument in loaded)
+                    {
+                        if (instrument == null)
+                        {
+                            continue;
+                        }
+
+                        var fullName = SafeString(() => instrument.FullName);
+                        if (!string.IsNullOrEmpty(fullName))
+                        {
+                            names.Add(fullName);
+                        }
+                    }
+                }
+
+                fullNames = names;
+                return true;
+            }
+            catch (Exception)
+            {
+                fullNames = new List<string>();
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Applies the deterministic explicit-selection rule to the loaded instrument surface. The
+        /// surface is projected into a minimal, host-free candidate list (full name plus the root
+        /// symbol when the metadata gate allows it) and handed to
+        /// <see cref="InstrumentSelector.Select"/>. The result carries the exact selection outcome
+        /// so every caller can report the same status code, and <paramref name="resolved"/> is the
+        /// single matched instrument (or null). Never throws.
+        /// </summary>
+        public static InstrumentSelectionResult SelectLoadedInstrument(
+            string requestedInstrumentId,
+            Func<bool> masterMetadataReady,
+            out Instrument resolved,
+            out bool surfaceObservable)
+        {
+            resolved = null;
+            surfaceObservable = false;
+
+            var candidates = new List<LoadedInstrumentCandidate>();
+            var loadedInstruments = new List<Instrument>();
+
+            try
+            {
+                var loaded = Instrument.All;
+                if (loaded == null)
+                {
+                    return InstrumentSelector.Select(requestedInstrumentId, false, candidates, false);
+                }
+
+                surfaceObservable = true;
+                var ready = masterMetadataReady != null && SafeBool(masterMetadataReady) == true;
+
                 lock (loaded)
                 {
                     foreach (var candidate in loaded)
                     {
-                        if (candidate == null || !ready)
+                        if (candidate == null)
                         {
                             continue;
                         }
 
-                        var rootName = SafeString(() => candidate.MasterInstrument != null
-                            ? candidate.MasterInstrument.Name
-                            : string.Empty);
-                        if (!ExpectedInstrumentIdentity.RootMatches(rootName))
+                        var fullName = SafeString(() => candidate.FullName);
+                        var rootName = string.Empty;
+                        var rootObservable = false;
+
+                        // The root symbol must only be read after DataLoaded/Realtime; before that it
+                        // is unobservable, so a candidate can only be matched by its full name.
+                        if (ready)
                         {
-                            continue;
+                            rootName = SafeString(() => candidate.MasterInstrument != null
+                                ? candidate.MasterInstrument.Name
+                                : string.Empty);
+                            rootObservable = !string.IsNullOrEmpty(rootName);
                         }
 
-                        matches++;
-                        resolved = candidate;
+                        candidates.Add(new LoadedInstrumentCandidate
+                        {
+                            FullName = fullName,
+                            RootName = rootName,
+                            RootObservable = rootObservable
+                        });
+                        loadedInstruments.Add(candidate);
                     }
                 }
-
-                // Ambiguity is not accepted: more than one loaded instrument carrying the ES root
-                // leaves the target unresolved so the caller cannot silently pick one.
-                return matches == 1 ? resolved : null;
             }
             catch (Exception)
             {
-                return null;
+                surfaceObservable = false;
+                return InstrumentSelector.Select(requestedInstrumentId, false, candidates, false);
             }
+
+            var result = InstrumentSelector.Select(requestedInstrumentId, surfaceObservable, candidates, false);
+            if (result.IsResolved && result.SelectedIndex >= 0 && result.SelectedIndex < loadedInstruments.Count)
+            {
+                resolved = loadedInstruments[result.SelectedIndex];
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -1305,62 +1414,30 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
             try
             {
-                // `var` keeps the code independent of the concrete collection type the installed NT
-                // build exposes for Instrument.All; only enumeration is required.
-                var loaded = Instrument.All;
-                if (loaded == null)
+                Instrument matched;
+                bool surfaceObservable;
+                var selection = SelectLoadedInstrument(
+                    RequestedInstrumentId, () => MasterMetadataReady, out matched, out surfaceObservable);
+
+                observation.InstrumentSurfaceObservable = surfaceObservable;
+                observation.SelectionStatus = selection.Status;
+                observation.SelectionReasonCode = selection.ReasonCode;
+                observation.ObservedInstrumentCount = selection.ObservedCount;
+                observation.MatchingInstrumentCount = selection.CandidateCount;
+
+                // Fail closed: only an explicit, unique selection can be compared further. The
+                // selector has already distinguished "unset" from "not loaded" from "ambiguous", so
+                // the verifier reports the exact target reason code instead of a false root
+                // mismatch. Nothing about a candidate is read or reported here.
+                if (!selection.IsResolved || matched == null)
                 {
-                    observation.InstrumentSurfaceObservable = false;
                     return observation;
                 }
 
-                observation.InstrumentSurfaceObservable = true;
-
-                Instrument matched = null;
-                var matchingCount = 0;
-                lock (loaded)
-                {
-                    foreach (var candidate in loaded)
-                    {
-                        if (candidate == null)
-                        {
-                            continue;
-                        }
-
-                        observation.ObservedInstrumentCount++;
-
-                        // MasterInstrument.* (and therefore the root symbol) must only be read after
-                        // DataLoaded/Realtime. Before that it is unobservable by design, so the
-                        // identity stays INCONCLUSIVE rather than being reported as a wrong instrument.
-                        if (!MasterMetadataReady)
-                        {
-                            continue;
-                        }
-
-                        // A single unreadable member must not abort the whole scan; the read failure
-                        // simply leaves that field unobservable (fail closed).
-                        var rootName = SafeString(() => candidate.MasterInstrument != null ? candidate.MasterInstrument.Name : string.Empty);
-                        if (string.IsNullOrEmpty(rootName))
-                        {
-                            continue;
-                        }
-
-                        observation.RootMetadataObservable = true;
-
-                        // Exact ordinal root comparison; a similar or differently-cased root is not a match.
-                        if (ExpectedInstrumentIdentity.RootMatches(rootName))
-                        {
-                            matchingCount++;
-                            matched = candidate;
-                        }
-                    }
-                }
-
-                observation.MatchingInstrumentCount = matchingCount;
-
-                // Only a unique exact root match can be compared further; zero matches is decided by
-                // the verifier (wrong or missing instrument) and no raw name is read here.
-                if (matchingCount != 1 || matched == null)
+                // The selection is proven, but MasterInstrument.* may only be read once the host is
+                // ready. Before that the field set stays unobservable (INCONCLUSIVE), never a
+                // fabricated identity.
+                if (!MasterMetadataReady)
                 {
                     return observation;
                 }
@@ -1369,7 +1446,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 observation.InstrumentRef = SyntheticRef.For("instrument", fullName);
 
                 var rootSymbol = SafeString(() => matched.MasterInstrument != null ? matched.MasterInstrument.Name : string.Empty);
-                observation.RootSymbolObservable = !string.IsNullOrEmpty(rootSymbol);
+                observation.RootMetadataObservable = !string.IsNullOrEmpty(rootSymbol);
+                observation.RootSymbolObservable = observation.RootMetadataObservable;
                 observation.RootSymbolMatches = observation.RootSymbolObservable && ExpectedInstrumentIdentity.RootMatches(rootSymbol);
 
                 var instrumentType = SafeString(() => matched.MasterInstrument != null ? matched.MasterInstrument.InstrumentType.ToString() : string.Empty);
@@ -1426,17 +1504,30 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
             try
             {
-                var instrument = ResolveLoadedInstrument(_requestedInstrumentId, () => MasterMetadataReady);
+                Instrument instrument;
+                bool surfaceObservable;
+                SelectLoadedInstrument(
+                    RequestedInstrumentId, () => MasterMetadataReady, out instrument, out surfaceObservable);
+
                 if (instrument == null)
                 {
-                    // No unique ES-root instrument: distinguish "surface not enumerable" from
+                    // No explicit unique selection: distinguish "surface not enumerable" from
                     // "enumerated but no matching instrument" so the verifier can fail closed.
-                    observation.InstrumentSurfaceObservable = Instrument.All != null;
+                    observation.InstrumentSurfaceObservable = surfaceObservable;
                     observation.InstrumentObserved = false;
                     return observation;
                 }
 
-                observation.InstrumentSurfaceObservable = true;
+                observation.InstrumentSurfaceObservable = surfaceObservable;
+
+                // The economics may only be read once the host is ready; before that the instrument
+                // was selected but its metadata is unobservable, so the check stays INCONCLUSIVE.
+                if (!MasterMetadataReady)
+                {
+                    observation.InstrumentObserved = false;
+                    return observation;
+                }
+
                 observation.InstrumentObserved = true;
 
                 var fullName = SafeString(() => instrument.FullName);
@@ -1682,40 +1773,53 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             }
         }
 
-        private static EnvironmentClass DetectEnvironment()
+        /// <summary>
+        /// Derives the environment class from the M2-verified target account's own connection mode.
+        /// The class is a property of the connection mode, and the only account this tool is scoped
+        /// to is the verified target, so the class is never taken from the first enumerated account
+        /// (the previous behaviour, which could PASS from an unrelated account's name). When no
+        /// target is verified, or its mode cannot be read, the class is Unknown (INCONCLUSIVE),
+        /// never a guess.
+        /// </summary>
+        private EnvironmentClass DetectEnvironment()
         {
-            var accounts = Account.All;
-            if (accounts == null)
+            if (!TryGetVerifiedTargetAccount(out var target) || target == null)
             {
                 return EnvironmentClass.Unknown;
             }
 
-            lock (accounts)
-            {
-                foreach (var account in accounts)
-                {
-                    if (account == null || string.IsNullOrEmpty(account.Name))
-                    {
-                        continue;
-                    }
-
-                    return ClassifyAccount(account.Name);
-                }
-            }
-
-            return EnvironmentClass.Unknown;
+            return ClassifyTargetAccountEnvironment(target);
         }
 
-        private static EnvironmentClass ClassifyAccount(string accountName)
+        /// <summary>
+        /// Classifies the environment class of a verified target account from its own connection
+        /// mode. Fail-closed: an unreadable connection, options or mode yields Unknown. The account
+        /// name is never consulted, so a "Sim*" naming convention can never fabricate a class.
+        /// </summary>
+        private static EnvironmentClass ClassifyTargetAccountEnvironment(Account target)
         {
-            if (string.IsNullOrEmpty(accountName))
+            if (target == null)
             {
                 return EnvironmentClass.Unknown;
             }
 
-            return accountName.StartsWith("Sim", StringComparison.OrdinalIgnoreCase)
-                ? EnvironmentClass.Simulation
-                : EnvironmentClass.Live;
+            var connection = target.Connection;
+            if (connection == null)
+            {
+                return EnvironmentClass.Unknown;
+            }
+
+            var options = connection.Options;
+            if (options == null)
+            {
+                return EnvironmentClass.Unknown;
+            }
+
+            var mode = SafeString(() => options.Mode.ToString());
+            var modeObservable = !string.IsNullOrEmpty(mode);
+            var modeIsSimulation = ExpectedAccountIdentity.ModeIsSimulation(mode);
+
+            return EnvironmentClassifier.Classify(true, modeObservable, modeIsSimulation);
         }
 
         private static ConnectionState MapConnectionState(ConnectionStatus status)

@@ -9,6 +9,34 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+### Changed
+
+- **Deterministic target-instrument selection (P18): the diagnostic never auto-discovers an ES
+  contract.** Previously the host resolved its target by scanning `Instrument.All` for an instrument
+  whose root symbol matched the permanent ES root, so with a real host that has many loaded ES
+  contracts it could not establish a unique target and — worse — the resolution depended on the
+  loaded surface rather than on what the operator actually selected. The target is now the
+  **explicitly selected** instrument and nothing else:
+  - New host-free `Core/Instruments/InstrumentSelector.cs` is the single selection rule shared by
+    every host component. It matches by **exact** full name, or by **exact** root only when exactly
+    one candidate matches; it never picks a first/default instrument and never matches by a name
+    substring. Outcomes are `RESOLVED`, `NOT_CONFIGURED`, `SURFACE_UNAVAILABLE`, `NOT_LOADED`,
+    `MULTIPLE_CANDIDATES`, `STUB_OR_MOCK`, each with a stable reason code.
+  - `Host/Nt8HostDataProvider.cs` projects `Instrument.All` into host-free candidates and applies the
+    selector in `SelectLoadedInstrument`; `ResolveAttestationInstrument`,
+    `BuildInstrumentIdentityObservation` and `BuildEsProductSpecificationObservation` all use it, so
+    one explicit identity drives both the metadata inspection and the market-data capture. A
+    selected-but-not-ready contract now reports `RESOLVED` with unobservable metadata
+    (`INCONCLUSIVE`) instead of a false root mismatch.
+  - `Host/DiagnosticAddOn.cs` gains the operator/host-set `RequestedInstrumentId` (read-only, default
+    null), threaded into both `Nt8HostDataProvider` and `MarketDataCapture`; with no target the tool
+    never becomes ready and never subscribes.
+  - `Core/Identity/InstrumentIdentityVerifier.cs` reports the exact fail-closed reason
+    (`TARGET_INSTRUMENT_NOT_CONFIGURED` / `_NOT_LOADED` / `_MULTIPLE_CANDIDATES`); a resolved
+    selection proceeds to the field comparison. `instruments.json` carries `selectionStatus` and
+    `selectionReasonCode`. Focused coverage: new `InstrumentSelectionTests` plus the updated
+    `HostInstrumentIdentityTests` / `M4FieldReadStatusTests` / `CompilationRegressionTests`.
+
 ### Fixed
 
 - **AddOn lifecycle/readiness gate: the host is now recognized at `Active`, and readiness is

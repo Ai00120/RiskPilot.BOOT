@@ -27,7 +27,9 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
         /// <summary>
         /// Creates a host provider with the verified slot mapping, matching the common test
-        /// construction (readiness probe plus optional requested instrument id).
+        /// construction (readiness probe plus optional requested instrument id). The requested id is
+        /// wrapped in a live probe so a test can also flip the selection after construction via the
+        /// returned provider's owner, mirroring how the AddOn supplies the operator's selection.
         /// </summary>
         internal static Nt8HostDataProvider Provider(bool masterMetadataReady, string requestedInstrumentId = null)
         {
@@ -36,7 +38,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 null,
                 null,
                 RithmicSlotMapping,
-                requestedInstrumentId);
+                () => requestedInstrumentId);
         }
 
         /// <summary>
@@ -50,7 +52,21 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 null,
                 null,
                 RithmicSlotMapping,
-                requestedInstrumentId);
+                () => requestedInstrumentId);
+        }
+
+        /// <summary>
+        /// Creates a host provider with an explicit live selection probe, so a test can change the
+        /// operator's selected instrument after construction (the Diagnostic Center picker case).
+        /// </summary>
+        internal static Nt8HostDataProvider Provider(System.Func<bool> masterMetadataReady, System.Func<string> requestedInstrumentIdProbe)
+        {
+            return new Nt8HostDataProvider(
+                masterMetadataReady,
+                null,
+                null,
+                RithmicSlotMapping,
+                requestedInstrumentIdProbe);
         }
     }
 }

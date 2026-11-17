@@ -225,7 +225,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument(Currency.Euro));
 
-                var provider = TestHost.Provider(true);
+                var provider = TestHost.Provider(true, "ES 12-26");
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.True(observation.CurrencyObservable);
@@ -250,7 +250,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument(Currency.Euro));
 
-                var provider = TestHost.Provider(true);
+                var provider = TestHost.Provider(true, "ES 12-26");
                 var observation = provider.GetSnapshot().EsProductSpecification;
 
                 Assert.True(observation.CurrencyObservable);
@@ -278,7 +278,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 instrument.MasterInstrument = null; // product currency (and economics) unavailable
                 Instrument.All.Add(instrument);
 
-                var provider = TestHost.Provider(true);
+                var provider = TestHost.Provider(true, "ES 12-26");
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.False(observation.CurrencyObservable);

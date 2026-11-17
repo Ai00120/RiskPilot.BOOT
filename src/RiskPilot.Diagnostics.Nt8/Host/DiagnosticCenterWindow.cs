@@ -31,6 +31,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         private readonly DiagnosticRunCoordinator _coordinator;
         private readonly IEvidenceSink _evidenceSink;
         private readonly Action _exportAction;
+        private readonly IInstrumentSelectionController _instrumentSelection;
 
         private readonly ComboBox _modeSelector = new ComboBox();
         private readonly Button _runButton = new Button();
@@ -44,17 +45,30 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         private readonly ListBox _acceptanceList = new ListBox();
         private readonly TextBlock _disclaimer = new TextBlock();
 
+        // Target-instrument picker. The operator explicitly chooses the contract; the window never
+        // selects one on its own (no implicit first/nearest-expiry pick).
+        private readonly ComboBox _instrumentSelector = new ComboBox();
+        private readonly Button _instrumentRefreshButton = new Button();
+        private readonly TextBlock _instrumentStatus = new TextBlock();
+        private bool _updatingInstrumentSelector;
+
         public DiagnosticCenterWindow(DiagnosticViewState viewState, DiagnosticRunCoordinator coordinator, IEvidenceSink evidenceSink)
-            : this(viewState, coordinator, evidenceSink, null)
+            : this(viewState, coordinator, evidenceSink, null, null)
         {
         }
 
         public DiagnosticCenterWindow(DiagnosticViewState viewState, DiagnosticRunCoordinator coordinator, IEvidenceSink evidenceSink, Action exportAction)
+            : this(viewState, coordinator, evidenceSink, exportAction, null)
+        {
+        }
+
+        public DiagnosticCenterWindow(DiagnosticViewState viewState, DiagnosticRunCoordinator coordinator, IEvidenceSink evidenceSink, Action exportAction, IInstrumentSelectionController instrumentSelection)
         {
             _viewState = viewState ?? throw new ArgumentNullException(nameof(viewState));
             _coordinator = coordinator;
             _evidenceSink = evidenceSink;
             _exportAction = exportAction;
+            _instrumentSelection = instrumentSelection;
 
             Caption = BuildIdentity.ProductName;
             Width = 900;
@@ -65,15 +79,26 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             Content = BuildLayout();
 
             _viewState.Changed += OnViewStateChanged;
+            if (_instrumentSelection != null)
+            {
+                _instrumentSelection.Selection.Changed += OnInstrumentSelectionChanged;
+            }
+
             Closed += (_, __) =>
             {
                 if (_viewState != null)
                 {
                     _viewState.Changed -= OnViewStateChanged;
                 }
+
+                if (_instrumentSelection != null)
+                {
+                    _instrumentSelection.Selection.Changed -= OnInstrumentSelectionChanged;
+                }
             };
 
             Refresh();
+            RefreshInstrumentSelection();
         }
 
         private UIElement BuildLayout()
@@ -121,6 +146,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             DockPanel.SetDock(controls, Dock.Top);
             root.Children.Add(controls);
 
+            root.Children.Add(BuildInstrumentPicker());
+
             var progressPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(8, 0, 8, 6) };
             _progress.Width = 500;
             _progress.Height = 16;
@@ -150,6 +177,196 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         private static TabItem BuildTab(string header, UIElement content)
         {
             return new TabItem { Header = header, Content = content };
+        }
+
+        /// <summary>
+        /// Builds the target-instrument picker row: a ComboBox of the loaded instruments' exact
+        /// FullNames, a Refresh button, and a status line showing the current selection and its
+        /// resolution. The window never selects an instrument on its own; the ComboBox starts with
+        /// no selection and the operator must choose explicitly.
+        /// </summary>
+        private UIElement BuildInstrumentPicker()
+        {
+            var panel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(8, 0, 8, 6) };
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Target instrument:",
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 6, 0)
+            });
+
+            _instrumentSelector.Width = 240;
+            _instrumentSelector.IsEditable = false;
+            _instrumentSelector.IsTextSearchEnabled = false;
+            // The operator's explicit choice only: writing through the controller records it in the
+            // shared selection model (which the host provider and market-data capture read).
+            _instrumentSelector.SelectionChanged += (_, __) => OnInstrumentSelectorChanged();
+            panel.Children.Add(_instrumentSelector);
+
+            _instrumentRefreshButton.Content = "Refresh";
+            _instrumentRefreshButton.Width = 80;
+            _instrumentRefreshButton.Margin = new Thickness(8, 0, 0, 0);
+            _instrumentRefreshButton.Click += (_, __) => RefreshAvailableInstruments();
+            panel.Children.Add(_instrumentRefreshButton);
+
+            _instrumentStatus.VerticalAlignment = VerticalAlignment.Center;
+            _instrumentStatus.Margin = new Thickness(10, 0, 0, 0);
+            _instrumentStatus.TextWrapping = TextWrapping.Wrap;
+            panel.Children.Add(_instrumentStatus);
+
+            DockPanel.SetDock(panel, Dock.Top);
+            return panel;
+        }
+
+        /// <summary>
+        /// Reloads the available-instrument list from the live host surface. The current selection is
+        /// never changed: a still-present contract stays selected, and a removed one is shown as
+        /// NotLoaded rather than being replaced. Runs on the UI thread (it is a button click).
+        /// </summary>
+        private void RefreshAvailableInstruments()
+        {
+            if (_instrumentSelection == null)
+            {
+                _instrumentStatus.Text = "Instrument selection is unavailable.";
+                return;
+            }
+
+            try
+            {
+                _instrumentSelection.RefreshAvailable();
+            }
+            catch (Exception ex)
+            {
+                _instrumentStatus.Text = "Refresh failed: " + Core.Errors.ErrorClassifier.Describe(ex);
+                return;
+            }
+
+            RefreshInstrumentSelection();
+        }
+
+        /// <summary>
+        /// Records the operator's explicit ComboBox choice into the shared selection model. The
+        /// guard prevents the programmatic repopulation in <see cref="RefreshInstrumentSelection"/>
+        /// from being mistaken for an operator action.
+        /// </summary>
+        private void OnInstrumentSelectorChanged()
+        {
+            if (_updatingInstrumentSelector || _instrumentSelection == null)
+            {
+                return;
+            }
+
+            var fullName = _instrumentSelector.SelectedItem as string;
+            if (string.IsNullOrEmpty(fullName))
+            {
+                return;
+            }
+
+            _instrumentSelection.Select(fullName);
+        }
+
+        /// <summary>
+        /// Re-renders the picker from the shared model: the available list, the current selection and
+        /// its resolution. The ComboBox is repopulated under a guard so the programmatic change is
+        /// not treated as an operator selection, and the operator's current selection is preserved
+        /// across the repopulation (never silently switched).
+        /// </summary>
+        private void RefreshInstrumentSelection()
+        {
+            if (_instrumentSelection == null)
+            {
+                _instrumentStatus.Text = "Instrument selection is unavailable.";
+                return;
+            }
+
+            var selection = _instrumentSelection.Selection;
+            var available = selection.AvailableInstrumentIds;
+            var selected = selection.SelectedInstrumentId;
+
+            _updatingInstrumentSelector = true;
+            try
+            {
+                _instrumentSelector.Items.Clear();
+                foreach (var name in available)
+                {
+                    _instrumentSelector.Items.Add(name);
+                }
+
+                // Preserve the operator's selection. A selection that is no longer in the list is
+                // not injected as an item and is not auto-replaced; the status line reports it as
+                // NotLoaded (fail closed).
+                var index = -1;
+                if (!string.IsNullOrEmpty(selected))
+                {
+                    for (var i = 0; i < _instrumentSelector.Items.Count; i++)
+                    {
+                        if (string.Equals(_instrumentSelector.Items[i] as string, selected, StringComparison.Ordinal))
+                        {
+                            index = i;
+                            break;
+                        }
+                    }
+                }
+
+                _instrumentSelector.SelectedIndex = index;
+            }
+            finally
+            {
+                _updatingInstrumentSelector = false;
+            }
+
+            _instrumentStatus.Text = DescribeSelection(selection.Resolution, selected, available.Count, selection.SurfaceObservable);
+        }
+
+        private static string DescribeSelection(
+            Core.Instruments.InstrumentSelectionResult resolution, string selected, int availableCount, bool surfaceObservable)
+        {
+            if (!surfaceObservable)
+            {
+                return "Loaded instruments are not observable; select and refresh once the host is ready.";
+            }
+
+            if (string.IsNullOrEmpty(selected))
+            {
+                return "No target selected — " + availableCount + " loaded instrument(s). Choose one to enable instrument checks.";
+            }
+
+            switch (resolution != null ? resolution.Status : null)
+            {
+                case Core.Instruments.InstrumentSelectionStatus.Resolved:
+                    return "Selected: " + selected + " (resolved).";
+                case Core.Instruments.InstrumentSelectionStatus.NotLoaded:
+                    return "Selected: " + selected + " — NOT LOADED. It is unavailable; choose another or refresh.";
+                case Core.Instruments.InstrumentSelectionStatus.MultipleCandidates:
+                    return "Selected: " + selected + " — AMBIGUOUS (" + resolution.CandidateCount + " matches). Choose a more specific contract.";
+                case Core.Instruments.InstrumentSelectionStatus.SurfaceUnavailable:
+                    return "Loaded instruments are not observable; select and refresh once the host is ready.";
+                default:
+                    return "Selected: " + selected + " (" + (resolution != null ? resolution.Status : "UNKNOWN") + ").";
+            }
+        }
+
+        /// <summary>
+        /// Marshals a selection-model change onto the UI thread before re-rendering, so a change
+        /// raised from a non-UI thread (for example the readiness retry loop) never touches WPF
+        /// controls cross-thread.
+        /// </summary>
+        private void OnInstrumentSelectionChanged()
+        {
+            var dispatcher = Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted)
+            {
+                return;
+            }
+
+            if (dispatcher.CheckAccess())
+            {
+                RefreshInstrumentSelection();
+            }
+            else
+            {
+                dispatcher.InvokeAsync(RefreshInstrumentSelection);
+            }
         }
 
         private DiagnosticMode SelectedMode()

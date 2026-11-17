@@ -170,7 +170,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 instrument.MasterInstrument.ThrowOnTickSizeRead = true;
                 Instrument.All.Add(instrument);
 
-                var provider = TestHost.Provider(true);
+                var provider = TestHost.Provider(true, "ES 12-26");
                 var metadata = provider.GetSnapshot().Attestation.Metadata;
 
                 // The failed field is recorded; the other fields remain successfully read.
@@ -200,7 +200,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument());
 
-                var provider = TestHost.Provider(true);
+                var provider = TestHost.Provider(true, "ES 12-26");
                 var metadata = provider.GetSnapshot().Attestation.Metadata;
 
                 Assert.False(metadata.HasReadFailures);
@@ -230,7 +230,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 instrument.MasterInstrument.ThrowOnPointValueRead = true;
                 Instrument.All.Add(instrument);
 
-                var provider = TestHost.Provider(true);
+                var provider = TestHost.Provider(true, "ES 12-26");
                 var results = new M4InstrumentAttestationProbe().Evaluate(Context(provider));
 
                 var field = Find(results, "M4.FIELD_METADATA");
@@ -256,7 +256,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Connection.Connections.Add(ConnectedRithmic());
                 Instrument.All.Add(EsInstrument());
 
-                var provider = TestHost.Provider(true);
+                var provider = TestHost.Provider(true, "ES 12-26");
                 var results = new M4InstrumentAttestationProbe().Evaluate(Context(provider));
 
                 var field = Find(results, "M4.FIELD_METADATA");
@@ -359,11 +359,10 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 instrument.MasterInstrument.ThrowOnNameRead = true;
                 Instrument.All.Add(instrument);
 
-                var provider = TestHost.Provider(true);
+                var provider = TestHost.Provider(true, "ES 12-26");
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.False(observation.RootMetadataObservable);
-                Assert.Equal(0, observation.MatchingInstrumentCount);
                 Assert.Equal(DiagnosticStatus.INCONCLUSIVE, InstrumentIdentityVerifier.Evaluate(observation).Status);
             }
             finally
@@ -383,7 +382,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 instrument.MasterInstrument.ThrowOnCurrencyRead = true;
                 Instrument.All.Add(instrument);
 
-                var provider = TestHost.Provider(true);
+                var provider = TestHost.Provider(true, "ES 12-26");
                 var observation = provider.GetSnapshot().InstrumentIdentity;
 
                 Assert.False(observation.CurrencyObservable);
@@ -409,7 +408,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 instrument.MasterInstrument.ThrowOnPointValueRead = true;
                 Instrument.All.Add(instrument);
 
-                var provider = TestHost.Provider(true);
+                var provider = TestHost.Provider(true, "ES 12-26");
                 var observation = provider.GetSnapshot().EsProductSpecification;
 
                 Assert.True(observation.InstrumentObserved);

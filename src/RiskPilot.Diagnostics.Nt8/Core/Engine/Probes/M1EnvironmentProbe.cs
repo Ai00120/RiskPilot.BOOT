@@ -66,15 +66,15 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 .WithReasonCode(environmentObserved ? "ENVIRONMENT_CLASS_OBSERVED" : "ENVIRONMENT_CLASS_UNKNOWN")
                 .WithObservation("environment=" + environment.Environment.ToWire())
                 .WithSource(FindingFactory.SourcePublicApi)
-                .WithMethod("Derived from the observed account name convention (Sim* = Simulation).")
-                .WithLimitation("Environment class is inferred from an account name, not an explicit API.")
+                .WithMethod("Derived from the M2-verified target account's own connection mode (Simulation/Live).")
+                .WithLimitation("The environment class is taken only from the verified target account's connection mode; with no verified target it is Unknown, never inferred from an account name.")
                 .WithNextAction(environmentObserved
                     ? "None."
-                    : "Connect an account so the environment class becomes observable.")
+                    : "Verify the target account and its connection so the environment class becomes observable.")
                 .WithEvidence(DiagnosticEvidence.Observable(FindingFactory.SourcePublicApi, "environment=" + environment.Environment.ToWire(), now))
                 .WithRemediation(environmentObserved
-                    ? "Environment class recorded from the running host."
-                    : "No account exposed the environment class; it cannot be proven.");
+                    ? "Environment class recorded from the verified target account's connection mode."
+                    : "No verified target account exposed the environment class; it cannot be proven.");
             results.Add(envCheck);
 
             results.Add(BuildHostVersionCheck(correlation, now));

@@ -33,18 +33,25 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         private readonly DiagnosticRunCoordinator _coordinator;
         private readonly IEvidenceSink _evidenceSink;
         private readonly Action _exportAction;
+        private readonly IInstrumentSelectionController _instrumentSelection;
 
         public DiagnosticCenterWindowManager(DiagnosticViewState viewState, DiagnosticRunCoordinator coordinator, IEvidenceSink evidenceSink)
-            : this(viewState, coordinator, evidenceSink, null)
+            : this(viewState, coordinator, evidenceSink, null, null)
         {
         }
 
         public DiagnosticCenterWindowManager(DiagnosticViewState viewState, DiagnosticRunCoordinator coordinator, IEvidenceSink evidenceSink, Action exportAction)
+            : this(viewState, coordinator, evidenceSink, exportAction, null)
+        {
+        }
+
+        public DiagnosticCenterWindowManager(DiagnosticViewState viewState, DiagnosticRunCoordinator coordinator, IEvidenceSink evidenceSink, Action exportAction, IInstrumentSelectionController instrumentSelection)
         {
             _viewState = viewState ?? throw new ArgumentNullException(nameof(viewState));
             _coordinator = coordinator;
             _evidenceSink = evidenceSink;
             _exportAction = exportAction;
+            _instrumentSelection = instrumentSelection;
         }
 
         /// <summary>True when a window is currently tracked.</summary>
@@ -73,7 +80,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 // single-window reference discipline. Returning true means the request was queued
                 // (the original contract), not that the window already exists.
                 dispatcher.InvokeAsync(() => Controller.OpenOrActivate(
-                    () => new WpfDiagnosticWindow(new DiagnosticCenterWindow(_viewState, _coordinator, _evidenceSink, _exportAction))));
+                    () => new WpfDiagnosticWindow(new DiagnosticCenterWindow(_viewState, _coordinator, _evidenceSink, _exportAction, _instrumentSelection))));
 
                 return true;
             }

@@ -18,13 +18,15 @@ namespace RiskPilot.Diagnostics.Nt8.Host
     /// Lifecycle: SetDefaults -> Active (Initialize + Start) -> Terminated (Stop + Dispose).
     /// Every transition is guarded exactly-once so a repeated state change is harmless.
     /// </summary>
-    public sealed partial class DiagnosticAddOn : AddOnBase
+    public sealed partial class DiagnosticAddOn : AddOnBase, Core.Run.IInstrumentSelectionController
     {
         private readonly object _gate = new object();
         private readonly System.Collections.Generic.List<string> _lifecycleStates = new System.Collections.Generic.List<string>();
         private readonly SwitchableUiDispatcher _uiDispatcher = new SwitchableUiDispatcher();
         private readonly Core.Run.HostReadinessTracker _readiness = new Core.Run.HostReadinessTracker();
+        private readonly Core.Instruments.TargetInstrumentSelection _instrumentSelection = new Core.Instruments.TargetInstrumentSelection();
         private DiagnosticRuntime _runtime;
+        private Nt8HostDataProvider _provider;
         private DiagnosticViewState _viewState;
         private DiagnosticRunCoordinator _coordinator;
         private MarketDataCapture _marketDataCapture;
@@ -128,6 +130,39 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         public Core.Contract.IReadOnlyDiagnosticSource StrategyDiagnosticSource { get; set; }
 
         /// <summary>
+        /// The explicit target instrument identity the diagnostic is scoped to (for example
+        /// <c>"ES 12-26"</c>). This is a thin proxy over <see cref="InstrumentSelection"/>, the
+        /// single source of truth the operator's Diagnostic Center picker writes and the host
+        /// provider and market-data capture read, so every component targets the same contract.
+        /// <para>
+        /// This is the only way the target is chosen: the tool never auto-discovers an instrument
+        /// from the loaded surface, never picks the first one and never selects by an ES root/name
+        /// substring. When it is null/empty the target stays unresolved and M4 reports
+        /// <c>TARGET_INSTRUMENT_NOT_CONFIGURED</c> (INCONCLUSIVE, never PASS). Setting it never
+        /// mutates the host selection; it only tells the read-only diagnostic which instrument to
+        /// observe.
+        /// </para>
+        /// </summary>
+        public string RequestedInstrumentId
+        {
+            get { return _instrumentSelection.SelectedInstrumentId; }
+            set { _instrumentSelection.Select(value); }
+        }
+
+        /// <summary>
+        /// The observable operator target-instrument selection model. The Diagnostic Center renders
+        /// its available list and current selection, and writes the operator's explicit choice here;
+        /// the host provider and the market-data capture read the same model through a live probe,
+        /// so there is no second selection source of truth. The model never selects an instrument on
+        /// its own (no implicit first/nearest-expiry pick), and a refresh never changes the current
+        /// selection.
+        /// </summary>
+        public Core.Instruments.TargetInstrumentSelection InstrumentSelection
+        {
+            get { return _instrumentSelection; }
+        }
+
+        /// <summary>
         /// Live readiness probe for the host data provider. True once the AddOn has reached an
         /// operational lifecycle state in which the NinjaTrader object model is reachable.
         /// <para>
@@ -175,7 +210,9 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     var provider = new Nt8HostDataProvider(
                         () => HostIsLive,
                         () => LifecycleStates,
-                        () => _readiness.Observe());
+                        () => _readiness.Observe(),
+                        () => _instrumentSelection.SelectedInstrumentId);
+                    _provider = provider;
                     _runtime = new DiagnosticRuntime(provider, SystemClock.Instance, 4096, 8192);
                     _runtime.Initialize();
 
@@ -188,7 +225,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     _marketDataCapture = new MarketDataCapture(
                         record => _runtime != null && _runtime.Ingest(record),
                         () => HostIsLive,
-                        null,
+                        () => _instrumentSelection.SelectedInstrumentId,
                         _readiness);
 
                     // The strategy capture pulls read-only strategy observations from the optional
@@ -286,6 +323,65 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             {
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Reloads the operator's available-instrument list from the live host discovery surface and
+        /// returns the resulting resolution of the current selection. The current selection is never
+        /// changed: a still-present contract stays resolved and a removed one is reported NotLoaded
+        /// (never replaced by another contract). Read-only: it enumerates <c>Instrument.FullName</c>
+        /// and never mutates the host. Never throws.
+        /// </summary>
+        public Core.Instruments.InstrumentSelectionResult RefreshAvailableInstruments()
+        {
+            System.Collections.Generic.IReadOnlyList<string> names;
+            var observable = Nt8HostDataProvider.TryEnumerateLoadedInstrumentNames(out names);
+            _instrumentSelection.Refresh(names, observable);
+
+            // The available list changed, so re-evaluate the (idempotent) market-data subscription
+            // against the current selection: a still-selected contract stays subscribed, a removed
+            // one detaches and fails closed.
+            if (observable)
+            {
+                EnsureMarketDataCapture();
+            }
+
+            return _instrumentSelection.Resolution;
+        }
+
+        /// <summary>
+        /// Applies an explicit operator instrument selection (an exact instrument FullName, or null
+        /// to clear). This never mutates the host selection; it only tells the read-only diagnostic
+        /// which contract to observe. After the change the (idempotent) market-data subscription is
+        /// re-evaluated so the capture follows the operator's choice without leaving a stale
+        /// subscription behind. Never throws.
+        /// </summary>
+        public void SelectInstrument(string fullName)
+        {
+            if (!_instrumentSelection.Select(fullName))
+            {
+                return;
+            }
+
+            EnsureMarketDataCapture();
+        }
+
+        /// <summary>The observable operator selection model (see <see cref="InstrumentSelection"/>).</summary>
+        Core.Instruments.TargetInstrumentSelection Core.Run.IInstrumentSelectionController.Selection
+        {
+            get { return _instrumentSelection; }
+        }
+
+        /// <summary>Interface form of <see cref="RefreshAvailableInstruments"/>.</summary>
+        Core.Instruments.InstrumentSelectionResult Core.Run.IInstrumentSelectionController.RefreshAvailable()
+        {
+            return RefreshAvailableInstruments();
+        }
+
+        /// <summary>Interface form of <see cref="SelectInstrument"/>.</summary>
+        void Core.Run.IInstrumentSelectionController.Select(string fullName)
+        {
+            SelectInstrument(fullName);
         }
 
         /// <summary>
@@ -683,6 +779,18 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         public DiagnosticRuntime Runtime
         {
             get { lock (_gate) { return _runtime; } }
+        }
+
+        /// <summary>The host data provider, or null before initialization. Exposed for the window layer.</summary>
+        public Nt8HostDataProvider Provider
+        {
+            get { lock (_gate) { return _provider; } }
+        }
+
+        /// <summary>The market-data capture, or null before initialization. Exposed for the window layer.</summary>
+        public MarketDataCapture MarketDataCapture
+        {
+            get { lock (_gate) { return _marketDataCapture; } }
         }
 
         /// <summary>The observable window state, or null before initialization.</summary>

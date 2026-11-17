@@ -199,41 +199,63 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
 
 ## Canonical ES/CME instrument identity (M4)
 
-- `M4.INSTRUMENT_IDENTITY` **proves** the instrument NinjaTrader actually has selected/loaded is
-  the permanent ES/CME identity. The host reads the loaded discovery surface `Instrument.All`
-  (never `Instrument.GetInstrument(<configured string>)`) and reduces every field to
-  booleans/counts + a `SyntheticRef` `instrument#<hash>` in `InstrumentIdentityObservation`; the
-  decision is `Core/Identity/InstrumentIdentityVerifier` (fail-closed). The raw symbol never enters
-  the observation, a finding or an artifact.
+- **Deterministic target selection (P18 — never auto-discover).** `M4.INSTRUMENT_IDENTITY` proves the
+  **explicitly selected** target instrument, not one auto-discovered from the loaded surface. The
+  single source of truth is the host-free `Core/Instruments/InstrumentSelector.cs`:
+  `InstrumentSelector.Select(requestedId, surfaceObservable, loaded, isStubOrMock)` returns a
+  `InstrumentSelectionResult` (`IsResolved`, `SelectedIndex`, `Status`, `CandidateCount`,
+  `ObservedCount`, `ReasonCode`). Rules: no id ⇒ `NotConfigured` (never "pick the first"); no surface
+  ⇒ `SurfaceUnavailable`; a stub/mock value ⇒ `StubOrMock`; an **exact** full-name match ⇒ `Resolved`;
+  else an **exact** root match ⇒ `Resolved` only when exactly one candidate matches, otherwise
+  `MultipleCandidates` (ambiguous); otherwise `NotLoaded`. A candidate whose root was not readable is
+  never matched by the root rule. The selector never picks a first/default instrument and never
+  selects by a name **substring** — an `ES`-like but different symbol can never be chosen.
+- The host adapter `Nt8HostDataProvider.SelectLoadedInstrument` / `ResolveLoadedInstrument` enumerates
+  `Instrument.All` only to compare each candidate's own `FullName`/`MasterInstrument.Name`; the raw
+  name is reduced to booleans/counts + a `SyntheticRef` `instrument#<hash>`. `ResolveAttestationInstrument`,
+  `BuildInstrumentIdentityObservation` and `BuildEsProductSpecificationObservation` all go through the
+  same selector, so **one** explicit identity is used by the metadata inspection **and** the
+  market-data capture. `MarketDataCapture` takes the same `requestedInstrumentId` and refuses to
+  subscribe with no selection (`Capture_NoSelection_DoesNotSubscribe`).
+- `DiagnosticAddOn.RequestedInstrumentId` is the operator/host-set explicit target (default null),
+  threaded into both `new Nt8HostDataProvider(...)` and `new MarketDataCapture(...)`. Setting it is
+  read-only — it never mutates the host selection. With no explicit target the tool never becomes
+  ready (`HostReadinessState.AwaitingInstrument`) and M4 stays `INCONCLUSIVE`
+  (`TARGET_INSTRUMENT_NOT_CONFIGURED`).
+- Fail-closed mapping (verifier `Core/Identity/InstrumentIdentityVerifier`): no selection ⇒
+  `INCONCLUSIVE` (`TARGET_INSTRUMENT_NOT_CONFIGURED`); the selected contract is not loaded ⇒
+  `INCONCLUSIVE` (`TARGET_INSTRUMENT_NOT_LOADED`, never a false root mismatch); the selection matches
+  more than one loaded contract ⇒ `INCONCLUSIVE` (`TARGET_INSTRUMENT_AMBIGUOUS`); no readable root at
+  all ⇒ `INCONCLUSIVE` (`INSTRUMENT_ROOT_UNOBSERVABLE`); a **resolved** contract whose root was read
+  and disagrees ⇒ `FAIL` (`INSTRUMENT_ROOT_MISMATCH`); more than one matching root ⇒
+  `INCONCLUSIVE` (`..._AMBIGUOUS`); a stub/mock value ⇒ `INCONCLUSIVE`. A mismatch outranks an
+  unobservable field. The expiry is **not** pinned: only the canonical root/venue form
+  (`ES_FUTURES_CME_*`) is required, so a manual contract roll keeps the identity valid.
 - The venue is confirmed only by the D-096 configured-route metadata: selected route `Globex`,
   configured exchange set exactly `{Globex}` and the sole **connected** provider path `Rithmic`.
   CME is **never** inferred from the `ES` symbol text. An unconfirmed exchange ⇒
   `INCONCLUSIVE` (`EXCHANGE_METADATA_UNOBSERVABLE`), never PASS; an observed route that contradicts
   ⇒ `FAIL` (`EXCHANGE_MISMATCH`).
-- Fail-closed mapping: no surface ⇒ `INCONCLUSIVE` (`INSTRUMENT_IDENTITY_UNOBSERVABLE`); no loaded
-  instrument ⇒ `INCONCLUSIVE` (`..._NO_INSTRUMENT_OBSERVED`); no readable root at all ⇒
-  `INCONCLUSIVE` (`INSTRUMENT_ROOT_UNOBSERVABLE`, never a false FAIL); a root that was read and does
-  not match exactly ⇒ `FAIL` (`INSTRUMENT_ROOT_MISMATCH`); more than one matching root ⇒
-  `INCONCLUSIVE` (`..._AMBIGUOUS`); a stub/mock value ⇒ `INCONCLUSIVE`. A mismatch outranks an
-  unobservable field. The expiry is **not** pinned: only the canonical root/venue form
-  (`ES_FUTURES_CME_*`) is required, so a manual contract roll keeps the identity valid.
 - `MasterInstrument.*` is only read when the provider's **live** readiness probe returns true. The
   probe is a `Func<bool>` evaluated on every read, not a value captured at construction: an AddOn is
   constructed at `State.Active`, before `MasterInstrument.*` is safe to read, so a captured flag would
   stay false for the whole session and leave M4 permanently `INCONCLUSIVE`. The AddOn supplies
-  `() => HostIsLive` (true once the state reaches `DataLoaded`/`Historical`/`Transition`/`Realtime`);
+  `() => HostIsLive` (true once the state reaches `Active`/`DataLoaded`/`Historical`/`Transition`/`Realtime`);
   a throwing probe fails closed to not-ready. Before readiness the identity is `INCONCLUSIVE`, not FAIL.
-- The D-078/D-096 attestation target is the **actual** loaded instrument: with no configured id the
-  host consults `Instrument.All` and attests the instrument whose `MasterInstrument.Name` matches the
-  permanent ES root (`ExpectedInstrumentIdentity.RootMatches`), reading that real object's metadata
-  (never one built from a configured string). Zero matching roots or more than one (ambiguous) ⇒
-  `HOST_UNAVAILABLE` (fail closed); a configured id, when present, still wins.
+  A selected-but-not-ready contract reports `SelectionStatus=Resolved` with `RootMetadataObservable=false`.
+- The D-078/D-096 attestation target is the same **explicitly selected** instrument: with no selection
+  it is `HOST_UNAVAILABLE`; the selected contract that is not loaded, or one that matches several
+  loaded contracts, is also `HOST_UNAVAILABLE` (fail closed). When it resolves, the host attests that
+  real loaded object (never one built from the configured string).
 - The check is emitted **even when the D-078/D-096 attestation observation is null**, so M4 always
   reports the instrument identity.
-- `instruments.json` carries an `instrumentIdentity` block (status, counts, reason codes, masked
-  ref); `EvidencePackageBuilder` re-evaluates the verifier from `dataset.Snapshot.InstrumentIdentity`.
-- Tests: `InstrumentIdentityTests` (verifier + probe) and `HostInstrumentIdentityTests` (host
-  adapter over the offline stub surface); a green stub run is **not** real-host proof.
+- `instruments.json` carries an `instrumentIdentity` block (status, `selectionStatus`,
+  `selectionReasonCode`, counts, reason codes, masked ref); `EvidencePackageBuilder` re-evaluates the
+  verifier from `dataset.Snapshot.InstrumentIdentity`.
+- Tests: `InstrumentIdentityTests` (verifier + probe), `HostInstrumentIdentityTests` (host adapter over
+  the offline stub surface) and `InstrumentSelectionTests` (the selector rule + the host resolution +
+  the AddOn readiness + the shared metadata/capture identity, incl. no-selection, unloaded, ambiguous,
+  mismatch and not-ready cases); a green stub run is **not** real-host proof.
 
 ## M3 active-order counting
 
@@ -722,6 +744,55 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   `OnWindowDestroyed` threading, and real `Dispatcher.HasShutdownStarted`/`HasShutdownFinished`
   timing) is **not** provable offline and still needs the manual NT8 acceptance tests in
   `docs/LIFECYCLE_INTEGRATION_AUDIT.md`.
+
+## Operator target-instrument selection & verified environment class (targeted remediation)
+
+- **The target instrument is chosen explicitly by the operator, never auto-discovered.** The
+  host-free model is `Core/Instruments/TargetInstrumentSelection.cs` (observable selected id +
+  available list + `Changed`), the decision rule is the existing
+  `Core/Instruments/InstrumentSelector.cs`, and `Core/Run/IInstrumentSelectionController.cs` is the
+  minimal surface the Diagnostic Center drives. `DiagnosticAddOn` implements it over the
+  read-only `Instrument.All` discovery surface (`Nt8HostDataProvider.TryEnumerateLoadedInstrumentNames`).
+  No component ever picks the first/nearest-expiry contract.
+- **One selection source of truth, read live.** The AddOn owns one `TargetInstrumentSelection` and
+  threads `() => _instrumentSelection.SelectedInstrumentId` (a **live probe**, never a captured
+  string) into both `Nt8HostDataProvider` and `MarketDataCapture`, so a selection the operator makes
+  *after* the AddOn is constructed (at `State.Active`) is honoured by the very next resolution.
+  `RequestedInstrumentId` on the AddOn is now a thin proxy over the same model.
+- **Fail-closed selection statuses** (`InstrumentSelectionStatus`): no selection ⇒ `NOT_CONFIGURED`;
+  a selected contract that is not loaded ⇒ `NOT_LOADED`; an insufficiently specific selection
+  matching >1 loaded contract ⇒ `MULTIPLE_CANDIDATES`; a surface that cannot be enumerated ⇒
+  `SURFACE_UNAVAILABLE`; a stub/mock value ⇒ `STUB_OR_MOCK`. Only an exact, unique match ⇒ `RESOLVED`.
+  A null or **throwing** selection probe is treated as "no selection" (never an implicit instrument).
+- **Re-targeting is idempotent and never duplicates a subscription.** `MarketDataCapture.TrySubscribe`
+  is a no-op while already subscribed to the resolved instrument; on a selection change it calls
+  `DetachInstrumentLocked` before subscribing to the new contract, so two contracts are never
+  subscribed at once. Clearing the selection (or a selection that no longer resolves) detaches and
+  reports the instrument fact unresolved. `Detach()` and the locked helper are the only detach paths.
+- **The picker lives in `Core/Run`.** The WPF `DiagnosticCenterWindow` only renders the shared model
+  (a ComboBox of exact FullNames + a Refresh button + a status line) and writes the operator's
+  choice through the controller; a programmatic repopulation runs under a guard so it is never
+  mistaken for an operator action, and a refresh never changes the current selection. The WPF files
+  are `UseStubs != true`-only, so this is verified by review, not by the offline stub build.
+- **The environment class is derived from the M2-verified target account's own connection mode.**
+  `Core/Identity/EnvironmentClassifier.cs` (`Classify`) is the host-free rule:
+  `Nt8HostDataProvider.DetectEnvironment` resolves the verified target (`TryGetVerifiedTargetAccount`)
+  and classifies from `target.Connection.Options.Mode`; the same helper now backs
+  `AccountRecord.AccountClass`. The previous first-account "Sim*" name heuristic is gone. Fail-closed:
+  no verified target, no connection/options, or an unreadable mode ⇒ `EnvironmentClass.Unknown`
+  (M1 `INCONCLUSIVE`), never a guess and never taken from an unrelated account.
+- Tests: `EnvironmentClassificationTests` (classifier + host adapter over the offline stub surface:
+  verified Simulation ⇒ Simulation; no verified target / unverified Live target / no connection /
+  no accounts ⇒ Unknown; first-account-not-target never drives the class) and the new cases in
+  `InstrumentSelectionTests` (selection model, AddOn refresh/select flow, live probe sees a
+  post-construction selection, throwing probe fails closed, re-target detaches the previous
+  instrument). A green stub run is **not** real-host proof.
+- **Known pre-existing flake (not caused by this work):** `M7StrategyTests.RuntimeIntegration_
+  IngestedStrategyRecord_DrivesM7ObservationAndEvidence` can observe `M7.STRATEGY_SURFACE=INCONCLUSIVE`
+  because `DiagnosticRuntime.Process` increments `Session.RecordProcessed()` **before**
+  `dispatcher.Dispatch(record)`, so a test waiting on `ProcessedCount` may read the accumulator
+  before the M7 consumer wrote it. Reproduced on the untouched baseline (~1/25 runs); left as-is
+  (out of scope).
 
 ## Reference repo
 
