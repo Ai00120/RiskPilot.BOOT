@@ -11,6 +11,57 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ### Changed
 
+- **Host readiness now reports nine independent, evidence-based facts instead of a conflated
+  Boolean.** The previous model recorded `metadataReady` from the lifecycle gate, so an AddOn that
+  merely reached `Active` reported metadata as ready even though `MasterInstrument.*` had never been
+  read. `M1.HOST_READINESS` now reports `hostOperational`, `hostAvailable`, `metadataReadAllowed`,
+  `instrumentResolved`, `metadataObserved`, `accountVerified`, `connectionVerified`,
+  `marketDataSubscribed` and `marketDataObserved` — each with its own three-valued state
+  (`SATISFIED`/`UNSATISFIED`/`UNKNOWN`). No fact is derived from another without evidence: reaching
+  `Active` never implies the metadata was read, a resolved instrument never implies market data, a
+  subscription never implies events, an account in `Account.All` never implies verification, and a
+  connected provider never implies a verified target-account association. The check is `PASS` only
+  when every fact holds; any unknown fact keeps it `INCONCLUSIVE`. The account/connection facts are
+  derived from the M2 identity and association observations by the host-free
+  `Core/Run/HostReadinessDerivation`, so the live probe and the exported `environment.json`
+  `hostReadiness` block agree.
+- **Readiness is invalidated when its evidence goes stale.** `HostReadinessTracker.BeginEpoch`
+  discards every fact observed before a lifecycle restart (a new lifecycle epoch), and
+  `InvalidateStreamFacts` (driven by `DiagnosticAddOn.InvalidateReadinessForReconnect`) clears the
+  connection/stream facts after a connection loss, so readiness is never `PASS` on stale or
+  invalidated evidence. The exported block carries the `epoch`.
+- **The AddOn's provider placeholder-slot mapping is now an explicit, default-empty input.**
+  `DiagnosticAddOn.OwnerAuthorizedProviderSlots` defaults to the fail-closed empty mapping, so
+  production never resolves a generic slot (for example `Provider14`) to a vendor; a reviewed
+  mapping may be supplied before `Active`. This is a read-only lookup, never a host mutation.
+- **M7 documents its missing external producer.** BOOT ships no strategy diagnostic producer, so M7
+  stays `INCONCLUSIVE` (never a fabricated `PASS`) and no BOT dependency is introduced. The neutral
+  read-only boundary and the producer responsibilities are recorded in
+  `docs/M7_STRATEGY_INTEGRATION.md`.
+- **New `docs/NT8_ACCEPTANCE_RUNBOOK.md`**: the BOOT-only real-host acceptance procedure (AddOn
+  load, lifecycle, explicit instrument selection, identity/venue, multiple contracts, account and
+  connection association, provider identity, LIVE/SIM classification, Level I/II observation,
+  reconnect, shutdown/restart, evidence export and fail-closed behavior). It never asks the
+  operator to submit an order or enable trading. No real-host run has been executed from this
+  build environment; the runbook is the procedure, not evidence.
+
+### Added
+
+- `Core/Run/HostReadiness.cs`: `HostReadinessFacts`, `HostReadinessDerivation`,
+  `HostReadinessEvaluator` and the thread-safe `HostReadinessTracker` (with the lifecycle-epoch and
+  stream-invalidation semantics) plus `HostReadinessRetryPolicy`.
+- `Core/Models/Observations/HostReadinessObservation.cs`: the `ReadinessFactState` enum, the
+  `HostReadinessState` labels/reason codes and the separated-facts observation.
+- Tests: `HostReadinessTests` (each fact independent, three-valued, concurrent tracker, epoch
+  discard, stream invalidation), the readiness regression cases in `AddOnLifecycleReadinessTests`
+  (Active with missing metadata, permitted-but-failed read, resolved-but-unsubscribed,
+  subscribed-but-no-events, events-with-unresolved-account, verified-account-disconnected,
+  all-facts-ready, shutdown/restart, reconnect invalidation, stale-epoch discard), the M7
+  no-producer cases in `M7StrategyTests`, and the AddOn default-mapping case in
+  `ProviderIdentityTests`.
+
+### Changed
+
 - **Environment classification is bound to the verified account chain
   `Target Account → Verified Connection → Provider Identity → Environment`.** The class was already
   derived from the M2-verified target account's own connection mode rather than the first

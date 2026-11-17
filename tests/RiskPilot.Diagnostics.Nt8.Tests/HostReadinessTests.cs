@@ -8,13 +8,29 @@ using Xunit;
 namespace RiskPilot.Diagnostics.Nt8.Tests
 {
     /// <summary>
-    /// Unit tests for the host-free readiness model that replaces the single, permanently-false
-    /// <c>HostIsLive</c> Boolean. An AddOn uses the NinjaTrader "Active state" system and never
-    /// reaches <c>DataLoaded</c>/<c>Historical</c>/<c>Transition</c>/<c>Realtime</c>, so readiness
-    /// must key on <c>Active</c> and report the five concepts separately.
+    /// Unit tests for the host-free readiness model. Each readiness fact is independent and
+    /// three-valued, so no fact is inferred from another: reaching <c>Active</c> never implies the
+    /// metadata was read, a resolved instrument never implies market data arrived, a subscription
+    /// never implies events, and an account in <c>Account.All</c> never implies verification.
     /// </summary>
     public class HostReadinessTests
     {
+        private static HostReadinessFacts AllFacts()
+        {
+            return new HostReadinessFacts
+            {
+                AddOnState = "Active",
+                HostAvailable = ReadinessFactState.Satisfied,
+                MetadataReadAllowed = ReadinessFactState.Satisfied,
+                InstrumentResolved = ReadinessFactState.Satisfied,
+                MetadataObserved = ReadinessFactState.Satisfied,
+                AccountVerified = ReadinessFactState.Satisfied,
+                ConnectionVerified = ReadinessFactState.Satisfied,
+                MarketDataSubscribed = ReadinessFactState.Satisfied,
+                MarketDataObserved = ReadinessFactState.Satisfied
+            };
+        }
+
         [Theory]
         [InlineData("Active", true)]
         [InlineData("DataLoaded", true)]
@@ -35,7 +51,6 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         [Fact]
         public void AddOnLifecycle_ClassifiesTheRealAddOnSequence()
         {
-            // The documented AddOn sequence: SetDefaults -> Configure -> Active -> Terminated.
             Assert.False(AddOnLifecycle.IsOperational("SetDefaults"));
             Assert.False(AddOnLifecycle.IsOperational("Configure"));
             Assert.True(AddOnLifecycle.IsOperational("Active"));
@@ -45,27 +60,143 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         [Fact]
         public void Evaluator_ActiveAlone_IsNotFullyReady()
         {
-            // The core regression: reaching Active must NOT be reported as ready. Only the host
-            // object model being reachable is proven by Active.
-            var observation = HostReadinessEvaluator.Evaluate(new HostReadinessFacts { AddOnState = "Active", HostAvailable = true });
+            // The core regression: reaching Active must NOT be reported as ready, and must NOT imply
+            // the metadata was read. Only the host object model being reachable is proven by Active.
+            var observation = HostReadinessEvaluator.Evaluate(new HostReadinessFacts
+            {
+                AddOnState = "Active",
+                HostAvailable = ReadinessFactState.Satisfied
+            });
 
             Assert.True(observation.LifecycleOperational);
             Assert.False(observation.FullyReady);
-            Assert.Equal(HostReadinessState.AwaitingInstrument, observation.State);
-            Assert.Contains(HostReadinessReasonCodes.InstrumentUnavailable, observation.ReasonCodes);
+            Assert.Equal(ReadinessFactState.Satisfied, observation.HostOperational);
+            Assert.Equal(ReadinessFactState.Unknown, observation.MetadataObserved);
+            Assert.Equal(HostReadinessState.AwaitingMetadataRead, observation.State);
+            Assert.Contains(HostReadinessReasonCodes.MetadataReadNotAllowed, observation.ReasonCodes);
+        }
+
+        [Fact]
+        public void Evaluator_ActiveLifecycleWithMissingMetadata_IsNotReady()
+        {
+            // Active lifecycle, host reachable, metadata read permitted, instrument resolved — but the
+            // metadata was never observed. Readiness must stay AWAITING_METADATA, never READY.
+            var facts = AllFacts();
+            facts.MetadataObserved = ReadinessFactState.Unknown;
+
+            var observation = HostReadinessEvaluator.Evaluate(facts);
+
+            Assert.False(observation.FullyReady);
+            Assert.Equal(HostReadinessState.AwaitingMetadata, observation.State);
+            Assert.Contains(HostReadinessReasonCodes.MetadataUnavailable, observation.ReasonCodes);
+        }
+
+        [Fact]
+        public void Evaluator_MetadataReadAllowed_DoesNotImplyMetadataObserved()
+        {
+            // The precise defect: metadataReadAllowed was conflated with metadataReady. They are now
+            // separate facts; permitted-but-unread must not be reported as observed.
+            var observation = HostReadinessEvaluator.Evaluate(new HostReadinessFacts
+            {
+                AddOnState = "Active",
+                HostAvailable = ReadinessFactState.Satisfied,
+                MetadataReadAllowed = ReadinessFactState.Satisfied,
+                InstrumentResolved = ReadinessFactState.Satisfied,
+                MetadataObserved = ReadinessFactState.Unknown
+            });
+
+            Assert.Equal(ReadinessFactState.Satisfied, observation.MetadataReadAllowed);
+            Assert.Equal(ReadinessFactState.Unknown, observation.MetadataObserved);
+            Assert.False(observation.FullyReady);
+        }
+
+        [Fact]
+        public void Evaluator_MetadataReadFails_IsNotReady()
+        {
+            // The read was permitted and attempted, but the required metadata could not be read.
+            var facts = AllFacts();
+            facts.MetadataObserved = ReadinessFactState.Unsatisfied;
+
+            var observation = HostReadinessEvaluator.Evaluate(facts);
+
+            Assert.False(observation.FullyReady);
+            Assert.Equal(HostReadinessState.AwaitingMetadata, observation.State);
+        }
+
+        [Fact]
+        public void Evaluator_InstrumentResolvedButNoSubscription_IsNotReady()
+        {
+            var facts = AllFacts();
+            facts.MarketDataSubscribed = ReadinessFactState.Unknown;
+            facts.MarketDataObserved = ReadinessFactState.Unknown;
+
+            var observation = HostReadinessEvaluator.Evaluate(facts);
+
+            Assert.True(observation.InstrumentResolved.IsSatisfied());
+            Assert.False(observation.FullyReady);
+            Assert.Equal(HostReadinessState.AwaitingSubscription, observation.State);
+        }
+
+        [Fact]
+        public void Evaluator_SubscribedButNoMarketDataEvents_IsNotReady()
+        {
+            // A successful subscription must not imply data availability: marketDataObserved is a
+            // separate fact.
+            var facts = AllFacts();
+            facts.MarketDataObserved = ReadinessFactState.Unknown;
+
+            var observation = HostReadinessEvaluator.Evaluate(facts);
+
+            Assert.True(observation.MarketDataSubscribed.IsSatisfied());
+            Assert.False(observation.FullyReady);
+            Assert.Equal(HostReadinessState.AwaitingMarketData, observation.State);
+            Assert.Contains(HostReadinessReasonCodes.MarketDataNotObserved, observation.ReasonCodes);
+        }
+
+        [Fact]
+        public void Evaluator_MarketDataObservedButAccountUnverified_IsNotReady()
+        {
+            var facts = AllFacts();
+            facts.AccountVerified = ReadinessFactState.Unknown;
+
+            var observation = HostReadinessEvaluator.Evaluate(facts);
+
+            Assert.True(observation.MarketDataObserved.IsSatisfied());
+            Assert.False(observation.FullyReady);
+            Assert.Equal(HostReadinessState.AwaitingAccount, observation.State);
+        }
+
+        [Fact]
+        public void Evaluator_AccountVerifiedButConnectionDisconnected_IsNotReady()
+        {
+            var facts = AllFacts();
+            facts.ConnectionVerified = ReadinessFactState.Unsatisfied;
+
+            var observation = HostReadinessEvaluator.Evaluate(facts);
+
+            Assert.True(observation.AccountVerified.IsSatisfied());
+            Assert.False(observation.FullyReady);
+            Assert.Equal(HostReadinessState.AwaitingConnection, observation.State);
+            Assert.Contains(HostReadinessReasonCodes.ConnectionUnverified, observation.ReasonCodes);
+        }
+
+        [Fact]
+        public void Evaluator_AllFacts_IsReady()
+        {
+            var observation = HostReadinessEvaluator.Evaluate(AllFacts());
+
+            Assert.True(observation.FullyReady);
+            Assert.Equal(HostReadinessState.Ready, observation.State);
+            Assert.Contains(HostReadinessReasonCodes.Ready, observation.ReasonCodes);
         }
 
         [Fact]
         public void Evaluator_NotOperational_IsReportedBeforeHostFacts()
         {
-            var observation = HostReadinessEvaluator.Evaluate(new HostReadinessFacts
-            {
-                AddOnState = "Configure",
-                HostAvailable = true,
-                InstrumentResolved = true,
-                MetadataReady = true,
-                MarketDataSubscribed = true
-            });
+            var facts = AllFacts();
+            facts.AddOnState = "Configure";
+
+            var observation = HostReadinessEvaluator.Evaluate(facts);
 
             Assert.False(observation.LifecycleOperational);
             Assert.False(observation.FullyReady);
@@ -75,14 +206,10 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         [Fact]
         public void Evaluator_ShutdownOutranksEverything()
         {
-            var observation = HostReadinessEvaluator.Evaluate(new HostReadinessFacts
-            {
-                AddOnState = "Terminated",
-                HostAvailable = true,
-                InstrumentResolved = true,
-                MetadataReady = true,
-                MarketDataSubscribed = true
-            });
+            var facts = AllFacts();
+            facts.AddOnState = "Terminated";
+
+            var observation = HostReadinessEvaluator.Evaluate(facts);
 
             Assert.True(observation.ShuttingDown);
             Assert.False(observation.FullyReady);
@@ -90,41 +217,16 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
-        public void Evaluator_AllFiveFacts_IsReady()
+        public void Evaluator_UnknownLifecycleState_IsNotOperational()
         {
             var observation = HostReadinessEvaluator.Evaluate(new HostReadinessFacts
             {
-                AddOnState = "Active",
-                HostAvailable = true,
-                InstrumentResolved = true,
-                MetadataReady = true,
-                MarketDataSubscribed = true
+                AddOnState = string.Empty,
+                HostAvailable = ReadinessFactState.Satisfied
             });
 
-            Assert.True(observation.FullyReady);
-            Assert.Equal(HostReadinessState.Ready, observation.State);
-            Assert.Contains(HostReadinessReasonCodes.Ready, observation.ReasonCodes);
-        }
-
-        [Theory]
-        [InlineData(false, true, true, true, HostReadinessState.AwaitingHost)]
-        [InlineData(true, false, true, true, HostReadinessState.AwaitingInstrument)]
-        [InlineData(true, true, false, true, HostReadinessState.AwaitingMetadata)]
-        [InlineData(true, true, true, false, HostReadinessState.AwaitingSubscription)]
-        public void Evaluator_ReportsTheExactOutstandingFact(
-            bool host, bool instrument, bool metadata, bool subscribed, string expectedState)
-        {
-            var observation = HostReadinessEvaluator.Evaluate(new HostReadinessFacts
-            {
-                AddOnState = "Active",
-                HostAvailable = host,
-                InstrumentResolved = instrument,
-                MetadataReady = metadata,
-                MarketDataSubscribed = subscribed
-            });
-
-            Assert.False(observation.FullyReady);
-            Assert.Equal(expectedState, observation.State);
+            Assert.Equal(ReadinessFactState.Unknown, observation.HostOperational);
+            Assert.Equal(HostReadinessState.NotOperational, observation.State);
         }
 
         [Fact]
@@ -141,14 +243,18 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         {
             var tracker = new HostReadinessTracker();
             tracker.RecordAddOnState("Active");
-            tracker.RecordHostAvailable(true);
+            tracker.RecordHostAvailable(ReadinessFactState.Satisfied);
+            tracker.RecordMetadataReadAllowed(ReadinessFactState.Satisfied);
 
             var first = tracker.Observe();
             Assert.Equal(HostReadinessState.AwaitingInstrument, first.State);
 
-            tracker.RecordInstrumentResolved(true);
-            tracker.RecordMetadataReady(true);
-            tracker.RecordMarketDataSubscribed(true);
+            tracker.RecordInstrumentResolved(ReadinessFactState.Satisfied);
+            tracker.RecordMetadataObserved(ReadinessFactState.Satisfied);
+            tracker.RecordAccountVerified(ReadinessFactState.Satisfied);
+            tracker.RecordConnectionVerified(ReadinessFactState.Satisfied);
+            tracker.RecordMarketDataSubscribed(ReadinessFactState.Satisfied);
+            tracker.RecordMarketDataObserved(ReadinessFactState.Satisfied);
 
             var ready = tracker.Observe();
             Assert.True(ready.FullyReady);
@@ -173,10 +279,10 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     {
                         switch (index)
                         {
-                            case 0: tracker.RecordHostAvailable(true); break;
-                            case 1: tracker.RecordInstrumentResolved(true); break;
-                            case 2: tracker.RecordMetadataReady(true); break;
-                            default: tracker.RecordMarketDataSubscribed(true); break;
+                            case 0: tracker.RecordHostAvailable(ReadinessFactState.Satisfied); break;
+                            case 1: tracker.RecordInstrumentResolved(ReadinessFactState.Satisfied); break;
+                            case 2: tracker.RecordMetadataReadAllowed(ReadinessFactState.Satisfied); break;
+                            default: tracker.RecordMarketDataSubscribed(ReadinessFactState.Satisfied); break;
                         }
                     }
                 });
@@ -190,8 +296,61 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             }
 
             var observation = tracker.Observe();
-            Assert.True(observation.FullyReady);
-            Assert.Equal(HostReadinessState.Ready, observation.State);
+            Assert.False(observation.FullyReady);
+        }
+
+        [Fact]
+        public void Tracker_InvalidateStreamFacts_ClearsConnectionAndStreamFacts()
+        {
+            var tracker = new HostReadinessTracker();
+            tracker.RecordAddOnState("Active");
+            tracker.RecordHostAvailable(ReadinessFactState.Satisfied);
+            tracker.RecordMetadataReadAllowed(ReadinessFactState.Satisfied);
+            tracker.RecordInstrumentResolved(ReadinessFactState.Satisfied);
+            tracker.RecordMetadataObserved(ReadinessFactState.Satisfied);
+            tracker.RecordAccountVerified(ReadinessFactState.Satisfied);
+            tracker.RecordConnectionVerified(ReadinessFactState.Satisfied);
+            tracker.RecordMarketDataSubscribed(ReadinessFactState.Satisfied);
+            tracker.RecordMarketDataObserved(ReadinessFactState.Satisfied);
+            Assert.True(tracker.Observe().FullyReady);
+
+            // A reconnect invalidates the connection- and stream-dependent facts, so readiness can
+            // never remain satisfied on evidence that no longer holds.
+            tracker.InvalidateStreamFacts();
+
+            var observation = tracker.Observe();
+            Assert.False(observation.FullyReady);
+            Assert.Equal(ReadinessFactState.Unknown, observation.ConnectionVerified);
+            Assert.Equal(ReadinessFactState.Unknown, observation.MarketDataSubscribed);
+            Assert.Equal(ReadinessFactState.Unknown, observation.MarketDataObserved);
+            // The lifecycle/metadata/instrument facts are unaffected.
+            Assert.True(observation.MetadataObserved.IsSatisfied());
+            Assert.True(observation.InstrumentResolved.IsSatisfied());
+        }
+
+        [Fact]
+        public void Tracker_BeginEpoch_DiscardsStaleFacts()
+        {
+            var tracker = new HostReadinessTracker();
+            tracker.RecordAddOnState("Active");
+            tracker.RecordHostAvailable(ReadinessFactState.Satisfied);
+            tracker.RecordMetadataReadAllowed(ReadinessFactState.Satisfied);
+            tracker.RecordInstrumentResolved(ReadinessFactState.Satisfied);
+            tracker.RecordMetadataObserved(ReadinessFactState.Satisfied);
+            tracker.RecordAccountVerified(ReadinessFactState.Satisfied);
+            tracker.RecordConnectionVerified(ReadinessFactState.Satisfied);
+            tracker.RecordMarketDataSubscribed(ReadinessFactState.Satisfied);
+            tracker.RecordMarketDataObserved(ReadinessFactState.Satisfied);
+            Assert.True(tracker.Observe().FullyReady);
+
+            // A restart begins a new epoch: no fact from the previous epoch may keep the tool ready.
+            tracker.BeginEpoch();
+            tracker.RecordAddOnState("Active");
+
+            var observation = tracker.Observe();
+            Assert.False(observation.FullyReady);
+            Assert.Equal(HostReadinessState.AwaitingHost, observation.State);
+            Assert.Equal(1, observation.Epoch);
         }
 
         [Fact]
@@ -222,6 +381,34 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.Equal(1, policy.MaxAttempts);
             Assert.Equal(1, policy.InitialDelayMs);
             Assert.True(policy.MaxDelayMs >= policy.InitialDelayMs);
+        }
+
+        [Fact]
+        public void Derivation_AccountVerified_IsUnknownWithNoSurface()
+        {
+            Assert.Equal(ReadinessFactState.Unknown, HostReadinessDerivation.AccountVerified(null));
+            Assert.Equal(ReadinessFactState.Unknown,
+                HostReadinessDerivation.AccountVerified(new AccountIdentityObservation()));
+        }
+
+        [Fact]
+        public void Derivation_ConnectionVerified_IsUnsatisfiedWhenDisconnected()
+        {
+            var connection = new TargetAccountConnectionObservation
+            {
+                AccountSurfaceObservable = true,
+                ObservedAccountCount = 1,
+                MatchingAccountCount = 1
+            };
+            var account = new AccountIdentityObservation
+            {
+                AccountSurfaceObservable = true,
+                ConnectionStatusObservable = true,
+                ConnectionConnected = false
+            };
+
+            Assert.Equal(ReadinessFactState.Unsatisfied,
+                HostReadinessDerivation.ConnectionVerified(connection, account));
         }
     }
 }

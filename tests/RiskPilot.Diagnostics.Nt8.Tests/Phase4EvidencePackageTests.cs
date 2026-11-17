@@ -486,11 +486,15 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     {
                         SurfaceObservable = true,
                         AddOnState = "Active",
-                        LifecycleOperational = true,
-                        HostAvailable = true,
-                        InstrumentReady = true,
-                        MetadataReady = true,
-                        MarketDataSubscribed = true,
+                        HostOperational = ReadinessFactState.Satisfied,
+                        HostAvailable = ReadinessFactState.Satisfied,
+                        MetadataReadAllowed = ReadinessFactState.Satisfied,
+                        InstrumentResolved = ReadinessFactState.Satisfied,
+                        MetadataObserved = ReadinessFactState.Satisfied,
+                        AccountVerified = ReadinessFactState.Satisfied,
+                        ConnectionVerified = ReadinessFactState.Satisfied,
+                        MarketDataSubscribed = ReadinessFactState.Satisfied,
+                        MarketDataObserved = ReadinessFactState.Satisfied,
                         FullyReady = true,
                         State = HostReadinessState.Ready,
                         ReasonCodes = new List<string> { HostReadinessReasonCodes.Ready }
@@ -504,10 +508,14 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.Contains("\"hostReadiness\"", environment);
             Assert.Contains("\"state\":\"READY\"", environment);
             Assert.Contains("\"addOnState\":\"Active\"", environment);
-            Assert.Contains("\"hostAvailable\":true", environment);
-            Assert.Contains("\"instrumentReady\":true", environment);
-            Assert.Contains("\"metadataReady\":true", environment);
-            Assert.Contains("\"marketDataSubscribed\":true", environment);
+            Assert.Contains("\"hostAvailable\":\"SATISFIED\"", environment);
+            Assert.Contains("\"metadataReadAllowed\":\"SATISFIED\"", environment);
+            Assert.Contains("\"instrumentResolved\":\"SATISFIED\"", environment);
+            Assert.Contains("\"metadataObserved\":\"SATISFIED\"", environment);
+            Assert.Contains("\"accountVerified\":\"SATISFIED\"", environment);
+            Assert.Contains("\"connectionVerified\":\"SATISFIED\"", environment);
+            Assert.Contains("\"marketDataSubscribed\":\"SATISFIED\"", environment);
+            Assert.Contains("\"marketDataObserved\":\"SATISFIED\"", environment);
             Assert.Contains("\"fullyReady\":true", environment);
             Assert.Contains("HOST_READY", environment);
         }

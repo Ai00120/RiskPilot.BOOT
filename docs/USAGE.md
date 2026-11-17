@@ -52,9 +52,46 @@ package.
 | **M4** | Instrument attestation / D-078 field approval. |
 | **M5** | DOM & market data: snapshot sync, out-of-bounds updates, data integrity. |
 | **M6** | TradeDelta / OrderFlow: trade-stream observability, direction provenance, completeness, readiness. |
-| **M7** | Strategies / risk gate: strategy surface and candidate rejection. |
+| **M7** | Strategies / risk gate: strategy surface and candidate rejection. BOOT ships no strategy producer, so M7 reports `INCONCLUSIVE` until an external read-only source is supplied (see `docs/M7_STRATEGY_INTEGRATION.md`). |
 | **M8** | Safety / acceptance: trading-disabled evidence, read-only posture, static safety scan. |
 | **M9** | Post-trade audit: order/execution/position surface and correlation timing. |
+
+## Host readiness semantics
+
+`M1.HOST_READINESS` is not a single Boolean. It reports **nine independent facts**, each with its
+own three-valued state (`SATISFIED` / `UNSATISFIED` / `UNKNOWN`), and is `PASS` only when every fact
+holds. Reaching `Active` never implies the metadata was read; a resolved instrument never implies
+market data arrived; a successful subscription never implies events; an account in `Account.All`
+never implies verification; a connected provider never implies a verified target-account
+association.
+
+| Fact | Proven by |
+| --- | --- |
+| `hostOperational` | the AddOn reached its operational lifecycle state (`Active`) |
+| `hostAvailable` | the NinjaTrader host object model is reachable |
+| `metadataReadAllowed` | the lifecycle permits attempting the metadata read |
+| `instrumentResolved` | the **explicitly selected** target instrument resolved uniquely |
+| `metadataObserved` | the required metadata was actually read from the host adapter |
+| `accountVerified` | the target account's identity evidence was verified (M2) |
+| `connectionVerified` | the account→connection association and connection state were verified (M2) |
+| `marketDataSubscribed` | the Level I/II subscriptions were established |
+| `marketDataObserved` | actual market-data events were received |
+
+The overall state is one of `NOT_OBSERVED`, `ADDON_NOT_OPERATIONAL`, `ADDON_SHUTTING_DOWN`,
+`AWAITING_HOST`, `AWAITING_METADATA_READ`, `AWAITING_INSTRUMENT`, `AWAITING_METADATA`,
+`AWAITING_ACCOUNT`, `AWAITING_CONNECTION`, `AWAITING_SUBSCRIPTION`, `AWAITING_MARKET_DATA` or
+`READY`. A restart begins a new lifecycle **epoch** that discards every fact observed before
+termination, and a reconnect invalidates the connection/stream facts, so readiness is never
+`PASS` on stale or invalidated evidence. The same facts are exported in `environment.json` under
+`hostReadiness`.
+
+## Verifying against a real host
+
+The step-by-step BOOT-only NinjaTrader acceptance procedure is in
+`docs/NT8_ACCEPTANCE_RUNBOOK.md`. It covers AddOn load, lifecycle, explicit instrument selection,
+identity/venue, multiple contracts, account and connection association, provider identity,
+LIVE/SIM classification, Level I/II observation, reconnect, shutdown/restart, evidence export and
+fail-closed behavior. It never asks the operator to submit an order or enable trading.
 
 ## Exporting the evidence package
 
@@ -117,6 +154,43 @@ The repository ships one sample package at
    evidence reference.
 3. Verify integrity: `manifest.json` lists a SHA-256 for every artifact. Re-hash the files and
    compare. The tool already verifies all 18 artifacts and their hashes before it writes anything.
+
+## Required configuration
+
+The tool is read-only, so "configuration" means the read-only inputs the operator supplies; nothing
+here mutates the host.
+
+| Input | Where | Default | Effect if unset |
+| --- | --- | --- | --- |
+| Target instrument | the Diagnostic Center picker (exact contract FullName) | none | the tool never becomes ready; M4 is `INCONCLUSIVE` |
+| Target account identity | fixed in `Core/Identity/AccountIdentityVerifier` (`ExpectedAccountIdentity`) | account `SimRP.BOT`, connection `My Rithmic`, provider `Rithmic`, mode `Simulation`, currency `USD` | n/a (it is the compile-time expectation) |
+| Owner-authorized provider slot mapping | `DiagnosticAddOn.OwnerAuthorizedProviderSlots` | empty (fail-closed) | a generic provider slot stays unresolved; provider checks are `INCONCLUSIVE` |
+| Readiness retry loop | `DiagnosticAddOn.ReadinessRetryEnabled` | `true` (host); tests set `false` | with it off only the first synchronous probe runs |
+
+Nothing else is configurable, and no input enables trading or mutates an account, connection,
+position or RiskPilot setting.
+
+## Known limitations
+
+- **No real-host verification.** Every result in this repository was produced against offline
+  **stubs**. A real NinjaTrader build and a real AddOn run have **not** been performed here, so
+  host compatibility is not proven. See `docs/INSTALL.md` and `docs/NT8_ACCEPTANCE_RUNBOOK.md`.
+- **Host build version is unobservable.** No public NinjaTrader API exposes the installed host
+  build, so `M1.HOST_COMPATIBILITY` is always `INCONCLUSIVE` and the declared target
+  (NinjaTrader 8.1.9.0, minimum supported 8.1.8.4) is an intention, not a verified fact.
+- **M7 reports `INCONCLUSIVE`.** BOOT ships no strategy diagnostic producer, so the strategy/risk
+  gate cannot be observed in a stock installation. The read-only boundary a future producer must
+  implement is in `docs/M7_STRATEGY_INTEGRATION.md`.
+- **Provider identity stays unresolved by default.** The adapter occupies a generic placeholder slot
+  (for example `Provider14`) that carries no vendor identity. Until owner-authorized runtime
+  evidence records the slot→vendor mapping, provider checks stay `INCONCLUSIVE`; no vendor is
+  assumed.
+- **Explicit instrument selection is required.** The tool never auto-discovers an instrument. With
+  no selection it never becomes ready and M4 stays `INCONCLUSIVE`.
+- **Depth (Level II) depends on the feed.** An instrument/connection without a Level II surface
+  reports `M5.DEPTH` `INCONCLUSIVE` — that is a supported outcome, not a failure.
+- **Read-only by design.** The tool cannot submit, modify or cancel an order and cannot enable
+  trading; anything that would require a mutation is reported `INCONCLUSIVE` rather than attempted.
 
 ## The three acceptance subjects
 

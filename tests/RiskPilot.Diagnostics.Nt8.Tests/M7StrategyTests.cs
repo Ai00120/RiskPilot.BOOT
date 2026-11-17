@@ -221,6 +221,40 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.Equal(0, snapshot.StrategyRiskGate.ObservedRecordCount);
         }
 
+        // ---------------- M7 without a genuine producer (fail-closed) ----------------
+
+        [Fact]
+        public void M7_NoStrategySource_IsInconclusive_AndNeverPass()
+        {
+            // No genuine strategy diagnostic producer exists inside BOOT: no host source supplies
+            // strategy records, so the surface stays unobservable. M7 must report INCONCLUSIVE (never
+            // PASS, never a fabricated observation) and must not depend on RiskPilot.BOT binaries.
+            var provider = new FakeDataProvider();
+            var results = new M7StrategyRiskGateProbe().Evaluate(Context(provider));
+
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M7.STRATEGY_SURFACE").Status);
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M7.STRATEGY_EVALUATION").Status);
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M7.CANDIDATE_REJECTION").Status);
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M7.STAGE3_SIZING").Status);
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M7.RISK_GATE").Status);
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M7.STAGE_CORRELATION").Status);
+            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M7.REASON_ATTRIBUTION").Status);
+        }
+
+        [Fact]
+        public void HostCapture_NoGenuineProducer_ExposesNoSource()
+        {
+            // The AddOn exposes the read-only contract as an optional input. BOOT ships no producer,
+            // so the input is null until an external producer is supplied; the capture then ingests
+            // nothing and never fabricates a strategy observation.
+            var addOn = new DiagnosticAddOn();
+            Assert.Null(addOn.StrategyDiagnosticSource);
+
+            var captured = new StrategyDiagnosticCapture(record => { }, addOn.StrategyDiagnosticSource);
+            Assert.False(captured.HasSource);
+            Assert.Equal(0, captured.TryCapture());
+        }
+
         // ---------------- Host capture adapter (read-only contract) ----------------
 
         [Fact]

@@ -2,108 +2,217 @@ using System;
 using System.Collections.Generic;
 using RiskPilot.Diagnostics.Nt8.Core.Identity;
 using RiskPilot.Diagnostics.Nt8.Core.Models.Observations;
+using RiskPilot.Diagnostics.Nt8.Core.Status;
 
 namespace RiskPilot.Diagnostics.Nt8.Core.Run
 {
     /// <summary>
-    /// The five independent readiness facts, kept separate on purpose. The previous single
-    /// <c>HostIsLive</c> Boolean collapsed all of them into one value keyed on data-processing
-    /// states an AddOn never reaches, so it was permanently false. Separating them lets the tool
-    /// wait precisely for the outstanding fact and report exactly which one is missing.
+    /// The independent readiness facts, kept separate on purpose and each carrying its own
+    /// three-valued state. The previous model collapsed several of them: it recorded
+    /// <c>MetadataReady</c> from the lifecycle gate, so an AddOn that merely reached <c>Active</c>
+    /// reported metadata as ready even though <c>MasterInstrument.*</c> had never been read, and a
+    /// successful subscription was indistinguishable from actual market data. Each fact here is
+    /// only ever what the host observed; none is derived from another without evidence.
     /// </summary>
     public struct HostReadinessFacts
     {
         /// <summary>The raw AddOn <c>State</c> member last observed, or null/empty.</summary>
         public string AddOnState;
 
-        /// <summary>True when the NinjaTrader host object model was reachable.</summary>
-        public bool HostAvailable;
+        /// <summary>The NinjaTrader host object model was reachable.</summary>
+        public ReadinessFactState HostAvailable;
 
-        /// <summary>True when the resolved instrument's master metadata was readable.</summary>
-        public bool MetadataReady;
+        /// <summary>The lifecycle permits attempting the metadata read.</summary>
+        public ReadinessFactState MetadataReadAllowed;
 
-        /// <summary>True when a target instrument was resolved.</summary>
-        public bool InstrumentResolved;
+        /// <summary>The explicitly selected target instrument was resolved uniquely.</summary>
+        public ReadinessFactState InstrumentResolved;
 
-        /// <summary>True when the Level I/II market-data streams were attached.</summary>
-        public bool MarketDataSubscribed;
+        /// <summary>The required metadata was actually read from the host adapter.</summary>
+        public ReadinessFactState MetadataObserved;
+
+        /// <summary>The target account's identity evidence was verified.</summary>
+        public ReadinessFactState AccountVerified;
+
+        /// <summary>The account→connection association and connection state were verified.</summary>
+        public ReadinessFactState ConnectionVerified;
+
+        /// <summary>The Level I/II market-data streams were attached.</summary>
+        public ReadinessFactState MarketDataSubscribed;
+
+        /// <summary>Actual market-data events were received.</summary>
+        public ReadinessFactState MarketDataObserved;
+    }
+
+    /// <summary>
+    /// Host-free derivation of the readiness facts that are expressed by other observations, so
+    /// the decision stays in the core and the host layer only reads host APIs. Nothing here infers
+    /// one fact from another: each fact is derived from the observation that actually proves it.
+    /// </summary>
+    public static class HostReadinessDerivation
+    {
+        /// <summary>
+        /// The account-verification fact from the M2 identity observation: satisfied only when the
+        /// identity verdict is PASS; unsatisfied when it is a definite FAIL; otherwise unknown (the
+        /// evidence is not there yet, which is never a satisfied fact). An account merely existing
+        /// in <c>Account.All</c> never makes this satisfied.
+        /// </summary>
+        public static ReadinessFactState AccountVerified(AccountIdentityObservation observation)
+        {
+            if (observation == null || !observation.AccountSurfaceObservable)
+            {
+                return ReadinessFactState.Unknown;
+            }
+
+            var verdict = AccountIdentityVerifier.Evaluate(observation);
+            if (verdict.Status == DiagnosticStatus.PASS)
+            {
+                return ReadinessFactState.Satisfied;
+            }
+
+            return verdict.Status == DiagnosticStatus.FAIL
+                ? ReadinessFactState.Unsatisfied
+                : ReadinessFactState.Unknown;
+        }
+
+        /// <summary>
+        /// The connection-verification fact: the target account's own connection association must be
+        /// proven AND that connection must be observed as connected. A definite association failure
+        /// or an observed disconnected connection is <see cref="ReadinessFactState.Unsatisfied"/>; a
+        /// proven association on a connected connection is satisfied; anything unproven is unknown.
+        /// A connected market-data connection is never mistaken for the account connection, and a
+        /// disconnected connection can never keep readiness satisfied.
+        /// </summary>
+        public static ReadinessFactState ConnectionVerified(
+            TargetAccountConnectionObservation connection,
+            AccountIdentityObservation account)
+        {
+            if (connection == null || !connection.AccountSurfaceObservable)
+            {
+                return ReadinessFactState.Unknown;
+            }
+
+            var verdict = TargetAccountConnectionVerifier.Evaluate(connection);
+            if (verdict.Status == DiagnosticStatus.FAIL)
+            {
+                return ReadinessFactState.Unsatisfied;
+            }
+
+            var statusObservable = account != null && account.ConnectionStatusObservable;
+            if (statusObservable && !account.ConnectionConnected)
+            {
+                return ReadinessFactState.Unsatisfied;
+            }
+
+            if (verdict.Status == DiagnosticStatus.PASS && statusObservable && account.ConnectionConnected)
+            {
+                return ReadinessFactState.Satisfied;
+            }
+
+            return ReadinessFactState.Unknown;
+        }
     }
 
     /// <summary>
     /// Host-free evaluation of the readiness facts into a <see cref="HostReadinessObservation"/>.
     /// The decision is fail-closed: an AddOn that has not reached its operational state, a host
-    /// that is shutting down, or any missing fact keeps the overall state below
+    /// that is shutting down, or any missing/unobserved fact keeps the overall state below
     /// <see cref="HostReadinessState.Ready"/>. Nothing is inferred from the fact that the AddOn was
     /// constructed: readiness is only ever what the observed facts actually prove.
     /// </summary>
     public static class HostReadinessEvaluator
     {
         /// <summary>
-        /// Derives the observation from the five facts. A null/empty <c>AddOnState</c> means the
+        /// Derives the observation from the facts. A null/empty <c>AddOnState</c> means the
         /// lifecycle was not observable, which is never treated as operational.
         /// </summary>
         public static HostReadinessObservation Evaluate(HostReadinessFacts facts)
         {
+            var addOnState = facts.AddOnState ?? string.Empty;
+            var operational = string.IsNullOrEmpty(addOnState)
+                ? ReadinessFactState.Unknown
+                : ReadinessFactStates.Of(AddOnLifecycle.IsOperational(addOnState));
+
             var observation = new HostReadinessObservation
             {
                 SurfaceObservable = true,
-                AddOnState = facts.AddOnState ?? string.Empty,
-                LifecycleOperational = AddOnLifecycle.IsOperational(facts.AddOnState),
-                ShuttingDown = AddOnLifecycle.IsShutdown(facts.AddOnState),
+                AddOnState = addOnState,
+                HostOperational = operational,
+                ShuttingDown = AddOnLifecycle.IsShutdown(addOnState),
                 HostAvailable = facts.HostAvailable,
-                MetadataReady = facts.MetadataReady,
-                InstrumentReady = facts.InstrumentResolved,
-                MarketDataSubscribed = facts.MarketDataSubscribed
+                MetadataReadAllowed = facts.MetadataReadAllowed,
+                InstrumentResolved = facts.InstrumentResolved,
+                MetadataObserved = facts.MetadataObserved,
+                AccountVerified = facts.AccountVerified,
+                ConnectionVerified = facts.ConnectionVerified,
+                MarketDataSubscribed = facts.MarketDataSubscribed,
+                MarketDataObserved = facts.MarketDataObserved
             };
 
             // Precedence: shutdown outranks everything (readiness can never complete), then a
-            // non-operational lifecycle (the AddOn has not reached Active), then each outstanding
-            // fact in dependency order. Only all-five-hold is READY.
+            // non-operational lifecycle, then each outstanding fact in dependency order. Only every
+            // fact holding is READY.
             if (observation.ShuttingDown)
             {
-                observation.State = HostReadinessState.ShuttingDown;
-                observation.ReasonCodes.Add(HostReadinessReasonCodes.ShuttingDown);
-                return observation;
+                return Stop(observation, HostReadinessState.ShuttingDown, HostReadinessReasonCodes.ShuttingDown);
             }
 
-            if (!observation.LifecycleOperational)
+            if (!observation.HostOperational.IsSatisfied())
             {
-                observation.State = HostReadinessState.NotOperational;
-                observation.ReasonCodes.Add(HostReadinessReasonCodes.NotOperational);
-                return observation;
+                return Stop(observation, HostReadinessState.NotOperational, HostReadinessReasonCodes.NotOperational);
             }
 
-            if (!observation.HostAvailable)
+            if (!observation.HostAvailable.IsSatisfied())
             {
-                observation.State = HostReadinessState.AwaitingHost;
-                observation.ReasonCodes.Add(HostReadinessReasonCodes.HostUnavailable);
-                return observation;
+                return Stop(observation, HostReadinessState.AwaitingHost, HostReadinessReasonCodes.HostUnavailable);
             }
 
-            if (!observation.InstrumentReady)
+            if (!observation.MetadataReadAllowed.IsSatisfied())
             {
-                observation.State = HostReadinessState.AwaitingInstrument;
-                observation.ReasonCodes.Add(HostReadinessReasonCodes.InstrumentUnavailable);
-                return observation;
+                return Stop(observation, HostReadinessState.AwaitingMetadataRead, HostReadinessReasonCodes.MetadataReadNotAllowed);
             }
 
-            if (!observation.MetadataReady)
+            if (!observation.InstrumentResolved.IsSatisfied())
             {
-                observation.State = HostReadinessState.AwaitingMetadata;
-                observation.ReasonCodes.Add(HostReadinessReasonCodes.MetadataUnavailable);
-                return observation;
+                return Stop(observation, HostReadinessState.AwaitingInstrument, HostReadinessReasonCodes.InstrumentUnavailable);
             }
 
-            if (!observation.MarketDataSubscribed)
+            if (!observation.MetadataObserved.IsSatisfied())
             {
-                observation.State = HostReadinessState.AwaitingSubscription;
-                observation.ReasonCodes.Add(HostReadinessReasonCodes.NotSubscribed);
-                return observation;
+                return Stop(observation, HostReadinessState.AwaitingMetadata, HostReadinessReasonCodes.MetadataUnavailable);
+            }
+
+            if (!observation.AccountVerified.IsSatisfied())
+            {
+                return Stop(observation, HostReadinessState.AwaitingAccount, HostReadinessReasonCodes.AccountUnverified);
+            }
+
+            if (!observation.ConnectionVerified.IsSatisfied())
+            {
+                return Stop(observation, HostReadinessState.AwaitingConnection, HostReadinessReasonCodes.ConnectionUnverified);
+            }
+
+            if (!observation.MarketDataSubscribed.IsSatisfied())
+            {
+                return Stop(observation, HostReadinessState.AwaitingSubscription, HostReadinessReasonCodes.NotSubscribed);
+            }
+
+            if (!observation.MarketDataObserved.IsSatisfied())
+            {
+                return Stop(observation, HostReadinessState.AwaitingMarketData, HostReadinessReasonCodes.MarketDataNotObserved);
             }
 
             observation.State = HostReadinessState.Ready;
             observation.FullyReady = true;
             observation.ReasonCodes.Add(HostReadinessReasonCodes.Ready);
+            return observation;
+        }
+
+        private static HostReadinessObservation Stop(HostReadinessObservation observation, string state, string reasonCode)
+        {
+            observation.State = state;
+            observation.FullyReady = false;
+            observation.ReasonCodes.Add(reasonCode);
             return observation;
         }
 
@@ -121,19 +230,69 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
 
     /// <summary>
     /// Thread-safe, host-free holder of the current readiness facts. The host layer records each
-    /// fact as it becomes observable (from the AddOn lifecycle callback, the instrument resolution
-    /// and the market-data subscription) and the provider reads the derived observation on demand.
-    /// A single private lock guards the facts so a host callback thread and the diagnostic worker
-    /// thread can update and read concurrently without a torn observation.
+    /// fact as it becomes observable (from the AddOn lifecycle callback, the instrument resolution,
+    /// the metadata read, the account/connection verification and the market-data subscription and
+    /// events) and the provider reads the derived observation on demand. A single private lock
+    /// guards the facts so a host callback thread and the diagnostic worker thread can update and
+    /// read concurrently without a torn observation.
+    /// <para>
+    /// The tracker owns a <em>lifecycle epoch</em>. <see cref="BeginEpoch"/> clears every previously
+    /// observed fact, so a fact observed in an earlier lifecycle epoch can never keep a restarted
+    /// AddOn reported as ready. <see cref="InvalidateStreamFacts"/> clears the connection- and
+    /// stream-dependent facts after a connection loss/reconnect, so readiness cannot remain
+    /// satisfied on evidence that no longer holds.
+    /// </para>
     /// </summary>
     public sealed class HostReadinessTracker
     {
         private readonly object _gate = new object();
         private string _addOnState = string.Empty;
-        private bool _hostAvailable;
-        private bool _metadataReady;
-        private bool _instrumentResolved;
-        private bool _marketDataSubscribed;
+        private long _epoch;
+        private ReadinessFactState _hostAvailable;
+        private ReadinessFactState _metadataReadAllowed;
+        private ReadinessFactState _instrumentResolved;
+        private ReadinessFactState _metadataObserved;
+        private ReadinessFactState _accountVerified;
+        private ReadinessFactState _connectionVerified;
+        private ReadinessFactState _marketDataSubscribed;
+        private ReadinessFactState _marketDataObserved;
+
+        /// <summary>
+        /// Begins a new lifecycle epoch: every previously observed fact is cleared, so a fact from
+        /// an earlier epoch can never keep a restarted AddOn reported as ready. The raw AddOn state
+        /// is left to be recorded by <see cref="RecordAddOnState"/>.
+        /// </summary>
+        public void BeginEpoch()
+        {
+            lock (_gate)
+            {
+                _epoch++;
+                _hostAvailable = ReadinessFactState.Unknown;
+                _metadataReadAllowed = ReadinessFactState.Unknown;
+                _instrumentResolved = ReadinessFactState.Unknown;
+                _metadataObserved = ReadinessFactState.Unknown;
+                _accountVerified = ReadinessFactState.Unknown;
+                _connectionVerified = ReadinessFactState.Unknown;
+                _marketDataSubscribed = ReadinessFactState.Unknown;
+                _marketDataObserved = ReadinessFactState.Unknown;
+            }
+        }
+
+        /// <summary>
+        /// Clears the connection- and stream-dependent facts after a connection loss/reconnect. The
+        /// lifecycle/metadata/instrument facts are unaffected, because a reconnect does not change
+        /// them. Readiness cannot remain satisfied on a subscription or a connection that no longer
+        /// holds.
+        /// </summary>
+        public void InvalidateStreamFacts()
+        {
+            lock (_gate)
+            {
+                _connectionVerified = ReadinessFactState.Unknown;
+                _marketDataSubscribed = ReadinessFactState.Unknown;
+                _marketDataObserved = ReadinessFactState.Unknown;
+            }
+        }
 
         /// <summary>Records the raw AddOn <c>State</c> member just observed.</summary>
         public void RecordAddOnState(string state)
@@ -144,62 +303,85 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Run
             }
         }
 
-        /// <summary>Records that the host object model was reachable.</summary>
-        public void RecordHostAvailable(bool available)
+        /// <summary>Records whether the host object model was reachable.</summary>
+        public void RecordHostAvailable(ReadinessFactState state)
         {
-            lock (_gate)
-            {
-                _hostAvailable = available;
-            }
+            lock (_gate) { _hostAvailable = state; }
         }
 
-        /// <summary>Records whether the resolved instrument's master metadata was readable.</summary>
-        public void RecordMetadataReady(bool ready)
+        /// <summary>Records whether the lifecycle permits attempting the metadata read.</summary>
+        public void RecordMetadataReadAllowed(ReadinessFactState state)
         {
-            lock (_gate)
-            {
-                _metadataReady = ready;
-            }
+            lock (_gate) { _metadataReadAllowed = state; }
         }
 
-        /// <summary>Records whether a target instrument was resolved.</summary>
-        public void RecordInstrumentResolved(bool resolved)
+        /// <summary>Records whether the target instrument was resolved uniquely.</summary>
+        public void RecordInstrumentResolved(ReadinessFactState state)
         {
-            lock (_gate)
-            {
-                _instrumentResolved = resolved;
-            }
+            lock (_gate) { _instrumentResolved = state; }
         }
 
-        /// <summary>Records whether the Level I/II market-data streams were attached.</summary>
-        public void RecordMarketDataSubscribed(bool subscribed)
+        /// <summary>Records whether the required metadata was actually read.</summary>
+        public void RecordMetadataObserved(ReadinessFactState state)
         {
-            lock (_gate)
-            {
-                _marketDataSubscribed = subscribed;
-            }
+            lock (_gate) { _metadataObserved = state; }
+        }
+
+        /// <summary>Records the target-account identity verification fact.</summary>
+        public void RecordAccountVerified(ReadinessFactState state)
+        {
+            lock (_gate) { _accountVerified = state; }
+        }
+
+        /// <summary>Records the account→connection association verification fact.</summary>
+        public void RecordConnectionVerified(ReadinessFactState state)
+        {
+            lock (_gate) { _connectionVerified = state; }
+        }
+
+        /// <summary>Records whether the Level I/II streams were attached.</summary>
+        public void RecordMarketDataSubscribed(ReadinessFactState state)
+        {
+            lock (_gate) { _marketDataSubscribed = state; }
+        }
+
+        /// <summary>Records whether actual market-data events were received.</summary>
+        public void RecordMarketDataObserved(ReadinessFactState state)
+        {
+            lock (_gate) { _marketDataObserved = state; }
         }
 
         /// <summary>The raw AddOn state last recorded.</summary>
         public string AddOnState { get { lock (_gate) { return _addOnState; } } }
 
+        /// <summary>The current lifecycle epoch.</summary>
+        public long Epoch { get { lock (_gate) { return _epoch; } } }
+
         /// <summary>Derives the readiness observation from the current facts.</summary>
         public HostReadinessObservation Observe()
         {
             HostReadinessFacts facts;
+            long epoch;
             lock (_gate)
             {
                 facts = new HostReadinessFacts
                 {
                     AddOnState = _addOnState,
                     HostAvailable = _hostAvailable,
-                    MetadataReady = _metadataReady,
+                    MetadataReadAllowed = _metadataReadAllowed,
                     InstrumentResolved = _instrumentResolved,
-                    MarketDataSubscribed = _marketDataSubscribed
+                    MetadataObserved = _metadataObserved,
+                    AccountVerified = _accountVerified,
+                    ConnectionVerified = _connectionVerified,
+                    MarketDataSubscribed = _marketDataSubscribed,
+                    MarketDataObserved = _marketDataObserved
                 };
+                epoch = _epoch;
             }
 
-            return HostReadinessEvaluator.Evaluate(facts);
+            var observation = HostReadinessEvaluator.Evaluate(facts);
+            observation.Epoch = epoch;
+            return observation;
         }
     }
 

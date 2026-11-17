@@ -97,23 +97,24 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             {
                 try
                 {
-                    // The master-metadata readiness gate decides whether MasterInstrument.* is safe to
-                    // read; it is true from the AddOn's operational (Active) state onward. Recording it
-                    // here keeps the readiness observation honest: metadata is only ready once the host
-                    // actually reports it is readable.
-                    var metadataReady = false;
+                    // Whether the lifecycle permits attempting the metadata read. This is the
+                    // metadataReadAllowed fact: it does NOT mean the metadata was read, only that the
+                    // read is permitted. The two are recorded separately so an AddOn that merely
+                    // reached Active can never report metadata as observed.
+                    var metadataReadAllowed = false;
                     try
                     {
-                        metadataReady = _masterMetadataReady();
+                        metadataReadAllowed = _masterMetadataReady();
                     }
                     catch (Exception)
                     {
-                        metadataReady = false;
+                        metadataReadAllowed = false;
                     }
 
                     if (_readiness != null)
                     {
-                        _readiness.RecordMetadataReady(metadataReady);
+                        _readiness.RecordMetadataReadAllowed(
+                            Core.Models.Observations.ReadinessFactStates.Of(metadataReadAllowed));
                     }
 
                     var instrument = Nt8HostDataProvider.ResolveLoadedInstrument(RequestedInstrumentId, _masterMetadataReady);
@@ -125,7 +126,10 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                         DetachInstrumentLocked();
                         if (_readiness != null)
                         {
-                            _readiness.RecordInstrumentResolved(false);
+                            _readiness.RecordInstrumentResolved(
+                                Core.Models.Observations.ReadinessFactState.Unsatisfied);
+                            _readiness.RecordMetadataObserved(
+                                Core.Models.Observations.ReadinessFactState.Unknown);
                         }
 
                         return false;
@@ -133,7 +137,12 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
                     if (_readiness != null)
                     {
-                        _readiness.RecordInstrumentResolved(true);
+                        _readiness.RecordInstrumentResolved(
+                            Core.Models.Observations.ReadinessFactState.Satisfied);
+                        // The instrument resolved uniquely, so the required metadata is now read from
+                        // the real host adapter. The fact is satisfied only when the required fields
+                        // were actually read; an unreadable field keeps it unsatisfied (fail closed).
+                        _readiness.RecordMetadataObserved(ReadMetadataObserved(instrument));
                     }
 
                     // Already subscribed to this exact instrument: nothing to do.
@@ -181,7 +190,12 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     _subscribed = true;
                     if (_readiness != null)
                     {
-                        _readiness.RecordMarketDataSubscribed(true);
+                        // The subscription request was established (the handlers were attached, or the
+                        // attach was posted to the instrument's dispatcher). This is the
+                        // marketDataSubscribed fact; it says nothing about whether events will arrive,
+                        // which is the separate marketDataObserved fact.
+                        _readiness.RecordMarketDataSubscribed(
+                            Core.Models.Observations.ReadinessFactState.Satisfied);
                     }
 
                     return true;
@@ -192,7 +206,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     // M5 reports the market-data surface as unobserved (INCONCLUSIVE).
                     if (_readiness != null)
                     {
-                        _readiness.RecordMarketDataSubscribed(false);
+                        _readiness.RecordMarketDataSubscribed(
+                            Core.Models.Observations.ReadinessFactState.Unsatisfied);
                     }
 
                     return false;
@@ -210,7 +225,12 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
             if (_readiness != null)
             {
-                _readiness.RecordMarketDataSubscribed(false);
+                // Detaching clears the stream-dependent facts: the subscription and any observed
+                // events no longer hold, so readiness cannot remain satisfied on them.
+                _readiness.RecordMarketDataSubscribed(
+                    Core.Models.Observations.ReadinessFactState.Unknown);
+                _readiness.RecordMarketDataObserved(
+                    Core.Models.Observations.ReadinessFactState.Unknown);
             }
         }
 
@@ -255,6 +275,61 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             }
         }
 
+        /// <summary>
+        /// Reads the required metadata from the resolved instrument and reports the
+        /// metadataObserved fact: satisfied only when the required fields were actually read.
+        /// An unreadable field (a throwing getter) keeps the fact unsatisfied, so a metadata read
+        /// that fails can never be reported as observed. Never throws.
+        /// </summary>
+        private static Core.Models.Observations.ReadinessFactState ReadMetadataObserved(Instrument instrument)
+        {
+            if (instrument == null)
+            {
+                return Core.Models.Observations.ReadinessFactState.Unsatisfied;
+            }
+
+            try
+            {
+                var fullName = instrument.FullName;
+                var exchange = instrument.Exchange;
+                var master = instrument.MasterInstrument;
+                if (master == null)
+                {
+                    return Core.Models.Observations.ReadinessFactState.Unsatisfied;
+                }
+
+                var root = master.Name;
+                var instrumentType = master.InstrumentType;
+                var currency = master.Currency;
+                var pointValue = master.PointValue;
+                var tickSize = master.TickSize;
+
+                var observed = !string.IsNullOrEmpty(fullName)
+                    && !string.IsNullOrEmpty(root)
+                    && !string.IsNullOrEmpty(exchange.ToString())
+                    && !string.IsNullOrEmpty(instrumentType.ToString())
+                    && !string.IsNullOrEmpty(currency.ToString())
+                    && pointValue != 0d
+                    && tickSize != 0d;
+
+                return Core.Models.Observations.ReadinessFactStates.Of(observed);
+            }
+            catch (Exception)
+            {
+                return Core.Models.Observations.ReadinessFactState.Unsatisfied;
+            }
+        }
+
+        private void RecordMarketDataObserved()
+        {
+            if (_readiness != null)
+            {
+                // An actual event was received, so market data is genuinely observed. The fact is
+                // recorded once satisfied; a later detach clears it again.
+                _readiness.RecordMarketDataObserved(Core.Models.Observations.ReadinessFactState.Satisfied);
+            }
+        }
+
         private void OnMarketData(object sender, MarketDataEventArgs args)
         {
             if (args == null)
@@ -264,6 +339,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
             try
             {
+                RecordMarketDataObserved();
+
                 // The Level I Last event carries no aggressor side. Record the best bid/ask the host
                 // reported on this same event (0 = not populated) so the M6 consumer can derive the
                 // direction from real host data instead of counting every print as unknown. No
@@ -299,6 +376,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
             try
             {
+                RecordMarketDataObserved();
+
                 var record = new DomRecord
                 {
                     InstrumentId = args.Instrument != null ? args.Instrument.FullName : string.Empty,

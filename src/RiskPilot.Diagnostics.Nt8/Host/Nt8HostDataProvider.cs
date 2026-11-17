@@ -464,10 +464,13 @@ namespace RiskPilot.Diagnostics.Nt8.Host
 
         /// <summary>
         /// Builds the separated host-readiness observation for M1. It reads the live readiness probe
-        /// supplied by the AddOn and overlays the market-data subscription fact, so the observation
-        /// always reflects the current host position rather than a value captured at construction.
-        /// When no probe is supplied the surface is unobservable (INCONCLUSIVE), never ready. A
-        /// throwing probe fails closed the same way.
+        /// supplied by the AddOn and overlays the account/connection verification facts, which are
+        /// derived from the M2 identity and association observations the host layer actually read —
+        /// an account existing in <c>Account.All</c> is never taken as verification, and a connected
+        /// provider is never taken as a verified target-account association. The observation always
+        /// reflects the current host position rather than a value captured at construction. When no
+        /// probe is supplied the surface is unobservable (INCONCLUSIVE), never ready. A throwing
+        /// probe fails closed the same way.
         /// </summary>
         private HostReadinessObservation BuildHostReadinessObservation()
         {
@@ -476,17 +479,78 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 return null;
             }
 
+            HostReadinessObservation observation;
             try
             {
-                // The probe derives every fact (including the market-data subscription, which the
-                // capture adapter records on the same tracker), so the observation is always a
-                // consistent, current snapshot rather than a mix of a probe and a second read.
-                return _hostReadiness();
+                // The probe derives the lifecycle/host/instrument/metadata/subscription/market-data
+                // facts (each recorded by the component that observed it), so the observation is
+                // always a consistent, current snapshot rather than a mix of a probe and a second read.
+                observation = _hostReadiness();
             }
             catch (Exception)
             {
                 return null;
             }
+
+            if (observation == null)
+            {
+                return null;
+            }
+
+            // The account and connection verification facts are only ever what the M2 evidence
+            // proves. The overlay is unconditional (not only when the probe left them unknown) so a
+            // reconnect that invalidates the association is reflected on the very next read.
+            try
+            {
+                var account = BuildAccountIdentityObservation();
+                var connection = BuildTargetAccountConnectionObservation();
+                observation.AccountVerified = Core.Run.HostReadinessDerivation.AccountVerified(account);
+                observation.ConnectionVerified = Core.Run.HostReadinessDerivation.ConnectionVerified(connection, account);
+            }
+            catch (Exception)
+            {
+                observation.AccountVerified = Core.Models.Observations.ReadinessFactState.Unknown;
+                observation.ConnectionVerified = Core.Models.Observations.ReadinessFactState.Unknown;
+            }
+
+            // The overall state and the fully-ready flag must reflect the overlaid facts, so
+            // re-derive them from the observation instead of trusting the probe's earlier verdict.
+            // The lifecycle epoch is preserved so a restart is still visible in the evidence.
+            var evaluated = Core.Run.HostReadinessEvaluator.Evaluate(ToFacts(observation));
+            evaluated.Epoch = observation.Epoch;
+            return evaluated;
+        }
+
+        /// <summary>
+        /// Projects an already-built observation back onto the facts, so the evaluator can re-derive
+        /// the overall state after the account/connection overlay. The lifecycle facts are taken
+        /// from the observation's own three-valued fields.
+        /// </summary>
+        private static Core.Run.HostReadinessFacts ToFacts(HostReadinessObservation observation)
+        {
+            return new Core.Run.HostReadinessFacts
+            {
+                AddOnState = observation.AddOnState,
+                HostAvailable = observation.HostAvailable,
+                MetadataReadAllowed = observation.MetadataReadAllowed,
+                InstrumentResolved = observation.InstrumentResolved,
+                MetadataObserved = observation.MetadataObserved,
+                AccountVerified = observation.AccountVerified,
+                ConnectionVerified = observation.ConnectionVerified,
+                MarketDataSubscribed = observation.MarketDataSubscribed,
+                MarketDataObserved = observation.MarketDataObserved
+            };
+        }
+
+        /// <summary>
+        /// Reads the current separated host-readiness observation. It is the same observation the
+        /// snapshot carries (the tracker facts plus the derived account/connection verification), so
+        /// the operator-visible readiness and the exported evidence can never disagree. A null or
+        /// throwing readiness probe leaves the surface unobservable, never ready.
+        /// </summary>
+        public HostReadinessObservation ReadHostReadiness()
+        {
+            return BuildHostReadinessObservation();
         }
 
         private ProviderEvidence BuildProviderEvidence()
