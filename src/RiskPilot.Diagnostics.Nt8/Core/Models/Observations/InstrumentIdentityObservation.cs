@@ -25,6 +25,20 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         public bool InstrumentSurfaceObservable { get; set; }
 
         /// <summary>
+        /// The deterministic selection outcome for the explicitly selected target instrument
+        /// (<see cref="Core.Instruments.InstrumentSelectionStatus"/>), or empty when the observation
+        /// was not built through the selector. A resolved selection always carries exactly one
+        /// matching instrument; every other value means no target could be established.
+        /// </summary>
+        public string SelectionStatus { get; set; }
+
+        /// <summary>
+        /// The stable reason code for <see cref="SelectionStatus"/>
+        /// (<see cref="Core.Instruments.InstrumentSelectionReasonCodes"/>), or empty.
+        /// </summary>
+        public string SelectionReasonCode { get; set; }
+
+        /// <summary>
         /// True when the observation originates from a compile-time stub or a test double rather
         /// than the real host. A stub/mock value can never establish real identity.
         /// </summary>

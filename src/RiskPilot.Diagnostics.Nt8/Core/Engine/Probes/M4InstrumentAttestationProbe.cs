@@ -112,15 +112,17 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 .WithSource(verdict.Status == DiagnosticStatus.INCONCLUSIVE && verdict.ObservedInstrumentCount == 0
                     ? FindingFactory.SourceUnobservable
                     : FindingFactory.SourcePublicApi)
-                .WithMethod("Read the loaded instrument discovery surface (Instrument.All), matched the root symbol "
-                    + "exactly, and compared the selected instrument's root, instrument type, currency and the "
-                    + "D-096 configured-route venue metadata against the permanent ES/CME identity.")
+                .WithMethod("Resolved the explicitly selected target instrument from the loaded discovery "
+                    + "surface (Instrument.All) by exact full-name/root match — never by auto-discovery, "
+                    + "first-instrument or root-substring — and compared its root, instrument type, currency "
+                    + "and the D-096 configured-route venue metadata against the permanent ES/CME identity.")
                 .WithLimitation("The venue is a configured-route mapping, not an independent exchange-issued "
                     + "listing-venue attestation; an unconfirmed exchange or route keeps the identity unproven "
-                    + "(INCONCLUSIVE). The raw symbol is never reported.")
+                    + "(INCONCLUSIVE). An unset, unloaded or ambiguous target is never auto-selected. The raw "
+                    + "symbol is never reported.")
                 .WithNextAction(verdict.Status == DiagnosticStatus.PASS
                     ? "None."
-                    : "Load/subscribe the permanent ES contract on the CME route, then re-run.")
+                    : "Select the exact target contract, load/subscribe it on the CME route, then re-run.")
                 .WithEvidence(evidence.ToArray());
         }
 

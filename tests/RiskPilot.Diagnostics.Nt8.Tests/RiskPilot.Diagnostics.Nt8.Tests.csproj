@@ -51,6 +51,7 @@
     <Compile Include="ProviderIdentityTests.cs" />
     <Compile Include="TargetAccountConnectionTests.cs" />
     <Compile Include="InstrumentIdentityTests.cs" />
+    <Compile Include="InstrumentSelectionTests.cs" />
     <Compile Include="EsProductSpecificationTests.cs" />
     <Compile Include="Stage34CoverageTests.cs" />
     <Compile Include="HostAccountIdentityTests.cs" />

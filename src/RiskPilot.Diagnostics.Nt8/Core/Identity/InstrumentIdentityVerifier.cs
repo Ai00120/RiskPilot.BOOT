@@ -94,6 +94,15 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
         public const string CanonicalIdUnobservable = "CANONICAL_ID_UNOBSERVABLE";
         public const string CanonicalIdMismatch = "CANONICAL_ID_MISMATCH";
         public const string IncompleteMetadata = "INSTRUMENT_IDENTITY_INCOMPLETE_METADATA";
+
+        /// <summary>No explicit target instrument was configured, so nothing could be proven.</summary>
+        public const string TargetNotConfigured = "TARGET_INSTRUMENT_NOT_CONFIGURED";
+
+        /// <summary>The explicitly selected instrument is not present on the loaded surface.</summary>
+        public const string TargetNotLoaded = "TARGET_INSTRUMENT_NOT_LOADED";
+
+        /// <summary>The explicit selection matched more than one loaded instrument (insufficiently specific).</summary>
+        public const string TargetMultipleCandidates = "TARGET_INSTRUMENT_MULTIPLE_CANDIDATES";
     }
 
     /// <summary>
@@ -178,6 +187,16 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
             if (observation.IsStubOrMockValue)
             {
                 return Inconclusive(observation, InstrumentIdentityReasonCodes.StubOrMock);
+            }
+
+            // The deterministic selection outcome, when the observation was built through the
+            // selector, is authoritative: an explicit target that is unset, not loaded or matches
+            // more than one loaded instrument can never be proven. This is checked before any
+            // field comparison so a missing target is never mistaken for a wrong instrument.
+            var selectionReason = SelectionReasonCode(observation.SelectionStatus);
+            if (selectionReason != null)
+            {
+                return Inconclusive(observation, selectionReason);
             }
 
             if (observation.ObservedInstrumentCount <= 0)
@@ -298,6 +317,27 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
                 DiagnosticStatus.PASS, observation,
                 new List<string> { InstrumentIdentityReasonCodes.Match },
                 mismatched, unobservable);
+        }
+
+        /// <summary>
+        /// Maps an explicit selection status onto the verifier's target reason code, or null when
+        /// the status is unset (the observation was not built through the selector) or resolved.
+        /// Only the statuses that can never prove an identity map to a reason code; a resolved
+        /// selection proceeds to the field comparison.
+        /// </summary>
+        private static string SelectionReasonCode(string selectionStatus)
+        {
+            switch (selectionStatus)
+            {
+                case Core.Instruments.InstrumentSelectionStatus.NotConfigured:
+                    return InstrumentIdentityReasonCodes.TargetNotConfigured;
+                case Core.Instruments.InstrumentSelectionStatus.NotLoaded:
+                    return InstrumentIdentityReasonCodes.TargetNotLoaded;
+                case Core.Instruments.InstrumentSelectionStatus.MultipleCandidates:
+                    return InstrumentIdentityReasonCodes.TargetMultipleCandidates;
+                default:
+                    return null;
+            }
         }
 
         private static InstrumentIdentityVerdict Inconclusive(InstrumentIdentityObservation observation, string reasonCode)

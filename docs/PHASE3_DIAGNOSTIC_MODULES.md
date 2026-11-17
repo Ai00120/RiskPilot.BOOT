@@ -271,12 +271,17 @@ mode `Simulation`، currency `USD`.
 | `M4.ATTESTATION_OUTCOME` | علل شکست به‌صورت جدا |
 
 **هویت instrument (M4.INSTRUMENT_IDENTITY):** میزبان سطح `Instrument.All` (instrument‌های
-بارگذاری‌شدهٔ NinjaTrader) را می‌خواند — نه یک نام ساخته‌شده از یک رشتهٔ پیکربندی — و هر فیلد را به
-boolean/count + `instrument#<hash>` کاهش می‌دهد. مقایسهٔ ریشهٔ نماد **exact و ordinal** است
+بارگذاری‌شدهٔ NinjaTrader) را می‌خواند — نه یک نام ساخته‌شده از یک رشتهٔ پیکربندی — و **فقط**
+instrumentی را که صریحاً انتخاب شده است (تطابق exact full-name/root) resolve می‌کند؛ هرگز از
+auto-discovery، «اولین instrument» یا تطابق زیررشته استفاده نمی‌کند. هر فیلد به
+boolean/count + `instrument#<hash>` کاهش می‌یابد. مقایسهٔ ریشهٔ نماد **exact و ordinal** است
 (`ES`)، نوع `Future`، ارز `USD` و صرافی فقط وقتی تأیید می‌شود که متادیتای مسیر پیکربندی‌شدهٔ D-096
 (مسیر انتخاب‌شدهٔ Globex، مجموعهٔ پیکربندی‌شدهٔ دقیقاً {Globex}، تنها مسیر provider متصل Rithmic)
 برقرار باشد. **CME هرگز از متن «ES» استنتاج نمی‌شود** و صرافی تأییدنشده هرگز PASS نمی‌شود.
 
+- no explicit selection → `INCONCLUSIVE` (`TARGET_INSTRUMENT_NOT_CONFIGURED`)
+- selected contract not loaded → `INCONCLUSIVE` (`TARGET_INSTRUMENT_NOT_LOADED`)
+- selection matches more than one loaded contract → `INCONCLUSIVE` (`TARGET_INSTRUMENT_MULTIPLE_CANDIDATES`)
 - wrong instrument (ریشهٔ مشابه/متفاوت) → `FAIL` (`INSTRUMENT_ROOT_MISMATCH`)
 - missing instrument → `INCONCLUSIVE` (`INSTRUMENT_IDENTITY_NO_INSTRUMENT_OBSERVED`)
 - ambiguous instrument (بیش از یک تطابق) → `INCONCLUSIVE` (`INSTRUMENT_IDENTITY_AMBIGUOUS`)
@@ -301,14 +306,15 @@ boolean/count + `instrument#<hash>` کاهش می‌دهد. مقایسهٔ ری�
   `Func<bool>` است که در هر خواندن ارزیابی می‌شود (نه مقدار ضبط‌شده در سازنده)؛ AddOn در
   `State.Active` ساخته می‌شود، پس مقدار ضبط‌شده همیشه false می‌ماند. AddOn مقدار `() => HostIsLive`
   را می‌دهد. قبل از آمادگی `INCONCLUSIVE` است، نه FAIL.
-- هدف attestation **همان instrument واقعی بارگذاری‌شده** است: بدون id پیکربندی‌شده، میزبان
-  `Instrument.All` را می‌خواند و instrumentی را attest می‌کند که ریشهٔ `MasterInstrument.Name` آن با
-  ریشهٔ دائمی ES مطابقت دارد؛ صفر یا بیش از یک تطابق ⇒ `HOST_UNAVAILABLE` (fail-closed).
+- هدف attestation **همان instrument صریحاً انتخاب‌شده** است: بدون انتخاب ⇒ `HOST_UNAVAILABLE`؛
+  قرارداد انتخاب‌شدهٔ بارگذاری‌نشده، یا انتخاب مبهم (چند تطابق)، نیز ⇒ `HOST_UNAVAILABLE`
+  (fail-closed). در صورت resolve، میزبان همان شیء واقعی بارگذاری‌شده را attest می‌کند.
 
 **مرجع API:** `Instrument.All`, `Instrument.FullName`, `Instrument.Expiry`, `Instrument.Exchange`,
 `Instrument.MasterInstrument.{Name,InstrumentType,Currency,TickSize,PointValue,Exchanges}`.
 **تست‌ها:** `Phase3ModuleTests.M4_*`, `InstrumentIdentityTests` (verifier + probe),
-`HostInstrumentIdentityTests` (آداپتور میزبان روی stub).
+`HostInstrumentIdentityTests` (آداپتور میزبان روی stub), `InstrumentSelectionTests` (قاعدهٔ انتخاب +
+resolve میزبان + آمادگی AddOn + اشتراک metadata/capture).
 **محدودیت:** Registry و وضعیت D-078 توسط فرآیند بازبینی‌شدهٔ Owner تأمین می‌شوند؛ ابزار فقط
 **مشاهده** می‌کند. صرافی یک mapping مسیر پیکربندی‌شده است، نه attestation مستقل از صرافی.
 اطلاعات تأییدنشده هرگز معتبر نمایش داده نمی‌شود.

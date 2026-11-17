@@ -102,6 +102,7 @@
     <Compile Include="Core\Models\Observations\EsProductSpecificationObservation.cs" />
     <Compile Include="Core\Models\Observations\DiagnosticSnapshot.cs" />
     <Compile Include="Core\Instruments\CanonicalInstrumentId.cs" />
+    <Compile Include="Core\Instruments\InstrumentSelector.cs" />
     <Compile Include="Core\Session\SessionId.cs" />
     <Compile Include="Core\Session\SessionContext.cs" />
     <Compile Include="Core\Session\RuntimeCounters.cs" />

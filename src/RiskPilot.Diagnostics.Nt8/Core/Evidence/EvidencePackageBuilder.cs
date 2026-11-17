@@ -615,6 +615,8 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Evidence
                 var verdict = Core.Identity.InstrumentIdentityVerifier.Evaluate(identity);
                 writer.BeginObject("instrumentIdentity");
                 writer.WriteProperty("status", verdict.Status.ToWire());
+                writer.WriteProperty("selectionStatus", SecretRedactor.Redact(identity.SelectionStatus));
+                writer.WriteProperty("selectionReasonCode", SecretRedactor.Redact(identity.SelectionReasonCode));
                 writer.WriteProperty("observedInstrumentCount", verdict.ObservedInstrumentCount);
                 writer.WriteProperty("matchingInstrumentCount", verdict.MatchingInstrumentCount);
                 writer.WriteProperty("instrumentRef", SecretRedactor.Redact(verdict.InstrumentRef));

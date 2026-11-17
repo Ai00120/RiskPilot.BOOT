@@ -582,7 +582,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     Instrument.All.Add(instrument);
 
                     var captured = new List<NormalizedRecord>();
-                    var capture = new MarketDataCapture(r => { captured.Add(r); return true; }, () => true);
+                    var capture = new MarketDataCapture(r => { captured.Add(r); return true; }, () => true, "ES 12-26");
 
                     Assert.True(capture.TrySubscribe());
                     Assert.True(capture.IsSubscribed);
@@ -621,7 +621,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Reset();
                 try
                 {
-                    var capture = new MarketDataCapture(r => true, () => true);
+                    var capture = new MarketDataCapture(r => true, () => true, "ES 12-26");
                     Assert.False(capture.TrySubscribe());
                     Assert.False(capture.IsSubscribed);
                 }
@@ -641,7 +641,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                     Instrument.All.Add(instrument);
 
                     var captured = new List<NormalizedRecord>();
-                    var capture = new MarketDataCapture(r => { captured.Add(r); return true; }, () => true);
+                    var capture = new MarketDataCapture(r => { captured.Add(r); return true; }, () => true, "ES 12-26");
                     Assert.True(capture.TrySubscribe());
 
                     instrument.MarketData.RaiseUpdate(new MarketDataEventArgs { Instrument = instrument, MarketDataType = MarketDataType.Bid, Bid = 1.0, Time = Now });

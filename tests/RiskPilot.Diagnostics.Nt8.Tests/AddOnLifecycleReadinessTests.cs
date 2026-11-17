@@ -40,7 +40,8 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         {
             // Disable the background retry timer so the test drives every probe deterministically;
             // the first probe still runs synchronously inside ApplyLifecycleState("Active").
-            return new DiagnosticAddOn { ReadinessRetryEnabled = false };
+            // The target instrument is set explicitly (the only supported selection mechanism).
+            return new DiagnosticAddOn { ReadinessRetryEnabled = false, RequestedInstrumentId = "ES 12-26" };
         }
 
         [Fact]

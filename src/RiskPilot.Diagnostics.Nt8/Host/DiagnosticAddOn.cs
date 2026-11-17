@@ -128,6 +128,22 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         public Core.Contract.IReadOnlyDiagnosticSource StrategyDiagnosticSource { get; set; }
 
         /// <summary>
+        /// The explicit target instrument identity the diagnostic is scoped to (for example
+        /// <c>"ES 12-26"</c>). It is set by the operator/host before the AddOn initialises and is
+        /// threaded into the host provider and the market-data capture, so every component targets
+        /// the same instrument.
+        /// <para>
+        /// This is the only way the target is chosen: the tool never auto-discovers an instrument
+        /// from the loaded surface, never picks the first one and never selects by an ES root/name
+        /// substring. When it is null/empty the target stays unresolved and M4 reports
+        /// <c>TARGET_INSTRUMENT_NOT_CONFIGURED</c> (INCONCLUSIVE, never PASS). Setting it never
+        /// mutates the host selection; it only tells the read-only diagnostic which instrument to
+        /// observe.
+        /// </para>
+        /// </summary>
+        public string RequestedInstrumentId { get; set; }
+
+        /// <summary>
         /// Live readiness probe for the host data provider. True once the AddOn has reached an
         /// operational lifecycle state in which the NinjaTrader object model is reachable.
         /// <para>
@@ -175,7 +191,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     var provider = new Nt8HostDataProvider(
                         () => HostIsLive,
                         () => LifecycleStates,
-                        () => _readiness.Observe());
+                        () => _readiness.Observe(),
+                        RequestedInstrumentId);
                     _runtime = new DiagnosticRuntime(provider, SystemClock.Instance, 4096, 8192);
                     _runtime.Initialize();
 
@@ -188,7 +205,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     _marketDataCapture = new MarketDataCapture(
                         record => _runtime != null && _runtime.Ingest(record),
                         () => HostIsLive,
-                        null,
+                        RequestedInstrumentId,
                         _readiness);
 
                     // The strategy capture pulls read-only strategy observations from the optional
