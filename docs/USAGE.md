@@ -155,6 +155,21 @@ The repository ships one sample package at
 3. Verify integrity: `manifest.json` lists a SHA-256 for every artifact. Re-hash the files and
    compare. The tool already verifies all 18 artifacts and their hashes before it writes anything.
 
+## Required configuration
+
+The tool is read-only, so "configuration" means the read-only inputs the operator supplies; nothing
+here mutates the host.
+
+| Input | Where | Default | Effect if unset |
+| --- | --- | --- | --- |
+| Target instrument | the Diagnostic Center picker (exact contract FullName) | none | the tool never becomes ready; M4 is `INCONCLUSIVE` |
+| Target account identity | fixed in `Core/Identity/AccountIdentityVerifier` (`ExpectedAccountIdentity`) | account `SimRP.BOT`, connection `My Rithmic`, provider `Rithmic`, mode `Simulation`, currency `USD` | n/a (it is the compile-time expectation) |
+| Owner-authorized provider slot mapping | `DiagnosticAddOn.OwnerAuthorizedProviderSlots` | empty (fail-closed) | a generic provider slot stays unresolved; provider checks are `INCONCLUSIVE` |
+| Readiness retry loop | `DiagnosticAddOn.ReadinessRetryEnabled` | `true` (host); tests set `false` | with it off only the first synchronous probe runs |
+
+Nothing else is configurable, and no input enables trading or mutates an account, connection,
+position or RiskPilot setting.
+
 ## Known limitations
 
 - **No real-host verification.** Every result in this repository was produced against offline
