@@ -90,7 +90,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
         /// <summary>The observed NinjaTrader placeholder slot that the Owner authorized as Rithmic (D-097).</summary>
         public const string OwnerAuthorizedRithmicSlot = "Provider14";
 
-        /// <summary>An empty owner-authorized slot mapping (the fail-closed default).</summary>
+        /// <summary>An empty owner-authorized slot mapping for the explicit fail-closed path.</summary>
         public static readonly IReadOnlyDictionary<string, string> NoOwnerAuthorizedSlots =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 

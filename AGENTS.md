@@ -907,8 +907,9 @@ mirrored here.
   `PROVIDER_ROUTE_UNRESOLVED` / `ACCOUNT_PROVIDER_UNRESOLVED` / `CONNECTION_PROVIDER_UNRESOLVED`),
   never a false mismatch.
 - M2 (`M2ConnectionProbe`) classifies the provider and counts account/connection provider
-  agreement three-valued: a placeholder on either side is counted as
-  `PROVIDER_AGREEMENT_UNRESOLVED` (INCONCLUSIVE), not a mismatch. The instrument verifier treats
+  agreement three-valued: an unmapped placeholder on either side is counted as
+  `PROVIDER_AGREEMENT_UNRESOLVED` (INCONCLUSIVE), not a mismatch. The compiled `Provider14` slot
+  resolves to `Rithmic` and therefore agrees. The instrument verifier treats
   an unresolved provider path as `PROVIDER_ROUTE_UNRESOLVED` so a Globex route is never confirmed
   from an unidentified provider. `M2.ACCOUNT_CONNECTION_ASSOCIATION` additionally requires the
   target account's own connection object to be among the host's enumerated connections

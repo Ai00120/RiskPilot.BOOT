@@ -512,6 +512,12 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Assert.False(readiness.FullyReady);
                 Assert.NotEqual(HostReadinessState.AwaitingInstrument, readiness.State);
 
+                // The same explicit target reaches the M4 attestation path, so the observed host
+                // failure mode (M4 HOST_UNAVAILABLE) cannot recur merely because no target was set.
+                var attestation = addOn.Provider.GetSnapshot().Attestation;
+                Assert.True(attestation.HostAvailable);
+                Assert.Equal("ES 12-26", attestation.RequestedInstrumentId);
+
                 addOn.SafeDispose();
             }
             finally

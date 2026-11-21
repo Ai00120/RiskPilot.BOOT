@@ -51,10 +51,10 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
         /// <summary>
         /// Provider match. The provider enum has no guaranteed Rithmic member, so the host renders
         /// it as a string. This Boolean is only a convenience for callers that need "definitely the
-        /// expected provider": a generic placeholder slot (e.g. "Provider14") is NOT the expected
-        /// provider here. Identity decisions use the three-valued
-        /// <see cref="ProviderIdentity.Compare"/> so an unresolved slot stays unproven instead of
-        /// becoming a false mismatch.
+        /// expected provider": an unmapped generic placeholder slot is NOT the expected provider
+        /// here, while the compiled D-097 <c>Provider14</c> mapping is. Identity decisions use the
+        /// three-valued <see cref="ProviderIdentity.Compare"/> so an unresolved slot stays unproven
+        /// instead of becoming a false mismatch.
         /// </summary>
         public static bool ProviderMatches(string observed)
         {

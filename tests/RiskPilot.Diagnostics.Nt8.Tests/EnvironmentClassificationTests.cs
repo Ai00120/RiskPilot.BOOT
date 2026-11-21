@@ -641,6 +641,44 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void M1_EnvironmentClass_PassesWithLiveModeForTheD097Account()
+        {
+            var identity = VerifiedAccountIdentity();
+            identity.ModeIsSimulation = false;
+            identity.ModeIsAccepted = true;
+
+            var provider = new FakeDataProvider
+            {
+                Environment = new EnvironmentRecord { Environment = EnvironmentClass.Live },
+                Snapshot = new DiagnosticSnapshot
+                {
+                    AccountIdentity = identity,
+                    TargetAccountConnection = VerifiedAssociation()
+                }
+            };
+
+            var results = new M1EnvironmentProbe().Evaluate(
+                new ProbeContext(
+                    provider,
+                    new SessionContext(SessionId.New(DateTime.UtcNow), DateTime.UtcNow),
+                    new FakeClock(DateTime.UtcNow),
+                    "corr00000000"));
+
+            DiagnosticResult found = null;
+            foreach (var result in results)
+            {
+                if (result.CheckId == "M1.ENVIRONMENT_CLASS")
+                {
+                    found = result;
+                }
+            }
+
+            Assert.NotNull(found);
+            Assert.Equal(DiagnosticStatus.PASS, found.Status);
+            Assert.Contains(EnvironmentVerificationChain.Verified, found.ReasonCodes);
+        }
+
+        [Fact]
         public void M1_EnvironmentClass_StaysInconclusive_WhenAssociationUnresolved()
         {
             var provider = new FakeDataProvider
