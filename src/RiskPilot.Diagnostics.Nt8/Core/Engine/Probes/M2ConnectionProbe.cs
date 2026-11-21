@@ -14,8 +14,9 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
     /// member: an adapter without a dedicated member is assigned a generic placeholder slot such
     /// as <c>Provider14</c>, which carries no vendor identity), distinguishes a real runtime value
     /// from a stub/mock value, checks account-to-connection association, and counts reconnects.
-    /// A generic placeholder slot is unresolved (INCONCLUSIVE), never a false PASS or FAIL. Missing
-    /// connections are INCONCLUSIVE, never PASS.
+    /// A generic placeholder slot without an owner-authorized mapping is unresolved
+    /// (INCONCLUSIVE), never a false PASS or FAIL; a mapped slot or a named member that contradicts
+    /// the required provider is FAIL. Missing connections are INCONCLUSIVE, never PASS.
     /// </summary>
     public sealed class M2ConnectionProbe : IDiagnosticProbe
     {
@@ -210,10 +211,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
             }
             else
             {
+                // A definite named provider (or a mapped slot) that differs from the required
+                // provider is proven wrong, so it fails; only an unreadable value or an unmapped
+                // placeholder slot above is unproven.
                 result = DiagnosticResult
-                    .Inconclusive(ModuleId, "M2.PROVIDER_IDENTITY", correlation, now)
+                    .Fail(ModuleId, "M2.PROVIDER_IDENTITY", ErrorClass.ConfigurationInvalid, correlation, now)
                     .WithReasonCode("PROVIDER_NOT_EXPECTED")
-                    .WithLimitation("The observed provider is a verified provider that is not the expected evidence provider; it is not treated as a failure of the host.");
+                    .WithLimitation("The observed provider is a verified provider that is not the expected evidence provider; the provider identity contradicts the required identity.")
+                    .WithNextAction("Bind the target account to the required provider connection, then re-run.");
             }
 
             return result
@@ -244,11 +249,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
 
         /// <summary>
         /// Verifies that the observed account is exactly the permanent RiskPilot.BOT identity
-        /// (D-095/D-096): account name, connection name, provider, simulation mode and currency.
-        /// The comparison is exact and fail-closed; a missing or unreadable field is
-        /// INCONCLUSIVE, and a similar or differently-cased name is not a match. The raw account
-        /// and connection names never enter the observation, so no identifier can leak into a
-        /// finding or an evidence artifact.
+        /// (D-095/D-096, amended by D-097): account name, connection name, provider, accepted
+        /// connection mode and currency. The comparison is exact and fail-closed; a missing or
+        /// unreadable field is INCONCLUSIVE, and a similar or differently-cased name is not a
+        /// match. The raw account and connection names never enter the observation, so no
+        /// identifier can leak into a finding or an evidence artifact.
         /// </summary>
         private DiagnosticResult BuildAccountIdentityCheck(ProbeContext context, string correlation, System.DateTime now)
         {

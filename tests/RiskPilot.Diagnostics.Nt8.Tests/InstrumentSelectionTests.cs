@@ -95,6 +95,55 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void Selector_HostMonthNameNotation_ResolvesSameContract()
+        {
+            var loaded = new List<LoadedInstrumentCandidate>
+            {
+                Candidate("ES DEC26", "ES"),
+                Candidate("ES MAR27", "ES")
+            };
+
+            var result = InstrumentSelector.Select("ES 12-26", true, loaded, false);
+
+            Assert.True(result.IsResolved);
+            Assert.Equal(0, result.SelectedIndex);
+            Assert.Equal(1, result.CandidateCount);
+        }
+
+        [Fact]
+        public void Selector_HostMonthNameNotation_DoesNotMatchDifferentContract()
+        {
+            var loaded = new List<LoadedInstrumentCandidate> { Candidate("ES MAR27", "ES") };
+
+            var result = InstrumentSelector.Select("ES 12-26", true, loaded, false);
+
+            Assert.False(result.IsResolved);
+            Assert.Equal(InstrumentSelectionStatus.NotLoaded, result.Status);
+        }
+
+        [Fact]
+        public void Selector_HostMonthNameNotation_WrongRoot_IsNotLoaded()
+        {
+            var loaded = new List<LoadedInstrumentCandidate> { Candidate("ES DEC26", "NQ") };
+
+            var result = InstrumentSelector.Select("ES 12-26", true, loaded, false);
+
+            Assert.False(result.IsResolved);
+            Assert.Equal(InstrumentSelectionStatus.NotLoaded, result.Status);
+        }
+
+        [Fact]
+        public void Selector_HostMonthNameNotation_LowerCase_IsNotLoaded()
+        {
+            var loaded = new List<LoadedInstrumentCandidate> { Candidate("es dec26", "es") };
+
+            var result = InstrumentSelector.Select("ES 12-26", true, loaded, false);
+
+            Assert.False(result.IsResolved);
+            Assert.Equal(InstrumentSelectionStatus.NotLoaded, result.Status);
+        }
+
+        [Fact]
         public void Selector_NoSelection_IsNotConfigured_NeverPicksFirst()
         {
             var loaded = new List<LoadedInstrumentCandidate> { Candidate("ES 12-26", "ES") };
@@ -182,6 +231,30 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
                 Assert.Equal(InstrumentSelectionStatus.Resolved, observation.SelectionStatus);
                 Assert.Equal(1, observation.MatchingInstrumentCount);
+                Assert.Equal(DiagnosticStatus.PASS, InstrumentIdentityVerifier.Evaluate(observation).Status);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Host_ExactlyOneSelectedEsContractInMonthNameNotation_IsPass()
+        {
+            Reset();
+            try
+            {
+                Connection.Connections.Add(ConnectedRithmic());
+                Instrument.All.Add(EsInstrument("ES DEC26"));
+
+                var provider = TestHost.Provider(true, "ES 12-26");
+                var observation = provider.GetSnapshot().InstrumentIdentity;
+
+                Assert.Equal(InstrumentSelectionStatus.Resolved, observation.SelectionStatus);
+                Assert.Equal(1, observation.MatchingInstrumentCount);
+                Assert.True(observation.SymbolParsed);
+                Assert.Equal("ES_FUTURES_CME_DEC26", observation.CanonicalInstrumentId);
                 Assert.Equal(DiagnosticStatus.PASS, InstrumentIdentityVerifier.Evaluate(observation).Status);
             }
             finally

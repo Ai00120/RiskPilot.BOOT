@@ -86,7 +86,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
-        public void Scenario_ProviderUnknown_IsInconclusiveNotPass()
+        public void Scenario_ProviderUnknown_FailsNotPass()
         {
             var provider = new FakeDataProvider
             {
@@ -105,7 +105,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             });
 
             var results = new M2ConnectionProbe().Evaluate(Context(provider));
-            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M2.PROVIDER_IDENTITY").Status);
+            Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M2.PROVIDER_IDENTITY").Status);
         }
 
         [Fact]

@@ -162,7 +162,7 @@ here mutates the host.
 
 | Input | Where | Default | Effect if unset |
 | --- | --- | --- | --- |
-| Target instrument | the Diagnostic Center picker (exact contract FullName) | `ES 12-26` (compiled D-097 default) | it still resolves only an exact loaded contract; a missing contract leaves M4 `INCONCLUSIVE` |
+| Target instrument | the Diagnostic Center picker (exact contract FullName) | `ES 12-26` (compiled D-097 default) | it resolves the same contract under `ES 12-26` or the host's `ES DEC26` notation; a missing contract leaves M4 `INCONCLUSIVE` |
 | Target account identity | fixed in `Core/Identity/AccountIdentityVerifier` (`ExpectedAccountIdentity`) | account `SimRP.BOT`, connection `Rithmic`, provider `Rithmic` (slot `Provider14` via BOOT's compiled mapping), mode `Simulation` or `Live`, currency `USD` | n/a (it is the compile-time expectation) |
 | Owner-authorized provider slot mapping | `DiagnosticAddOn.OwnerAuthorizedProviderSlots` | BOOT's compiled immutable D-097 mapping (`Provider14` → `Rithmic`) | a caller may supply an empty mapping; any other slot then stays unresolved and provider checks are `INCONCLUSIVE` |
 | Readiness retry loop | `DiagnosticAddOn.ReadinessRetryEnabled` | `true` (host); tests set `false` | with it off only the first synchronous probe runs |
@@ -187,8 +187,9 @@ position or RiskPilot setting.
   mapping resolves exactly `Provider14` → `Rithmic`; every other slot stays `INCONCLUSIVE`. No
   vendor is inferred by name or guesswork.
 - **The target instrument is explicit.** `ES 12-26` is the compiled D-097 default; the operator may
-  re-target in the picker. The tool never auto-discovers an instrument. A cleared selection never
-  becomes ready and M4 stays `INCONCLUSIVE`.
+  re-target in the picker. The host may render the same December 2026 contract as `ES DEC26`, which
+  the selector and canonical-id parser treat as one contract by exact root/month/year. The tool never
+  auto-discovers an instrument. A cleared selection never becomes ready and M4 stays `INCONCLUSIVE`.
 - **Depth (Level II) depends on the feed.** An instrument/connection without a Level II surface
   reports `M5.DEPTH` `INCONCLUSIVE` — that is a supported outcome, not a failure.
 - **Read-only by design.** The tool cannot submit, modify or cancel an order and cannot enable

@@ -273,7 +273,8 @@ SIM، currency `USD`.
 
 **هویت instrument (M4.INSTRUMENT_IDENTITY):** میزبان سطح `Instrument.All` (instrument‌های
 بارگذاری‌شدهٔ NinjaTrader) را می‌خواند — نه یک نام ساخته‌شده از یک رشتهٔ پیکربندی — و **فقط**
-instrumentی را که صریحاً انتخاب شده است (تطابق exact full-name/root) resolve می‌کند؛ هرگز از
+instrumentی را که صریحاً انتخاب شده است (تطابق exact full-name/root، یا همان قرارداد با نماد
+ماهِ میزبان مثل `ES DEC26` در برابر `ES 12-26` با تطابق دقیق root/month/year) resolve می‌کند؛ هرگز از
 auto-discovery، «اولین instrument» یا تطابق زیررشته استفاده نمی‌کند. هر فیلد به
 boolean/count + `instrument#<hash>` کاهش می‌یابد. مقایسهٔ ریشهٔ نماد **exact و ordinal** است
 (`ES`)، نوع `Future`، ارز `USD` و صرافی فقط وقتی تأیید می‌شود که متادیتای مسیر پیکربندی‌شدهٔ D-096

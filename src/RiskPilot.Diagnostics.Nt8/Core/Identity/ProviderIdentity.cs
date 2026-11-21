@@ -157,8 +157,10 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
 
         /// <summary>
         /// Resolves a <b>placeholder slot</b> to a verified vendor through the owner-authorized
-        /// mapping, or returns null when no verified mapping applies. The mapping is matched
-        /// case-insensitively on the exact slot name.
+        /// mapping, or returns null when no verified mapping applies. Lookup uses the supplied
+        /// dictionary's comparer; the compiled production mapping
+        /// (<see cref="OwnerAuthorizedSlots"/>) is ordinal exact, so a differently-cased slot never
+        /// resolves.
         /// <para>
         /// The mapping applies to placeholder slots only: an explicitly named provider (for example
         /// <c>Yahoo</c> or <c>Simulator</c>) already carries a real vendor identity, so it is never

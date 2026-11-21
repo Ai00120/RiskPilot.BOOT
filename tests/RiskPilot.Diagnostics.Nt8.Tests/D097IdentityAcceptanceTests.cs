@@ -145,6 +145,12 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Assert.Equal(1, snapshot.AccountIdentity.MatchingAccountCount);
                 Assert.True(snapshot.AccountIdentity.ModeIsAccepted);
                 Assert.False(snapshot.AccountIdentity.ModeIsSimulation);
+                Assert.True(snapshot.AccountIdentity.ConnectionConnected);
+                Assert.True(snapshot.AccountIdentity.ConnectionNameMatches);
+                Assert.Equal(ProviderIdentityMatch.Matches, snapshot.AccountIdentity.ConnectionProviderMatch);
+                Assert.Equal(1, snapshot.TargetAccountConnection.ConnectionCount);
+                Assert.Equal(1, snapshot.TargetAccountConnection.MatchingConnectionCount);
+                Assert.True(snapshot.TargetAccountConnection.ConnectionEnumerated);
                 Assert.Equal(DiagnosticStatus.PASS, AccountIdentityVerifier.Evaluate(snapshot.AccountIdentity).Status);
                 Assert.Equal(DiagnosticStatus.PASS, TargetAccountConnectionVerifier.Evaluate(snapshot.TargetAccountConnection).Status);
 
@@ -179,11 +185,11 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
                 Assert.Equal(19, snapshot.AccountIdentity.ObservedAccountCount);
                 Assert.Equal(0, snapshot.AccountIdentity.MatchingAccountCount);
-                Assert.NotEqual(DiagnosticStatus.PASS, AccountIdentityVerifier.Evaluate(snapshot.AccountIdentity).Status);
+                Assert.Equal(DiagnosticStatus.FAIL, AccountIdentityVerifier.Evaluate(snapshot.AccountIdentity).Status);
 
                 var results = new M2ConnectionProbe().Evaluate(Context(FakeFrom(host)));
-                Assert.NotEqual(DiagnosticStatus.PASS, Find(results, "M2.ACCOUNT_IDENTITY").Status);
-                Assert.NotEqual(DiagnosticStatus.PASS, Find(results, "M2.ACCOUNT_CONNECTION_ASSOCIATION").Status);
+                Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M2.ACCOUNT_IDENTITY").Status);
+                Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M2.ACCOUNT_CONNECTION_ASSOCIATION").Status);
             }
             finally
             {
@@ -206,6 +212,9 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
                 Assert.Equal(DiagnosticStatus.FAIL, verdict.Status);
                 Assert.Contains(AccountIdentityReasonCodes.AccountProviderMismatch, verdict.MismatchedFields);
+
+                var results = new M2ConnectionProbe().Evaluate(Context(FakeFrom(host)));
+                Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M2.ACCOUNT_IDENTITY").Status);
             }
             finally
             {
@@ -228,6 +237,33 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
                 Assert.Equal(DiagnosticStatus.FAIL, verdict.Status);
                 Assert.Contains(TargetAccountConnectionReasonCodes.ConnectionNameMismatch, verdict.MismatchedFields);
+
+                var results = new M2ConnectionProbe().Evaluate(Context(FakeFrom(host)));
+                Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M2.ACCOUNT_IDENTITY").Status);
+                Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M2.ACCOUNT_CONNECTION_ASSOCIATION").Status);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Host_WrongConnectionProvider_IsFail()
+        {
+            Reset();
+            try
+            {
+                var connection = TargetConnectionObject(provider: Provider.Simulator);
+                SeedNineteenAccounts(connection, targetProvider: Provider.Simulator);
+                Connection.Connections.Add(connection);
+
+                var host = TestHost.ProductionProvider(true);
+                var results = new M2ConnectionProbe().Evaluate(Context(FakeFrom(host)));
+
+                Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M2.ACCOUNT_IDENTITY").Status);
+                Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M2.ACCOUNT_CONNECTION_ASSOCIATION").Status);
+                Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M2.PROVIDER_IDENTITY").Status);
             }
             finally
             {

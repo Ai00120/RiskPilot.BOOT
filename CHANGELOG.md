@@ -17,10 +17,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   account, and denomination `USD`. `ProviderIdentity.OwnerAuthorizedSlots` now carries that single
   mapping; every other placeholder slot remains unresolved (fail closed). The static safety scan
   still confines the account-name literal, and no BOT binary or source dependency was added.
+- **A definite named provider mismatch now `FAIL`s.** `M2.PROVIDER_IDENTITY` previously reported
+  `INCONCLUSIVE` for a resolved named provider that differed from the requirement. A proven
+  contradiction now fails, while an unreadable value or an unmapped placeholder slot stays
+  `INCONCLUSIVE` (never a false mismatch).
 - **The explicit target instrument now defaults to `ES 12-26`.** The AddOn and the Diagnostic Center
   selection model start with that contract instead of no selection, so a host run no longer reports
   `TARGET_INSTRUMENT_NOT_CONFIGURED` merely because the operator did not pick one. The value is still
-  resolved against the loaded surface by exact match; a missing contract stays `INCONCLUSIVE`.
+  resolved against the loaded surface by exact match; a missing contract stays `INCONCLUSIVE`. The
+  canonical-id parser and selector also accept the host's `ES DEC26` notation as the same December
+  2026 contract (exact root/month/year, never a substring).
 - **Full-mode runs wait (bounded) for host readiness.** `RuntimeDiagnosticRunner` polls the host
   readiness observation before a Full pass, up to `DiagnosticAddOn.ReadinessWaitTimeoutMs`
   (default 20 s), and re-attempts the idempotent market-data subscription afterward. Quick keeps its
@@ -368,7 +374,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 - **`M2.ACCOUNT_CONNECTION_ASSOCIATION` did not prove the target account's actual connection.**
   The check compared each account's provider with the provider of *its* reported connection, but
   it never proved that the *target* account (D-095/D-096: `SimRP.BOT`) is bound to the required
-  connection (`My Rithmic`) and provider (`Rithmic`); a set of accounts whose providers agreed
+  connection (`My Rithmic`, superseded by D-097: `Rithmic`) and provider (`Rithmic`); a set of
+  accounts whose providers agreed
   could pass even when the target account was absent or bound to a different connection. The
   check now resolves the target account's **own** `Account.Connection` and compares its name and
   provider (and the account provider) against the required identity, via the new fail-closed

@@ -349,7 +349,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
-        public void M2_ResolvedNamedProviderThatDiffers_IsInconclusive()
+        public void M2_ResolvedNamedProviderThatDiffers_Fails()
         {
             var provider = ProviderWithEvidence(new ProviderEvidence
             {
@@ -361,7 +361,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             });
 
             var result = Find(new M2ConnectionProbe().Evaluate(Context(provider)), "M2.PROVIDER_IDENTITY");
-            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, result.Status);
+            Assert.Equal(DiagnosticStatus.FAIL, result.Status);
             Assert.Contains("PROVIDER_NOT_EXPECTED", result.ReasonCodes);
         }
 

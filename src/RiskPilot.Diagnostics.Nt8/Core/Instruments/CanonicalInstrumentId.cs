@@ -29,9 +29,15 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Instruments
         private static readonly Regex FuturesSymbol =
             new Regex(@"^(?<root>[A-Za-z]{1,6})\s*[-\s]\s*(?<month>\d{1,2})\s*-\s*(?<year>\d{2,4})$", RegexOptions.Compiled);
 
+        private static readonly Regex FuturesSymbolWithMonthName =
+            new Regex(@"^(?<root>[A-Za-z]{1,6})\s*[-\s]\s*(?<month>[A-Za-z]{3})\s*[-\s]?\s*(?<year>\d{2,4})$", RegexOptions.Compiled);
+
         /// <summary>
         /// Attempts to parse a host contract symbol into its root, month and full year.
-        /// Returns false when the symbol is not a recognised futures contract.
+        /// Accepts both the numeric month form (<c>ES 12-26</c>) and the month-name form the host
+        /// may render (<c>ES DEC26</c>), so the same contract is never treated as a different one
+        /// merely because of its display notation. Returns false when the symbol is not a
+        /// recognised futures contract.
         /// </summary>
         public static bool TryParse(string symbol, out string root, out int month, out int fullYear)
         {
@@ -43,14 +49,24 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Instruments
                 return false;
             }
 
-            var match = FuturesSymbol.Match(symbol.Trim());
+            var trimmed = symbol.Trim();
+            var match = FuturesSymbol.Match(trimmed);
             if (!match.Success)
             {
-                return false;
-            }
+                match = FuturesSymbolWithMonthName.Match(trimmed);
+                if (!match.Success)
+                {
+                    return false;
+                }
 
-            if (!int.TryParse(match.Groups["month"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedMonth)
-                || parsedMonth < 1 || parsedMonth > 12)
+                month = Array.IndexOf(MonthAbbreviations, match.Groups["month"].Value.ToUpperInvariant()) + 1;
+                if (month == 0)
+                {
+                    return false;
+                }
+            }
+            else if (!int.TryParse(match.Groups["month"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out month)
+                || month < 1 || month > 12)
             {
                 return false;
             }
@@ -61,7 +77,6 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Instruments
             }
 
             root = match.Groups["root"].Value.ToUpperInvariant();
-            month = parsedMonth;
             fullYear = parsedYear >= 100 ? parsedYear : 2000 + parsedYear;
             return true;
         }

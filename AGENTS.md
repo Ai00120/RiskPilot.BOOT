@@ -209,14 +209,17 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   `InstrumentSelector.Select(requestedId, surfaceObservable, loaded, isStubOrMock)` returns a
   `InstrumentSelectionResult` (`IsResolved`, `SelectedIndex`, `Status`, `CandidateCount`,
   `ObservedCount`, `ReasonCode`). Rules: no id ⇒ `NotConfigured` (never "pick the first"); no surface
-  ⇒ `SurfaceUnavailable`; a stub/mock value ⇒ `StubOrMock`; an **exact** full-name match ⇒ `Resolved`;
-  else an **exact** root match ⇒ `Resolved` only when exactly one candidate matches, otherwise
-  `MultipleCandidates` (ambiguous); otherwise `NotLoaded`. A candidate whose root was not readable is
-  never matched by the root rule. The selector never picks a first/default instrument and never
-  selects by a name **substring** — an `ES`-like but different symbol can never be chosen.
+  ⇒ `SurfaceUnavailable`; a stub/mock value ⇒ `StubOrMock`; an **exact** full-name match, or the
+  same contract under the other accepted month notation (numeric `ES 12-26` vs host `ES DEC26`,
+  exact root/month/year, never a substring) ⇒ `Resolved`; else an **exact** root match ⇒ `Resolved`
+  only when exactly one candidate matches, otherwise `MultipleCandidates` (ambiguous); otherwise
+  `NotLoaded`. A candidate whose root was not readable is never matched by the root rule. The
+  selector never picks a first/default instrument and never selects by a name **substring** — an
+  `ES`-like but different symbol can never be chosen.
 - The host adapter `Nt8HostDataProvider.SelectLoadedInstrument` / `ResolveLoadedInstrument` enumerates
-  `Instrument.All` only to compare each candidate's own `FullName`/`MasterInstrument.Name`; the raw
-  name is reduced to booleans/counts + a `SyntheticRef` `instrument#<hash>`. `ResolveAttestationInstrument`,
+  `Instrument.All` only to compare each candidate's own `FullName`/`MasterInstrument.Name` (including
+  the numeric/month-name contract equivalence); the raw name is reduced to booleans/counts + a
+  `SyntheticRef` `instrument#<hash>`. `ResolveAttestationInstrument`,
   `BuildInstrumentIdentityObservation` and `BuildEsProductSpecificationObservation` all go through the
   same selector, so **one** explicit identity is used by the metadata inspection **and** the
   market-data capture. `MarketDataCapture` takes the same `requestedInstrumentId` and refuses to
@@ -226,8 +229,9 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   into both `new Nt8HostDataProvider(...)` and `new MarketDataCapture(...)`. Setting it (or the
   Diagnostic Center picker) is read-only — it never mutates the host selection. If the operator
   clears the selection the tool never becomes ready (`HostReadinessState.AwaitingInstrument`) and M4
-  stays `INCONCLUSIVE` (`TARGET_INSTRUMENT_NOT_CONFIGURED`). The compiled default only resolves when
-  that exact contract is loaded; a missing contract stays `INCONCLUSIVE`, never a fabricated match.
+  stays `INCONCLUSIVE` (`TARGET_INSTRUMENT_NOT_CONFIGURED`). The compiled default resolves when the
+  same contract is loaded under either accepted notation (`ES 12-26` or host `ES DEC26`); a missing
+  contract stays `INCONCLUSIVE`, never a fabricated match.
 - Fail-closed mapping (verifier `Core/Identity/InstrumentIdentityVerifier`): no selection ⇒
   `INCONCLUSIVE` (`TARGET_INSTRUMENT_NOT_CONFIGURED`); the selected contract is not loaded ⇒
   `INCONCLUSIVE` (`TARGET_INSTRUMENT_NOT_LOADED`, never a false root mismatch); the selection matches
@@ -236,7 +240,9 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   and disagrees ⇒ `FAIL` (`INSTRUMENT_ROOT_MISMATCH`); more than one matching root ⇒
   `INCONCLUSIVE` (`..._AMBIGUOUS`); a stub/mock value ⇒ `INCONCLUSIVE`. A mismatch outranks an
   unobservable field. The expiry is **not** pinned: only the canonical root/venue form
-  (`ES_FUTURES_CME_*`) is required, so a manual contract roll keeps the identity valid.
+  (`ES_FUTURES_CME_*`) is required, so a manual contract roll keeps the identity valid. D-098
+  compares the BOT attestation expiry by month/year; BOOT still does not enforce expiry, and the
+  canonical-id parser accepts both `ES 12-26` and the host `ES DEC26` notation for the same contract.
 - The venue is confirmed only by the D-096 configured-route metadata: selected route `Globex`,
   configured exchange set exactly `{Globex}` and the sole **connected** provider path `Rithmic`.
   CME is **never** inferred from the `ES` symbol text. An unconfirmed exchange ⇒
@@ -869,7 +875,9 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   that one SIM account, denomination `USD`. The mode acceptance is recorded as `ModeIsAccepted`;
   `ModeIsSimulation` remains a separate fact so evidence still shows which mode was observed.
 - The explicit target instrument is `ES 12-26` (compiled default). It must be loaded and uniquely
-  matched; the tool never auto-discovers a first/nearest contract.
+  matched; the tool never auto-discovers a first/nearest contract. The host may render the same
+  contract as `ES DEC26`; the selector and canonical-id parser treat the two notations as one
+  contract by exact root/month/year, never by substring.
 - `RuntimeDiagnosticRunner` waits for `HostReadinessObservation.FullyReady` before a **Full** pass,
   bounded by `DiagnosticAddOn.ReadinessWaitTimeoutMs` (default 20 s). Quick and Post-Trade Audit do
   not wait, preserving their previous semantics. Cancellation stops the wait before any probe. The

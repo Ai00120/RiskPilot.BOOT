@@ -46,7 +46,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Instruments
     /// </summary>
     public struct LoadedInstrumentCandidate
     {
-        /// <summary>The instrument's host full name (for example "ES 12-26"), or empty when unreadable.</summary>
+        /// <summary>The instrument's host full name (for example "ES 12-26" or "ES DEC26"), or empty when unreadable.</summary>
         public string FullName;
 
         /// <summary>The instrument's root symbol (for example "ES"), or empty when unreadable.</summary>
@@ -114,9 +114,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Instruments
     /// identity such as a bare root) ⇒ <see cref="InstrumentSelectionStatus.MultipleCandidates"/>;</item>
     /// <item>only an exact, unique match ⇒ <see cref="InstrumentSelectionStatus.Resolved"/>.</item>
     /// </list>
-    /// A loaded instrument matches when its full name equals the selection exactly, or — only when
-    /// its root symbol was actually read — when its root equals the selection exactly. All
-    /// comparisons are ordinal and case-sensitive.
+    /// A loaded instrument matches when its full name equals the selection exactly, when its full
+    /// name denotes the same futures contract under the other accepted month notation (numeric
+    /// <c>ES 12-26</c> vs host <c>ES DEC26</c>), or — only when its root symbol was actually read —
+    /// when its root equals the selection exactly. All comparisons are ordinal and case-sensitive;
+    /// contract equivalence is exact on root, month and year, never a substring match.
     /// </summary>
     public static class InstrumentSelector
     {
@@ -158,8 +160,10 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Instruments
                     var rootMatch = candidate.RootObservable
                         && !string.IsNullOrEmpty(candidate.RootName)
                         && string.Equals(candidate.RootName, requestedInstrumentId, StringComparison.Ordinal);
+                    var contractMatch = !fullNameMatch && !rootMatch
+                        && SameContract(candidate, requestedInstrumentId);
 
-                    if (!fullNameMatch && !rootMatch)
+                    if (!fullNameMatch && !rootMatch && !contractMatch)
                     {
                         continue;
                     }
@@ -183,6 +187,42 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Instruments
 
             return InstrumentSelectionResult.Create(
                 InstrumentSelectionStatus.Resolved, InstrumentSelectionReasonCodes.Resolved, selectedIndex, observed, 1);
+        }
+
+        /// <summary>
+        /// True when the candidate's full name and the explicit selection denote the same futures
+        /// contract under either accepted notation (numeric month or host month name). The
+        /// comparison is exact on root, month and year; it is never a substring or prefix match.
+        /// When the candidate's root was read, it must also agree with the parsed root, so a
+        /// malformed candidate is not selected by its display name.
+        /// </summary>
+        private static bool SameContract(LoadedInstrumentCandidate candidate, string requestedInstrumentId)
+        {
+            if (string.IsNullOrEmpty(candidate.FullName)
+                || !string.Equals(requestedInstrumentId, requestedInstrumentId.ToUpperInvariant(), StringComparison.Ordinal)
+                || !string.Equals(candidate.FullName, candidate.FullName.ToUpperInvariant(), StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            string requestedRoot, candidateRoot;
+            int requestedMonth, requestedYear, candidateMonth, candidateYear;
+            if (!CanonicalInstrumentId.TryParse(requestedInstrumentId, out requestedRoot, out requestedMonth, out requestedYear)
+                || !CanonicalInstrumentId.TryParse(candidate.FullName, out candidateRoot, out candidateMonth, out candidateYear))
+            {
+                return false;
+            }
+
+            if (!string.Equals(requestedRoot, candidateRoot, StringComparison.Ordinal)
+                || requestedMonth != candidateMonth
+                || requestedYear != candidateYear)
+            {
+                return false;
+            }
+
+            return !candidate.RootObservable
+                || string.IsNullOrEmpty(candidate.RootName)
+                || string.Equals(candidate.RootName, candidateRoot, StringComparison.Ordinal);
         }
     }
 }
