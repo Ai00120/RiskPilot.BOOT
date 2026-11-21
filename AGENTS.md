@@ -548,8 +548,9 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   `marketDataSubscribed` / `marketDataObserved`. The exported `hostReadiness` block carries `epoch`.
 - `DiagnosticAddOn.Readiness` delegates to `Nt8HostDataProvider.ReadHostReadiness()` once the
   provider exists (single source of truth with the snapshot/evidence); before Active it reports the
-  raw tracker observation. `OwnerAuthorizedProviderSlots` is a new AddOn input, **default empty**
-  (fail-closed), threaded into the provider so the AddOn is never a slot-mapping leak.
+  raw tracker observation. `OwnerAuthorizedProviderSlots` is an AddOn input that defaults to BOOT's
+  compiled immutable D-097 mapping (`Provider14` → `Rithmic`); a host/test may supply an empty
+  mapping before `Active` (fail-closed), and the AddOn is never a slot-mapping leak.
 - `environment.json` `hostReadiness` writes each fact as its `SATISFIED`/`UNSATISFIED`/`UNKNOWN`
   wire string (`ReadinessFactStates.ToWire`), never a Boolean.
 - M7 ships no producer: `DiagnosticAddOn.StrategyDiagnosticSource` is null by default, so M7 stays
