@@ -17,8 +17,9 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models
 
         /// <summary>
         /// True when the provider value carries a verified vendor identity (a named enum member, or
-        /// a generic placeholder slot with an owner-authorized mapping). False for a generic slot
-        /// such as "Provider14", which is never assumed to be the expected provider.
+        /// a generic placeholder slot resolved by an owner-authorized mapping such as the compiled
+        /// D-097 <c>Provider14 -&gt; Rithmic</c> mapping). False for any unmapped generic slot, which
+        /// is never assumed to be the expected provider.
         /// </summary>
         public bool ProviderResolved { get; set; }
 

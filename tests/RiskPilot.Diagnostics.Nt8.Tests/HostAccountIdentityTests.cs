@@ -19,7 +19,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
     public class HostAccountIdentityTests
     {
         private const string ExpectedAccount = "SimRP.BOT";
-        private const string ExpectedConnection = "My Rithmic";
+        private const string ExpectedConnection = "Rithmic";
 
         private static void Reset()
         {

@@ -16,8 +16,9 @@ modify or cancel an order, and it never asks to enable trading. `Trading=Disable
 | NinjaTrader | 8.1.9.0 (target); minimum supported 8.1.8.4 |
 | OS | 64-bit Windows with NinjaTrader 8 installed |
 | Real build | `dotnet build src/RiskPilot.Diagnostics.Nt8/RiskPilot.Diagnostics.Nt8.csproj -p:UseStubs=false` on Windows, or the NinjaScript Editor compile |
-| Target account (the verified identity) | account `SimRP.BOT`, connection `My Rithmic`, provider `Rithmic`, mode `Simulation`, currency `USD` |
-| Provider slot | The adapter occupies a generic placeholder slot (for example `Provider14`); it is unresolved until the owner-authorized slot mapping is supplied (see §3) |
+| Target account (the verified identity) | account `SimRP.BOT`, connection `Rithmic`, provider `Rithmic` (slot `Provider14` via BOOT's compiled mapping), mode `Simulation` or `Live` for that SIM account, currency `USD` |
+| Target instrument | `ES 12-26` (explicit default; the host may render the same contract as `ES DEC26`; the operator may re-target in the picker) |
+| Provider slot | The adapter occupies `Provider14`; BOOT's own compiled immutable exact-match mapping resolves it to `Rithmic`. Any other slot stays unresolved (fail closed). |
 | Trading | **Disabled**. Do not enable it at any point. |
 
 Before starting, confirm the AddOn's source was staged with
@@ -48,13 +49,18 @@ Before starting, confirm the AddOn's source was staged with
 
 ## 3. Explicit instrument selection
 
-- **Preconditions:** the target ES contract (for example `ES 12-26`) is loaded in NinjaTrader.
-- **Operator action:** In the Diagnostic Center picker, select the exact contract FullName and click
-  **Refresh** if the list is stale. Never rely on auto-discovery: with no selection the tool never
-  becomes ready.
+- **Preconditions:** the target ES contract `ES 12-26` (the compiled D-097 default) is loaded in
+  NinjaTrader. The host may render the same December 2026 contract as `ES DEC26`.
+- **Operator action:** the AddOn starts with `ES 12-26` selected. In the Diagnostic Center picker,
+  confirm or change the exact contract FullName and click **Refresh** if the list is stale. If the
+  host lists `ES DEC26`, the compiled default still resolves it as the same contract; selecting the
+  host FullName explicitly is also valid. Never rely on auto-discovery: the tool only uses the
+  explicit selection.
 - **Expected diagnostic status:** `M1.HOST_READINESS.instrumentResolved = SATISFIED` only for the
-  **exact** selected contract; with no selection `M1.HOST_READINESS` stays INCONCLUSIVE
-  (`INSTRUMENT_NOT_RESOLVED`) and `M4.INSTRUMENT_IDENTITY` reports `TARGET_INSTRUMENT_NOT_CONFIGURED`.
+  **exact** selected contract (or its equivalent month notation); if the operator clears the
+  selection, `M1.HOST_READINESS` stays INCONCLUSIVE (`INSTRUMENT_NOT_RESOLVED`) and
+  `M4.INSTRUMENT_IDENTITY` reports `TARGET_INSTRUMENT_NOT_CONFIGURED`. If neither notation is
+  loaded, M4 stays INCONCLUSIVE (`TARGET_INSTRUMENT_NOT_LOADED`), never a fabricated match.
 - **Expected evidence fields:** `instruments.json` → `instrumentIdentity.selectionStatus=RESOLVED`,
   `selectionReasonCode`, `maskedRef` (`instrument#<hash>`), `candidateCount=1`.
 - **PASS:** the selected contract resolves uniquely (`selectionStatus=RESOLVED`, one candidate).
@@ -79,7 +85,7 @@ Before starting, confirm the AddOn's source was staged with
 
 ## 5. Multiple loaded ES contracts
 
-- **Preconditions:** two or more ES contracts loaded (for example `ES 12-26` and `ES 03-27`).
+- **Preconditions:** two or more ES contracts loaded (for example `ES DEC26` and `ES MAR27`).
 - **Operator action:** Select exactly one of them and run.
 - **Expected diagnostic status:** only the selected contract resolves; the others are never chosen.
 - **Expected evidence fields:** `instrumentIdentity.candidateCount` reflects the loaded set;
@@ -120,10 +126,10 @@ Before starting, confirm the AddOn's source was staged with
 
 - **Preconditions:** the connection reports its provider.
 - **Operator action:** Start a **Quick Diagnostic** run.
-- **Expected diagnostic status:** `M2.PROVIDER_IDENTITY` PASS only when the target account's own
-  connection provider is a **named** member that matches the requirement. A generic placeholder slot
-  (for example `Provider14`) stays INCONCLUSIVE (`PROVIDER_SLOT_UNRESOLVED` / `PROVIDER_ROUTE_UNRESOLVED`)
-  unless an owner-authorized slot mapping is supplied.
+- **Expected diagnostic status:** `M2.PROVIDER_IDENTITY` PASS when the target account's own
+  connection provider is a **named** member that matches the requirement, or when the observed
+  `Provider14` slot resolves through BOOT's compiled D-097 mapping. Any other placeholder slot
+  stays INCONCLUSIVE (`PROVIDER_SLOT_UNRESOLVED` / `PROVIDER_ROUTE_UNRESOLVED`).
 - **Expected evidence fields:** `connections.json` / `accounts.json` provider rows with
   `ResolutionBasis`, and the masked `connectionRef`.
 - **PASS:** a named provider member matches (or a mapping that the owner has explicitly authorized

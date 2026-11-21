@@ -77,7 +77,10 @@ ALLOWED_REFLECTION_FILES = {
 # accidental hardcoded identity leak would first appear. It catches a hardcoded literal only;
 # it does not prove that a runtime value (for example a host-reported connection name) is never
 # emitted -- that is enforced by the artifact/finding tests.
-IDENTITY_LITERALS = ["SimRP.BOT", "My Rithmic"]
+# Under D-097 the connection is named "Rithmic", the same public vendor identity the provider
+# evidence legitimately reports, so only the account name is a confinement literal. Confining the
+# connection name would flag every legitimate provider mention.
+IDENTITY_LITERALS = ["SimRP.BOT"]
 IDENTITY_DEFINITION_FILE = "src/RiskPilot.Diagnostics.Nt8/Core/Identity/AccountIdentityVerifier.cs"
 
 # The declared NinjaTrader host versions (minimum supported / target) are published evidence and

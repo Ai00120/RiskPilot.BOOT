@@ -14,8 +14,9 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
     /// member: an adapter without a dedicated member is assigned a generic placeholder slot such
     /// as <c>Provider14</c>, which carries no vendor identity), distinguishes a real runtime value
     /// from a stub/mock value, checks account-to-connection association, and counts reconnects.
-    /// A generic placeholder slot is unresolved (INCONCLUSIVE), never a false PASS or FAIL. Missing
-    /// connections are INCONCLUSIVE, never PASS.
+    /// A generic placeholder slot without an owner-authorized mapping is unresolved
+    /// (INCONCLUSIVE), never a false PASS or FAIL; a mapped slot or a named member that contradicts
+    /// the required provider is FAIL. Missing connections are INCONCLUSIVE, never PASS.
     /// </summary>
     public sealed class M2ConnectionProbe : IDiagnosticProbe
     {
@@ -196,25 +197,28 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 result = DiagnosticResult
                     .Pass(ModuleId, "M2.PROVIDER_IDENTITY", correlation, now)
                     .WithReasonCode("EXPECTED_PROVIDER_MATCH")
-                    .WithLimitation("Provider identity is classified from the provider enum's ToString(); the enum has no dedicated Rithmic member, so a match means the observed value is a verified name equal to the expected provider.");
+                    .WithLimitation("Provider identity is classified from the provider enum's ToString(); the enum has no dedicated Rithmic member, so a match means the observed value is the compiled Owner-authorized Provider14 slot resolved to the expected provider.");
             }
             else if (unresolved)
             {
-                // A generic placeholder slot (e.g. "Provider14") carries no vendor identity and the
-                // owner-authorized slot mapping is empty by default, so the provider cannot be
-                // proven. Fail closed (INCONCLUSIVE) and mark the real mapping BLOCKED.
+                // A generic placeholder slot other than the D-097 Provider14 mapping carries no
+                // vendor identity, so the provider cannot be proven. Fail closed (INCONCLUSIVE).
                 result = DiagnosticResult
                     .Inconclusive(ModuleId, "M2.PROVIDER_IDENTITY", correlation, now)
                     .WithReasonCode("PROVIDER_SLOT_UNRESOLVED")
-                    .WithLimitation("The observed provider is a generic NinjaTrader placeholder slot (for example \"Provider14\") that carries no vendor identity, and no owner-authorized slot->vendor mapping resolves it. The real provider mapping is BLOCKED until runtime evidence records which slot the adapter occupies; it is never assumed to be the expected provider.")
-                    .WithNextAction("Record the installed host's provider enum slot mapping (owner-authorized) from runtime evidence, then re-run.");
+                    .WithLimitation("The observed provider is a generic NinjaTrader placeholder slot that carries no vendor identity, and the compiled Owner-authorized mapping (D-097: Provider14 -> Rithmic) does not resolve it. Any other slot stays unproven; it is never assumed to be the expected provider.")
+                    .WithNextAction("Confirm the observed provider slot is the Owner-authorized Provider14, then re-run.");
             }
             else
             {
+                // A definite named provider (or a mapped slot) that differs from the required
+                // provider is proven wrong, so it fails; only an unreadable value or an unmapped
+                // placeholder slot above is unproven.
                 result = DiagnosticResult
-                    .Inconclusive(ModuleId, "M2.PROVIDER_IDENTITY", correlation, now)
+                    .Fail(ModuleId, "M2.PROVIDER_IDENTITY", ErrorClass.ConfigurationInvalid, correlation, now)
                     .WithReasonCode("PROVIDER_NOT_EXPECTED")
-                    .WithLimitation("The observed provider is a verified provider that is not the expected evidence provider; it is not treated as a failure of the host.");
+                    .WithLimitation("The observed provider is a verified provider that is not the expected evidence provider; the provider identity contradicts the required identity.")
+                    .WithNextAction("Bind the target account to the required provider connection, then re-run.");
             }
 
             return result
@@ -245,11 +249,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
 
         /// <summary>
         /// Verifies that the observed account is exactly the permanent RiskPilot.BOT identity
-        /// (D-095/D-096): account name, connection name, provider, simulation mode and currency.
-        /// The comparison is exact and fail-closed; a missing or unreadable field is
-        /// INCONCLUSIVE, and a similar or differently-cased name is not a match. The raw account
-        /// and connection names never enter the observation, so no identifier can leak into a
-        /// finding or an evidence artifact.
+        /// (D-095/D-096, amended by D-097): account name, connection name, provider, accepted
+        /// connection mode and currency. The comparison is exact and fail-closed; a missing or
+        /// unreadable field is INCONCLUSIVE, and a similar or differently-cased name is not a
+        /// match. The raw account and connection names never enter the observation, so no
+        /// identifier can leak into a finding or an evidence artifact.
         /// </summary>
         private DiagnosticResult BuildAccountIdentityCheck(ProbeContext context, string correlation, System.DateTime now)
         {

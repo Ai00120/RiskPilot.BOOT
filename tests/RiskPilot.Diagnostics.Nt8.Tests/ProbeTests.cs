@@ -77,7 +77,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
-        public void M2_UnexpectedProvider_IsInconclusiveNotPass()
+        public void M2_UnexpectedProvider_FailsNotPass()
         {
             var provider = new FakeDataProvider();
             provider.Connections.Add(new ConnectionRecord
@@ -90,7 +90,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             provider.Provider = new ProviderRecord { Name = "Simulator", IsExpectedEvidenceProvider = false };
 
             var results = new M2ConnectionProbe().Evaluate(Context(provider));
-            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, Find(results, "M2.PROVIDER_IDENTITY").Status);
+            Assert.Equal(DiagnosticStatus.FAIL, Find(results, "M2.PROVIDER_IDENTITY").Status);
         }
 
         [Fact]

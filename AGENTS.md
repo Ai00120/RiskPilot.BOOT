@@ -142,14 +142,18 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   and `NinjaTrader.Gui`) plus WPF (`PresentationCore`, `PresentationFramework`, `System.Xaml`,
   `WindowsBase`). The real-host build is not verifiable offline; never claim it is.
 
-## Exact account identity notes (P16 / D-095 / D-096)
+## Exact account identity notes (P16 / D-095 / D-096 / D-097)
 
-- M2 verifies the **exact** permanent RiskPilot.BOT identity: account `SimRP.BOT`, connection
-  `My Rithmic`, provider `Rithmic`, mode `Simulation`, currency `USD`.
-- The only place the raw account/connection name literals live is
+- M2 verifies the **exact** permanent RiskPilot.BOT identity under D-097: account `SimRP.BOT`,
+  connection `Rithmic`, provider `Rithmic` (the generic slot `Provider14` resolved by BOOT's own
+  compiled mapping), mode `Simulation` **or** `Live` for that one SIM account, currency `USD`.
+- The only place the raw account name literal lives is
   `Core/Identity/AccountIdentityVerifier.cs` (`ExpectedAccountIdentity`). The static safety scan
   fails if `SimRP.BOT` appears in any other production source file, so an accidental identity
-  leak into a diagnostic/log/report is caught. Tests and docs are not scanned.
+  leak into a diagnostic/log/report is caught. Tests and docs are not scanned. Under D-097 the
+  connection name equals the public provider name (`Rithmic`), which legitimate provider evidence
+  reports, so the connection name is not a confinement literal; `SecurityScanner` confines it only
+  when it differs from the provider name.
 - The Host adapter (`Nt8HostDataProvider.BuildAccountIdentityObservation()`) does the exact
   ordinal name comparison and reduces everything to booleans/counts + `SyntheticRef`; the raw
   names never enter `AccountIdentityObservation`, a finding, or an artifact.
@@ -205,23 +209,29 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   `InstrumentSelector.Select(requestedId, surfaceObservable, loaded, isStubOrMock)` returns a
   `InstrumentSelectionResult` (`IsResolved`, `SelectedIndex`, `Status`, `CandidateCount`,
   `ObservedCount`, `ReasonCode`). Rules: no id ⇒ `NotConfigured` (never "pick the first"); no surface
-  ⇒ `SurfaceUnavailable`; a stub/mock value ⇒ `StubOrMock`; an **exact** full-name match ⇒ `Resolved`;
-  else an **exact** root match ⇒ `Resolved` only when exactly one candidate matches, otherwise
-  `MultipleCandidates` (ambiguous); otherwise `NotLoaded`. A candidate whose root was not readable is
-  never matched by the root rule. The selector never picks a first/default instrument and never
-  selects by a name **substring** — an `ES`-like but different symbol can never be chosen.
+  ⇒ `SurfaceUnavailable`; a stub/mock value ⇒ `StubOrMock`; an **exact** full-name match, or the
+  same contract under the other accepted month notation (numeric `ES 12-26` vs host `ES DEC26`,
+  exact root/month/year, never a substring) ⇒ `Resolved`; else an **exact** root match ⇒ `Resolved`
+  only when exactly one candidate matches, otherwise `MultipleCandidates` (ambiguous); otherwise
+  `NotLoaded`. A candidate whose root was not readable is never matched by the root rule. The
+  selector never picks a first/default instrument and never selects by a name **substring** — an
+  `ES`-like but different symbol can never be chosen.
 - The host adapter `Nt8HostDataProvider.SelectLoadedInstrument` / `ResolveLoadedInstrument` enumerates
-  `Instrument.All` only to compare each candidate's own `FullName`/`MasterInstrument.Name`; the raw
-  name is reduced to booleans/counts + a `SyntheticRef` `instrument#<hash>`. `ResolveAttestationInstrument`,
+  `Instrument.All` only to compare each candidate's own `FullName`/`MasterInstrument.Name` (including
+  the numeric/month-name contract equivalence); the raw name is reduced to booleans/counts + a
+  `SyntheticRef` `instrument#<hash>`. `ResolveAttestationInstrument`,
   `BuildInstrumentIdentityObservation` and `BuildEsProductSpecificationObservation` all go through the
   same selector, so **one** explicit identity is used by the metadata inspection **and** the
   market-data capture. `MarketDataCapture` takes the same `requestedInstrumentId` and refuses to
   subscribe with no selection (`Capture_NoSelection_DoesNotSubscribe`).
-- `DiagnosticAddOn.RequestedInstrumentId` is the operator/host-set explicit target (default null),
-  threaded into both `new Nt8HostDataProvider(...)` and `new MarketDataCapture(...)`. Setting it is
-  read-only — it never mutates the host selection. With no explicit target the tool never becomes
-  ready (`HostReadinessState.AwaitingInstrument`) and M4 stays `INCONCLUSIVE`
-  (`TARGET_INSTRUMENT_NOT_CONFIGURED`).
+- `DiagnosticAddOn.RequestedInstrumentId` is the operator/host-set explicit target. It now defaults
+  to the compiled D-097 target `ES 12-26` (`ExpectedInstrumentIdentity.TargetInstrumentId`), threaded
+  into both `new Nt8HostDataProvider(...)` and `new MarketDataCapture(...)`. Setting it (or the
+  Diagnostic Center picker) is read-only — it never mutates the host selection. If the operator
+  clears the selection the tool never becomes ready (`HostReadinessState.AwaitingInstrument`) and M4
+  stays `INCONCLUSIVE` (`TARGET_INSTRUMENT_NOT_CONFIGURED`). The compiled default resolves when the
+  same contract is loaded under either accepted notation (`ES 12-26` or host `ES DEC26`); a missing
+  contract stays `INCONCLUSIVE`, never a fabricated match.
 - Fail-closed mapping (verifier `Core/Identity/InstrumentIdentityVerifier`): no selection ⇒
   `INCONCLUSIVE` (`TARGET_INSTRUMENT_NOT_CONFIGURED`); the selected contract is not loaded ⇒
   `INCONCLUSIVE` (`TARGET_INSTRUMENT_NOT_LOADED`, never a false root mismatch); the selection matches
@@ -230,7 +240,9 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   and disagrees ⇒ `FAIL` (`INSTRUMENT_ROOT_MISMATCH`); more than one matching root ⇒
   `INCONCLUSIVE` (`..._AMBIGUOUS`); a stub/mock value ⇒ `INCONCLUSIVE`. A mismatch outranks an
   unobservable field. The expiry is **not** pinned: only the canonical root/venue form
-  (`ES_FUTURES_CME_*`) is required, so a manual contract roll keeps the identity valid.
+  (`ES_FUTURES_CME_*`) is required, so a manual contract roll keeps the identity valid. D-098
+  compares the BOT attestation expiry by month/year; BOOT still does not enforce expiry, and the
+  canonical-id parser accepts both `ES 12-26` and the host `ES DEC26` notation for the same contract.
 - The venue is confirmed only by the D-096 configured-route metadata: selected route `Globex`,
   configured exchange set exactly `{Globex}` and the sole **connected** provider path `Rithmic`.
   CME is **never** inferred from the `ES` symbol text. An unconfirmed exchange ⇒
@@ -536,8 +548,9 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   `marketDataSubscribed` / `marketDataObserved`. The exported `hostReadiness` block carries `epoch`.
 - `DiagnosticAddOn.Readiness` delegates to `Nt8HostDataProvider.ReadHostReadiness()` once the
   provider exists (single source of truth with the snapshot/evidence); before Active it reports the
-  raw tracker observation. `OwnerAuthorizedProviderSlots` is a new AddOn input, **default empty**
-  (fail-closed), threaded into the provider so the AddOn is never a slot-mapping leak.
+  raw tracker observation. `OwnerAuthorizedProviderSlots` is an AddOn input that defaults to BOOT's
+  compiled immutable D-097 mapping (`Provider14` → `Rithmic`); a host/test may supply an empty
+  mapping before `Active` (fail-closed), and the AddOn is never a slot-mapping leak.
 - `environment.json` `hostReadiness` writes each fact as its `SATISFIED`/`UNSATISFIED`/`UNKNOWN`
   wire string (`ReadinessFactStates.ToWire`), never a Boolean.
 - M7 ships no producer: `DiagnosticAddOn.StrategyDiagnosticSource` is null by default, so M7 stays
@@ -852,37 +865,67 @@ python3 verification/addon-smoke/test_diagnostic_safety.py
   before the M7 consumer wrote it. Reproduced on the untouched baseline (~1/25 runs); left as-is
   (out of scope).
 
+## D-097 acceptance run (identity, target instrument, readiness wait, M7)
+
+- The observed host facts are 19 accounts, exactly one exact-name match, and one connected
+  `Rithmic` connection (`Provider14`, Live). M2 must PASS with exactly those inputs and must still
+  refuse any other account, connection name, unresolved slot, mode or unreadable field.
+  `D097IdentityAcceptanceTests` covers the positive path plus each negative boundary.
+- The permanent identity is account `SimRP.BOT`, connection `Rithmic`, provider `Provider14` resolved
+  to `Rithmic` by BOOT's compiled immutable exact-match mapping, mode `Simulation` **or** `Live` for
+  that one SIM account, denomination `USD`. The mode acceptance is recorded as `ModeIsAccepted`;
+  `ModeIsSimulation` remains a separate fact so evidence still shows which mode was observed.
+- The explicit target instrument is `ES 12-26` (compiled default). It must be loaded and uniquely
+  matched; the tool never auto-discovers a first/nearest contract. The host may render the same
+  contract as `ES DEC26`; the selector and canonical-id parser treat the two notations as one
+  contract by exact root/month/year, never by substring.
+- `RuntimeDiagnosticRunner` waits for `HostReadinessObservation.FullyReady` before a **Full** pass,
+  bounded by `DiagnosticAddOn.ReadinessWaitTimeoutMs` (default 20 s). Quick and Post-Trade Audit do
+  not wait, preserving their previous semantics. Cancellation stops the wait before any probe. The
+  wait only delays the pass; it never changes a verdict, so a FAIL stays FAIL. The wait is
+  deterministic-testable through the injectable sleep delegate and a zero timeout.
+- M7 executes the read-only strategy verification when `DiagnosticAddOn.StrategyDiagnosticSource`
+  supplies records (`CaptureStrategyObservations` → ingest → drain → M7); with no source it stays
+  `INCONCLUSIVE`. `D097M7IntegrationTests` covers both paths, including the exported snapshot.
+- `docs/STAGE34_COVERAGE.md` and the runbook carry the D-097 identity text; keep them in sync with
+  `ExpectedAccountIdentity` and `ProviderIdentity.OwnerAuthorizedSlots`.
+
 ## Reference repo
 
 `Ai00120/RiskPilot.BOT` is **read-only reference** for study. Never modify it. Its stubs live
 at `src/RiskPilot.BOT/Stubs/NinjaTraderStubs.cs`; its two-build-mode csproj is the pattern
 mirrored here.
 
-## Provider identity — the `Provider14` contract (P2)
+## Provider identity — the `Provider14` contract (P2 / D-097)
 
 - The real `NinjaTrader.Cbi.Provider` enum has **no** dedicated `Rithmic` member. Named members are
   `Collective2=0 .. Yahoo=19`; an adapter without a dedicated member is assigned a **generic
   placeholder slot** (`Provider1..Provider40` = 20..59, `Custom0..Custom45` = 1000..1045,
   `Unknown` = 9999). The diagnostic environment reports `Provider14`, a placeholder slot that
-  carries **no vendor identity**. Never map it to Rithmic (or any vendor) by guesswork, display
-  name, or an online reference.
+  carries **no vendor identity** in the enum itself. Never map any other slot to Rithmic (or any
+  vendor) by guesswork, display name, or an online reference.
 - `Core/Identity/ProviderIdentity.cs` is the single host-free source of truth: `Classify`
   (Named / PlaceholderSlot / Unobservable), `IsPlaceholderSlot`, `Resolve`, `Compare` (three-valued
   `ProviderIdentityMatch`: `Matches` / `Differs` / `Unresolved`), `IsExpectedProvider`,
-  `IsUnresolved` and `TryAgree`. The owner-authorized slot→vendor mapping is empty by default
-  (`NoOwnerAuthorizedSlots`), so the real mapping is **BLOCKED** until runtime evidence records
-  which slot the adapter occupies.
-- Fail-closed: a definite named member that differs ⇒ `FAIL`; an unreadable value or an unresolved
-  placeholder slot ⇒ `INCONCLUSIVE` (`PROVIDER_SLOT_UNRESOLVED` / `PROVIDER_ROUTE_UNRESOLVED` /
-  `ACCOUNT_PROVIDER_UNRESOLVED` / `CONNECTION_PROVIDER_UNRESOLVED`), never a false mismatch.
+  `IsUnresolved` and `TryAgree`. D-097 supplies exactly one **compiled, immutable, exact-match**
+  owner-authorized mapping — `Provider14` → `Rithmic` (`OwnerAuthorizedSlots`) — so the observed
+  host slot resolves without any runtime input. `NoOwnerAuthorizedSlots` remains available for the
+  fail-closed path. The lookup is ordinal (`provider14`, `Provider140` do not resolve).
+- Fail-closed: a definite named member that differs ⇒ `FAIL`; an unreadable value or any other
+  unresolved placeholder slot ⇒ `INCONCLUSIVE` (`PROVIDER_SLOT_UNRESOLVED` /
+  `PROVIDER_ROUTE_UNRESOLVED` / `ACCOUNT_PROVIDER_UNRESOLVED` / `CONNECTION_PROVIDER_UNRESOLVED`),
+  never a false mismatch.
 - M2 (`M2ConnectionProbe`) classifies the provider and counts account/connection provider
-  agreement three-valued: a placeholder on either side is counted as
-  `PROVIDER_AGREEMENT_UNRESOLVED` (INCONCLUSIVE), not a mismatch. The instrument verifier treats
+  agreement three-valued: an unmapped placeholder on either side is counted as
+  `PROVIDER_AGREEMENT_UNRESOLVED` (INCONCLUSIVE), not a mismatch. The compiled `Provider14` slot
+  resolves to `Rithmic` and therefore agrees. The instrument verifier treats
   an unresolved provider path as `PROVIDER_ROUTE_UNRESOLVED` so a Globex route is never confirmed
   from an unidentified provider. `M2.ACCOUNT_CONNECTION_ASSOCIATION` additionally requires the
   target account's own connection object to be among the host's enumerated connections
   (`TARGET_ACCOUNT_CONNECTION_NOT_ENUMERATED`): a name match alone is not proof of association.
-- `Host/Nt8HostDataProvider` takes an optional owner-authorized slot mapping (empty by default).
+- `Host/Nt8HostDataProvider` uses the compiled D-097 mapping by default; the full constructor still
+  accepts an explicit mapping so the adapter logic can be exercised with an empty mapping offline.
   The offline stub `Provider` enum mirrors the real surface (no `Rithmic`); tests use
-  `Provider.Provider14` and a reviewed slot mapping as a test seam. A green stub run is **not**
-  real-host proof. See `tests/RiskPilot.Diagnostics.Nt8.Tests/ProviderIdentityTests.cs`.
+  `Provider.Provider14` and both the production mapping and a reviewed test mapping. A green stub
+  run is **not** real-host proof. See `tests/RiskPilot.Diagnostics.Nt8.Tests/ProviderIdentityTests.cs`
+  and `D097IdentityAcceptanceTests.cs`.

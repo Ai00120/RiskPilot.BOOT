@@ -349,6 +349,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         public void M4_CanonicalInstrumentId_ParsesEvidenceContract()
         {
             Assert.Equal("ES_FUTURES_CME_DEC26", Core.Instruments.CanonicalInstrumentId.Build("ES 12-26", "CME"));
+            Assert.Equal("ES_FUTURES_CME_DEC26", Core.Instruments.CanonicalInstrumentId.Build("ES DEC26", "CME"));
             Assert.Null(Core.Instruments.CanonicalInstrumentId.Build("not-a-contract", "CME"));
         }
 

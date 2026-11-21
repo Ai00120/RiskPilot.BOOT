@@ -44,7 +44,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 PriceStatus = ConnectionStatus.Connected,
                 Options = new ConnectOptions
                 {
-                    Name = "My Rithmic",
+                    Name = "Rithmic",
                     Provider = Provider.Provider14,
                     Mode = Mode.Simulation
                 }
@@ -92,6 +92,55 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.Equal(0, result.SelectedIndex);
             Assert.Equal(1, result.CandidateCount);
             Assert.Equal(InstrumentSelectionStatus.Resolved, result.Status);
+        }
+
+        [Fact]
+        public void Selector_HostMonthNameNotation_ResolvesSameContract()
+        {
+            var loaded = new List<LoadedInstrumentCandidate>
+            {
+                Candidate("ES DEC26", "ES"),
+                Candidate("ES MAR27", "ES")
+            };
+
+            var result = InstrumentSelector.Select("ES 12-26", true, loaded, false);
+
+            Assert.True(result.IsResolved);
+            Assert.Equal(0, result.SelectedIndex);
+            Assert.Equal(1, result.CandidateCount);
+        }
+
+        [Fact]
+        public void Selector_HostMonthNameNotation_DoesNotMatchDifferentContract()
+        {
+            var loaded = new List<LoadedInstrumentCandidate> { Candidate("ES MAR27", "ES") };
+
+            var result = InstrumentSelector.Select("ES 12-26", true, loaded, false);
+
+            Assert.False(result.IsResolved);
+            Assert.Equal(InstrumentSelectionStatus.NotLoaded, result.Status);
+        }
+
+        [Fact]
+        public void Selector_HostMonthNameNotation_WrongRoot_IsNotLoaded()
+        {
+            var loaded = new List<LoadedInstrumentCandidate> { Candidate("ES DEC26", "NQ") };
+
+            var result = InstrumentSelector.Select("ES 12-26", true, loaded, false);
+
+            Assert.False(result.IsResolved);
+            Assert.Equal(InstrumentSelectionStatus.NotLoaded, result.Status);
+        }
+
+        [Fact]
+        public void Selector_HostMonthNameNotation_LowerCase_IsNotLoaded()
+        {
+            var loaded = new List<LoadedInstrumentCandidate> { Candidate("es dec26", "es") };
+
+            var result = InstrumentSelector.Select("ES 12-26", true, loaded, false);
+
+            Assert.False(result.IsResolved);
+            Assert.Equal(InstrumentSelectionStatus.NotLoaded, result.Status);
         }
 
         [Fact]
@@ -182,6 +231,30 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
                 Assert.Equal(InstrumentSelectionStatus.Resolved, observation.SelectionStatus);
                 Assert.Equal(1, observation.MatchingInstrumentCount);
+                Assert.Equal(DiagnosticStatus.PASS, InstrumentIdentityVerifier.Evaluate(observation).Status);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
+        public void Host_ExactlyOneSelectedEsContractInMonthNameNotation_IsPass()
+        {
+            Reset();
+            try
+            {
+                Connection.Connections.Add(ConnectedRithmic());
+                Instrument.All.Add(EsInstrument("ES DEC26"));
+
+                var provider = TestHost.Provider(true, "ES 12-26");
+                var observation = provider.GetSnapshot().InstrumentIdentity;
+
+                Assert.Equal(InstrumentSelectionStatus.Resolved, observation.SelectionStatus);
+                Assert.Equal(1, observation.MatchingInstrumentCount);
+                Assert.True(observation.SymbolParsed);
+                Assert.Equal("ES_FUTURES_CME_DEC26", observation.CanonicalInstrumentId);
                 Assert.Equal(DiagnosticStatus.PASS, InstrumentIdentityVerifier.Evaluate(observation).Status);
             }
             finally
@@ -494,7 +567,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
-        public void AddOn_NoSelection_NeverBecomesReady()
+        public void AddOn_DefaultSelection_ResolvesWhenLoaded_ButIsNotReadyWithoutTheRest()
         {
             Reset();
             try
@@ -504,8 +577,19 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 var addOn = new DiagnosticAddOn { ReadinessRetryEnabled = false };
                 addOn.ApplyLifecycleState("Active");
 
-                Assert.False(addOn.Readiness.FullyReady);
-                Assert.Equal(HostReadinessState.AwaitingInstrument, addOn.Readiness.State);
+                // The compiled D-097 target is explicit, so the instrument fact resolves as soon as
+                // that contract is loaded. Readiness as a whole still requires the verified account,
+                // connection and observed market data, so it is never ready on the instrument alone.
+                var readiness = addOn.Readiness;
+                Assert.True(readiness.InstrumentResolved.IsSatisfied());
+                Assert.False(readiness.FullyReady);
+                Assert.NotEqual(HostReadinessState.AwaitingInstrument, readiness.State);
+
+                // The same explicit target reaches the M4 attestation path, so the observed host
+                // failure mode (M4 HOST_UNAVAILABLE) cannot recur merely because no target was set.
+                var attestation = addOn.Provider.GetSnapshot().Attestation;
+                Assert.True(attestation.HostAvailable);
+                Assert.Equal("ES 12-26", attestation.RequestedInstrumentId);
 
                 addOn.SafeDispose();
             }
@@ -625,7 +709,10 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 Assert.Equal(2, addOn.InstrumentSelection.AvailableInstrumentIds.Count);
                 Assert.Contains("ES 12-26", addOn.InstrumentSelection.AvailableInstrumentIds);
                 Assert.Contains("ES 03-27", addOn.InstrumentSelection.AvailableInstrumentIds);
-                Assert.Equal(InstrumentSelectionStatus.NotConfigured, resolution.Status);
+                // Refreshing never changes the selection: the compiled D-097 target remains selected
+                // and resolves against the enumerated surface.
+                Assert.Equal("ES 12-26", addOn.InstrumentSelection.SelectedInstrumentId);
+                Assert.Equal(InstrumentSelectionStatus.Resolved, resolution.Status);
 
                 addOn.SafeDispose();
             }
@@ -676,19 +763,21 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             try
             {
                 Instrument.All.Add(EsInstrument("ES 12-26"));
+                Instrument.All.Add(EsInstrument("ES 03-27"));
                 Connection.Connections.Add(ConnectedRithmic());
 
                 var addOn = new DiagnosticAddOn { ReadinessRetryEnabled = false };
                 addOn.ApplyLifecycleState("Active");
 
-                // No selection yet: the identity is unproven.
-                Assert.Equal(InstrumentSelectionStatus.NotConfigured,
-                    addOn.Provider.GetSnapshot().InstrumentIdentity.SelectionStatus);
+                // The compiled D-097 target is selected at construction and resolves.
+                Assert.Equal("ES 12-26", addOn.RequestedInstrumentId);
 
-                // The operator selects after the provider was constructed; the live probe must see it.
-                addOn.SelectInstrument("ES 12-26");
+                // The operator selects a different contract after the provider was constructed; the
+                // live probe must see it without rebuilding the provider.
+                addOn.SelectInstrument("ES 03-27");
 
                 var observation = addOn.Provider.GetSnapshot().InstrumentIdentity;
+                Assert.Equal("ES 03-27", addOn.RequestedInstrumentId);
                 Assert.Equal(InstrumentSelectionStatus.Resolved, observation.SelectionStatus);
                 Assert.Equal(1, observation.MatchingInstrumentCount);
 

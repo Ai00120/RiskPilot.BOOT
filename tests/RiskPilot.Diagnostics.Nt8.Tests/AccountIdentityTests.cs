@@ -16,7 +16,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 {
     /// <summary>
     /// Regression tests for the exact account-identity verification required by RiskPilot.BOT
-    /// (D-095/D-096): Account=SimRP.BOT, Connection=My Rithmic, provider=Rithmic,
+    /// (D-095/D-096): Account=SimRP.BOT, Connection=Rithmic, provider=Rithmic,
     /// mode=Simulation, currency=USD. They drive the real verifier and the real M2 probe and
     /// assert the fail-closed rules: a partial/similar match is never accepted, a missing or
     /// unreadable field is INCONCLUSIVE (never PASS), and no raw account or connection name is
@@ -25,7 +25,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
     public class AccountIdentityTests
     {
         private const string ExpectedAccount = "SimRP.BOT";
-        private const string ExpectedConnection = "My Rithmic";
+        private const string ExpectedConnection = "Rithmic";
         private const string ExpectedProvider = "Rithmic";
 
         private static ProbeContext Context(FakeDataProvider provider)
@@ -120,7 +120,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         [Fact]
         public void ExpectedIdentity_SimilarConnectionNames_AreNotAccepted()
         {
-            Assert.False(ExpectedAccountIdentity.ConnectionNameMatches("My Rithmic2"));
+            Assert.False(ExpectedAccountIdentity.ConnectionNameMatches("Rithmic2"));
             Assert.False(ExpectedAccountIdentity.ConnectionNameMatches("My Rithmi"));
             Assert.False(ExpectedAccountIdentity.ConnectionNameMatches("my rithmic"));
             Assert.False(ExpectedAccountIdentity.ConnectionNameMatches("MyRithmic"));
@@ -436,7 +436,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         public void ExpectedIdentity_Constants_MatchOwnerSpecification()
         {
             Assert.Equal("SimRP.BOT", ExpectedAccountIdentity.AccountName);
-            Assert.Equal("My Rithmic", ExpectedAccountIdentity.ConnectionName);
+            Assert.Equal("Rithmic", ExpectedAccountIdentity.ConnectionName);
             Assert.Equal("Rithmic", ExpectedAccountIdentity.Provider);
             Assert.Equal("USD", ExpectedAccountIdentity.Currency);
             Assert.Equal("SIMULATION", ExpectedAccountIdentity.SimulationMode);

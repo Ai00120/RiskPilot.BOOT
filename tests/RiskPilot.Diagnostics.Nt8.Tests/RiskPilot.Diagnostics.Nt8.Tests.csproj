@@ -79,6 +79,9 @@
     <Compile Include="CompilationRegressionTests.cs" />
     <Compile Include="ZeroDefaultTests.cs" />
     <Compile Include="EnvironmentClassificationTests.cs" />
+    <Compile Include="D097IdentityAcceptanceTests.cs" />
+    <Compile Include="ReadinessWaitTests.cs" />
+    <Compile Include="D097M7IntegrationTests.cs" />
   </ItemGroup>
 
 </Project>

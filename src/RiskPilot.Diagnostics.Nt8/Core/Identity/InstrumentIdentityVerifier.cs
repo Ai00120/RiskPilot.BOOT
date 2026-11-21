@@ -31,6 +31,15 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
         public const string Currency = "USD";
 
         /// <summary>
+        /// The explicit target contract the Diagnostic Center is configured for: the December 2026
+        /// E-mini S&amp;P 500 future as NinjaTrader renders its full name. This is an explicit
+        /// compile-time selection, not auto-discovery: the tool still resolves it against the
+        /// loaded surface and never picks a first/nearest contract. The operator may change it in
+        /// the Diagnostic Center picker.
+        /// </summary>
+        public const string TargetInstrumentId = "ES 12-26";
+
+        /// <summary>
         /// The canonical identity prefix that the selected instrument must reduce to: the ES root
         /// on the CME venue. The expiry is deliberately NOT pinned here — the permanent identity is
         /// the ES root (D-095 §5), and the active contract rolls manually — so only the root/venue

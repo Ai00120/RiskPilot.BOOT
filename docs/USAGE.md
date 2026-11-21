@@ -162,9 +162,9 @@ here mutates the host.
 
 | Input | Where | Default | Effect if unset |
 | --- | --- | --- | --- |
-| Target instrument | the Diagnostic Center picker (exact contract FullName) | none | the tool never becomes ready; M4 is `INCONCLUSIVE` |
-| Target account identity | fixed in `Core/Identity/AccountIdentityVerifier` (`ExpectedAccountIdentity`) | account `SimRP.BOT`, connection `My Rithmic`, provider `Rithmic`, mode `Simulation`, currency `USD` | n/a (it is the compile-time expectation) |
-| Owner-authorized provider slot mapping | `DiagnosticAddOn.OwnerAuthorizedProviderSlots` | empty (fail-closed) | a generic provider slot stays unresolved; provider checks are `INCONCLUSIVE` |
+| Target instrument | the Diagnostic Center picker (exact contract FullName) | `ES 12-26` (compiled D-097 default) | it resolves the same contract under `ES 12-26` or the host's `ES DEC26` notation; a missing contract leaves M4 `INCONCLUSIVE` |
+| Target account identity | fixed in `Core/Identity/AccountIdentityVerifier` (`ExpectedAccountIdentity`) | account `SimRP.BOT`, connection `Rithmic`, provider `Rithmic` (slot `Provider14` via BOOT's compiled mapping), mode `Simulation` or `Live`, currency `USD` | n/a (it is the compile-time expectation) |
+| Owner-authorized provider slot mapping | `DiagnosticAddOn.OwnerAuthorizedProviderSlots` | BOOT's compiled immutable D-097 mapping (`Provider14` → `Rithmic`) | a caller may supply an empty mapping; any other slot then stays unresolved and provider checks are `INCONCLUSIVE` |
 | Readiness retry loop | `DiagnosticAddOn.ReadinessRetryEnabled` | `true` (host); tests set `false` | with it off only the first synchronous probe runs |
 
 Nothing else is configurable, and no input enables trading or mutates an account, connection,
@@ -178,15 +178,18 @@ position or RiskPilot setting.
 - **Host build version is unobservable.** No public NinjaTrader API exposes the installed host
   build, so `M1.HOST_COMPATIBILITY` is always `INCONCLUSIVE` and the declared target
   (NinjaTrader 8.1.9.0, minimum supported 8.1.8.4) is an intention, not a verified fact.
-- **M7 reports `INCONCLUSIVE`.** BOOT ships no strategy diagnostic producer, so the strategy/risk
-  gate cannot be observed in a stock installation. The read-only boundary a future producer must
-  implement is in `docs/M7_STRATEGY_INTEGRATION.md`.
-- **Provider identity stays unresolved by default.** The adapter occupies a generic placeholder slot
-  (for example `Provider14`) that carries no vendor identity. Until owner-authorized runtime
-  evidence records the slot→vendor mapping, provider checks stay `INCONCLUSIVE`; no vendor is
-  assumed.
-- **Explicit instrument selection is required.** The tool never auto-discovers an instrument. With
-  no selection it never becomes ready and M4 stays `INCONCLUSIVE`.
+- **M7 executes when a read-only source is available.** A stock installation ships no strategy
+  diagnostic producer, so M7 stays `INCONCLUSIVE`. When a host or RiskPilot component supplies
+  `IReadOnlyDiagnosticSource` records, M7 executes the Stage 3/4 strategy verification and exports
+  the same evidence; the read-only boundary is in `docs/M7_STRATEGY_INTEGRATION.md`.
+- **Provider identity resolves only the authorized slot.** The adapter occupies the generic slot
+  `Provider14`, which carries no vendor identity in the enum. BOOT's own compiled immutable D-097
+  mapping resolves exactly `Provider14` → `Rithmic`; every other slot stays `INCONCLUSIVE`. No
+  vendor is inferred by name or guesswork.
+- **The target instrument is explicit.** `ES 12-26` is the compiled D-097 default; the operator may
+  re-target in the picker. The host may render the same December 2026 contract as `ES DEC26`, which
+  the selector and canonical-id parser treat as one contract by exact root/month/year. The tool never
+  auto-discovers an instrument. A cleared selection never becomes ready and M4 stays `INCONCLUSIVE`.
 - **Depth (Level II) depends on the feed.** An instrument/connection without a Level II surface
   reports `M5.DEPTH` `INCONCLUSIVE` — that is a supported outcome, not a failure.
 - **Read-only by design.** The tool cannot submit, modify or cancel an order and cannot enable

@@ -6,11 +6,11 @@ using RiskPilot.Diagnostics.Nt8.Core.Status;
 namespace RiskPilot.Diagnostics.Nt8.Core.Identity
 {
     /// <summary>
-    /// The permanent operational identity RiskPilot.BOT requires (D-095/D-096). The literal
-    /// account and connection names are Owner-provided configuration identifiers: they may
-    /// appear in reviewed source and tests as explicit match constants, but they are never
-    /// emitted to a log, a finding, a report or an evidence artifact. Everything the verifier
-    /// reports is a reason code, a count or a boolean.
+    /// The permanent operational identity RiskPilot.BOT requires (D-095/D-096 as amended by
+    /// D-097). The literal account and connection names are Owner-provided configuration
+    /// identifiers: they may appear in reviewed source and tests as explicit match constants, but
+    /// they are never emitted to a log, a finding, a report or an evidence artifact. Everything the
+    /// verifier reports is a reason code, a count or a boolean.
     /// </summary>
     public static class ExpectedAccountIdentity
     {
@@ -18,13 +18,20 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
         public const string AccountName = "SimRP.BOT";
 
         /// <summary>Exact connection name (ordinal match; no partial or similar-name match).</summary>
-        public const string ConnectionName = "My Rithmic";
+        public const string ConnectionName = "Rithmic";
 
         /// <summary>Required provider for the account and for its connection.</summary>
         public const string Provider = "Rithmic";
 
-        /// <summary>Required connection mode, as the host enum renders it.</summary>
+        /// <summary>The connection mode value the host renders for a simulation connection.</summary>
         public const string SimulationMode = "SIMULATION";
+
+        /// <summary>
+        /// The connection mode value the host renders for a live connection. D-097 accepts it for
+        /// the one designated SIM account: the NT8 connection mode is not the account-kind
+        /// authority, and the Owner explicitly attested that this account is a SIM account.
+        /// </summary>
+        public const string LiveMode = "LIVE";
 
         /// <summary>Required account denomination, as the host enum renders it.</summary>
         public const string Currency = "USD";
@@ -44,10 +51,10 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
         /// <summary>
         /// Provider match. The provider enum has no guaranteed Rithmic member, so the host renders
         /// it as a string. This Boolean is only a convenience for callers that need "definitely the
-        /// expected provider": a generic placeholder slot (e.g. "Provider14") is NOT the expected
-        /// provider here. Identity decisions use the three-valued
-        /// <see cref="ProviderIdentity.Compare"/> so an unresolved slot stays unproven instead of
-        /// becoming a false mismatch.
+        /// expected provider": an unmapped generic placeholder slot is NOT the expected provider
+        /// here, while the compiled D-097 <c>Provider14</c> mapping is. Identity decisions use the
+        /// three-valued <see cref="ProviderIdentity.Compare"/> so an unresolved slot stays unproven
+        /// instead of becoming a false mismatch.
         /// </summary>
         public static bool ProviderMatches(string observed)
         {
@@ -58,6 +65,17 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
         public static bool ModeIsSimulation(string observedMode)
         {
             return string.Equals(observedMode, SimulationMode, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// True when the rendered connection mode is accepted for the D-097 account: Simulation or
+        /// Live. The acceptance is scoped by the verifier to the single exact account name, so it
+        /// never authorizes any other account. Any other mode (for example Playback) is rejected.
+        /// </summary>
+        public static bool ModeIsAccepted(string observedMode)
+        {
+            return string.Equals(observedMode, SimulationMode, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(observedMode, LiveMode, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>True when the rendered denomination is the required currency.</summary>
@@ -150,7 +168,10 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
     }
 
     /// <summary>
-    /// Compares the observed account identity against the permanent RiskPilot.BOT identity.
+    /// Compares the observed account identity against the permanent RiskPilot.BOT identity
+    /// (D-095/D-096, amended by D-097: connection <c>Rithmic</c>, provider <c>Rithmic</c> via the
+    /// compiled <c>Provider14</c> mapping, connection mode Simulation <b>or</b> Live accepted for
+    /// the one designated SIM account, denomination USD).
     /// <para>
     /// The comparison is fail-closed and never accepts a partial match:
     /// <list type="bullet">
@@ -253,7 +274,7 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
             {
                 unobservable.Add(AccountIdentityReasonCodes.ModeUnobservable);
             }
-            else if (!observation.ModeIsSimulation)
+            else if (!observation.ModeIsAccepted)
             {
                 mismatched.Add(AccountIdentityReasonCodes.ModeMismatch);
             }

@@ -63,6 +63,7 @@ represented as a real NinjaTrader API.
    generated source copies, then stage only the source bundle following INSTALL.md. Do not mix
    DLL and source installations. Never delete the host's own AssemblyInfo.cs.
 4. Compile in NinjaScript Editor and retain the complete error list or successful compile log.
-5. Run read-only diagnostics with the approved SimRP.BOT / My Rithmic / Rithmic / Simulation /
-   ES / CME / USD identity. Missing denomination must not PASS; non-USD must not PASS. Do not
-   place trades or change account currency merely to test diagnostics.
+5. Run read-only diagnostics with the approved D-097 identity: account `SimRP.BOT`, connection
+   `Rithmic`, provider slot `Provider14` resolved to `Rithmic` by BOOT's compiled mapping, mode
+   `Simulation` or `Live` for that SIM account, ES/CME/USD. Missing denomination must not PASS;
+   non-USD must not PASS. Do not place trades or change account currency merely to test diagnostics.

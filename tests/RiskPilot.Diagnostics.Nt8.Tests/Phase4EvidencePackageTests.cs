@@ -351,6 +351,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 
             Assert.DoesNotContain("SimRP.BOT", accounts);
             Assert.DoesNotContain("My Rithmic", accounts);
+            Assert.DoesNotContain("\"connectionName\"", accounts);
         }
 
         [Fact]

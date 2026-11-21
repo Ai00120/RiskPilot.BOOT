@@ -50,11 +50,13 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
-        public void IsExpectedProvider_OnlyTrueForNamedMatch()
+        public void IsExpectedProvider_TrueForNamedMatch_AndAuthorizedSlot()
         {
             Assert.True(ProviderIdentity.IsExpectedProvider("Rithmic"));
             Assert.False(ProviderIdentity.IsExpectedProvider("Simulator"));
-            Assert.False(ProviderIdentity.IsExpectedProvider("Provider14"));
+            // D-097: the compiled Owner-authorized mapping resolves Provider14 to Rithmic.
+            Assert.True(ProviderIdentity.IsExpectedProvider("Provider14"));
+            Assert.False(ProviderIdentity.IsExpectedProvider("Provider15"));
         }
 
         // ---------------- unknown / placeholder identity ----------------
@@ -69,12 +71,14 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         [Fact]
         public void PlaceholderSlot_WithoutMapping_IsUnresolved_NeverAssumedRithmic()
         {
-            // The core finding: "Provider14" must never be mapped to Rithmic by guesswork. With the
-            // fail-closed default mapping it stays Unresolved (INCONCLUSIVE).
+            // The core fail-closed rule: a placeholder must never be mapped to Rithmic by guesswork.
+            // With no mapping it stays Unresolved (INCONCLUSIVE). D-097 supplies exactly one
+            // explicit, compiled mapping (Provider14), and only that slot resolves.
             Assert.Equal(ProviderIdentityMatch.Unresolved,
                 ProviderIdentity.Compare("Provider14", "Rithmic", ProviderIdentity.NoOwnerAuthorizedSlots));
-            Assert.True(ProviderIdentity.IsUnresolved("Provider14"));
-            Assert.False(ProviderIdentity.IsExpectedProvider("Provider14"));
+            Assert.False(ProviderIdentity.IsUnresolved("Provider14"));
+            Assert.True(ProviderIdentity.IsUnresolved("Provider15"));
+            Assert.False(ProviderIdentity.IsExpectedProvider("Provider15"));
         }
 
         [Theory]
@@ -200,25 +204,47 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         {
             Assert.Null(ProviderIdentity.Resolve("Provider14", null));
             Assert.Null(ProviderIdentity.Resolve("Provider14", ProviderIdentity.NoOwnerAuthorizedSlots));
-            Assert.Null(ProviderIdentity.Resolve("Provider14", ProviderIdentity.OwnerAuthorizedSlots));
+            Assert.Equal("Rithmic", ProviderIdentity.Resolve("Provider14", ProviderIdentity.OwnerAuthorizedSlots));
             Assert.Null(ProviderIdentity.Resolve(null, RithmicSlotMapping));
             Assert.Null(ProviderIdentity.Resolve("   ", RithmicSlotMapping));
         }
 
         [Fact]
-        public void ProductionMapping_IsEmpty_FailClosed()
+        public void ProductionMapping_IsCompiledD097Mapping_AndImmutable()
         {
-            // Production must never carry a guessed mapping.
-            Assert.Empty(ProviderIdentity.OwnerAuthorizedSlots);
+            // D-097 authorizes exactly one slot -> vendor mapping, compiled into BOOT itself.
+            Assert.Single(ProviderIdentity.OwnerAuthorizedSlots);
+            Assert.Equal("Rithmic", ProviderIdentity.OwnerAuthorizedSlots["Provider14"]);
+            Assert.Equal(ProviderIdentityMatch.Matches,
+                ProviderIdentity.Compare("Provider14", "Rithmic", ProviderIdentity.OwnerAuthorizedSlots));
+            Assert.Equal(ProviderIdentityMatch.Unresolved,
+                ProviderIdentity.Compare("Provider15", "Rithmic", ProviderIdentity.OwnerAuthorizedSlots));
+
+            // The mapping is an immutable view: no runtime component can add or replace a slot.
+            Assert.Throws<NotSupportedException>(() =>
+                ((IDictionary<string, string>)ProviderIdentity.OwnerAuthorizedSlots).Add("Provider15", "Rithmic"));
         }
 
         [Fact]
-        public void AddOn_DefaultSlotMapping_IsEmpty_FailClosed()
+        public void ProductionMapping_IsExactMatch_NeverCaseOrPrefixInsensitive()
         {
-            // The AddOn's slot mapping is the production default (empty) unless a host/test supplies
-            // one, so the AddOn itself is never a mapping leak and Provider14 stays unresolved.
+            Assert.Equal(ProviderIdentityMatch.Unresolved,
+                ProviderIdentity.Compare("provider14", "Rithmic", ProviderIdentity.OwnerAuthorizedSlots));
+            Assert.Equal(ProviderIdentityMatch.Unresolved,
+                ProviderIdentity.Compare("Provider140", "Rithmic", ProviderIdentity.OwnerAuthorizedSlots));
+            Assert.Null(ProviderIdentity.Resolve("provider14", ProviderIdentity.OwnerAuthorizedSlots));
+        }
+
+        [Fact]
+        public void AddOn_DefaultSlotMapping_IsTheCompiledD097Mapping()
+        {
             var addOn = new DiagnosticAddOn();
-            Assert.Empty(addOn.OwnerAuthorizedProviderSlots);
+            Assert.Equal(ProviderIdentity.OwnerAuthorizedSlots, addOn.OwnerAuthorizedProviderSlots);
+            Assert.Equal(ProviderIdentityMatch.Matches,
+                ProviderIdentity.Compare("Provider14", "Rithmic", addOn.OwnerAuthorizedProviderSlots));
+
+            // A caller may still supply an empty mapping (the fail-closed path used by the adapter tests).
+            addOn.OwnerAuthorizedProviderSlots = ProviderIdentity.NoOwnerAuthorizedSlots;
             Assert.Equal(ProviderIdentityMatch.Unresolved,
                 ProviderIdentity.Compare("Provider14", "Rithmic", addOn.OwnerAuthorizedProviderSlots));
         }
@@ -323,7 +349,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
-        public void M2_ResolvedNamedProviderThatDiffers_IsInconclusive()
+        public void M2_ResolvedNamedProviderThatDiffers_Fails()
         {
             var provider = ProviderWithEvidence(new ProviderEvidence
             {
@@ -335,7 +361,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             });
 
             var result = Find(new M2ConnectionProbe().Evaluate(Context(provider)), "M2.PROVIDER_IDENTITY");
-            Assert.Equal(DiagnosticStatus.INCONCLUSIVE, result.Status);
+            Assert.Equal(DiagnosticStatus.FAIL, result.Status);
             Assert.Contains("PROVIDER_NOT_EXPECTED", result.ReasonCodes);
         }
 

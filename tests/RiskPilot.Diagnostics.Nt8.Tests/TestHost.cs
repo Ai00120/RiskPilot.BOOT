@@ -12,8 +12,9 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
     /// host reports the Rithmic adapter as a generic placeholder slot (<c>Provider14</c>) that
     /// carries no vendor identity. The fixtures therefore set <c>Provider.Provider14</c> and supply
     /// the owner-authorized slot mapping below, which is the ONLY way a placeholder slot may be
-    /// accepted. This mirrors how production would resolve the slot once runtime evidence records
-    /// the mapping; the production default stays empty (fail closed).
+    /// accepted. Production now compiles the D-097 mapping (<c>Provider14 -&gt; Rithmic</c>) into
+    /// BOOT itself; the explicit fixture mapping mirrors it and lets a test also supply an empty
+    /// mapping to prove the fail-closed path.
     /// </para>
     /// </summary>
     internal static class TestHost
@@ -38,6 +39,17 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 null,
                 null,
                 RithmicSlotMapping,
+                () => requestedInstrumentId);
+        }
+
+        /// <summary>
+        /// Creates a host provider with the production default mapping (the compiled D-097
+        /// <c>Provider14 -&gt; Rithmic</c> mapping), so the tests exercise exactly what ships.
+        /// </summary>
+        internal static Nt8HostDataProvider ProductionProvider(bool masterMetadataReady, string requestedInstrumentId = null)
+        {
+            return new Nt8HostDataProvider(
+                () => masterMetadataReady,
                 () => requestedInstrumentId);
         }
 
