@@ -22,6 +22,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
     {
         private readonly Action<StrategyRecord> _ingest;
         private readonly IReadOnlyDiagnosticSource _source;
+        private readonly Func<IReadOnlyDiagnosticSource> _sourceProbe;
 
         public StrategyDiagnosticCapture(Action<StrategyRecord> ingest, IReadOnlyDiagnosticSource source)
         {
@@ -30,9 +31,47 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         }
 
         /// <summary>
+        /// Creates a capture whose read-only source is resolved on every capture. A host component
+        /// may expose its diagnostic source <em>after</em> the AddOn initialises, so the source must
+        /// be a live probe rather than a value captured at construction; a null or throwing probe
+        /// means "no source" and leaves M7 INCONCLUSIVE. The trailing marker keeps this overload
+        /// unambiguous against the direct-source constructor when a caller passes <c>null</c>.
+        /// </summary>
+        public StrategyDiagnosticCapture(Action<StrategyRecord> ingest, Func<IReadOnlyDiagnosticSource> sourceProbe, bool liveSource)
+        {
+            _ingest = ingest;
+            _sourceProbe = sourceProbe;
+        }
+
+        /// <summary>
         /// True when a read-only source is available. A capture with no source reports nothing.
         /// </summary>
-        public bool HasSource { get { return _source != null; } }
+        public bool HasSource
+        {
+            get { return ResolveSource() != null; }
+        }
+
+        private IReadOnlyDiagnosticSource ResolveSource()
+        {
+            if (_source != null)
+            {
+                return _source;
+            }
+
+            if (_sourceProbe == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                return _sourceProbe();
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
 
         /// <summary>
         /// Pulls the current read-only strategy observations and ingests them. Returns the number
@@ -41,7 +80,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// </summary>
         public int TryCapture()
         {
-            if (_source == null || _ingest == null)
+            var source = ResolveSource();
+            if (source == null || _ingest == null)
             {
                 return 0;
             }
@@ -49,7 +89,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
             IReadOnlyList<StrategyRecord> strategies;
             try
             {
-                strategies = _source.ReadStrategies();
+                strategies = source.ReadStrategies();
             }
             catch (Exception)
             {

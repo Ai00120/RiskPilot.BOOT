@@ -35,7 +35,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 PriceStatus = ConnectionStatus.Connected,
                 Options = new ConnectOptions
                 {
-                    Name = "My Rithmic",
+                    Name = "Rithmic",
                     Provider = Provider.Provider14,
                     Mode = Mode.Simulation
                 }

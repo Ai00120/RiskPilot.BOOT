@@ -16,7 +16,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
 {
     /// <summary>
     /// Regression tests for the exact account-to-connection and provider association required by
-    /// RiskPilot.BOT (D-095/D-096): the target account must be bound to connection "My Rithmic"
+    /// RiskPilot.BOT (D-095/D-096): the target account must be bound to connection "Rithmic"
     /// with provider "Rithmic", proven from the account's own connection rather than an arbitrary
     /// or first connection. They drive the real verifier and the real M2 probe and assert the
     /// fail-closed rules: a wrong account, a wrong/unrelated connection, a wrong provider, a
@@ -26,7 +26,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
     public class TargetAccountConnectionTests
     {
         private const string ExpectedAccount = "SimRP.BOT";
-        private const string ExpectedConnection = "My Rithmic";
+        private const string ExpectedConnection = "Rithmic";
         private const string ExpectedProvider = "Rithmic";
 
         private static ProbeContext Context(FakeDataProvider provider)
@@ -457,7 +457,10 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.True(package.VerifyIntegrity(out var failure), failure);
 
             var connections = package.Read(Core.Evidence.EvidencePackageCatalog.ConnectionsJson);
-            Assert.DoesNotContain(ExpectedConnection, connections);
+            // Under D-097 the connection name equals the public provider name, so the providerName
+            // field legitimately contains "Rithmic"; the raw connection name must never be written
+            // as its own field. The connection is identified by its synthetic ref.
+            Assert.DoesNotContain("\"connectionName\"", connections);
             Assert.Contains("\"connectionRef\"", connections);
             Assert.Contains(SyntheticRef.For("connection", ExpectedConnection), connections);
         }
@@ -486,7 +489,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.True(package.VerifyIntegrity(out var failure), failure);
 
             var accounts = package.Read(Core.Evidence.EvidencePackageCatalog.AccountsJson);
-            Assert.DoesNotContain(ExpectedConnection, accounts);
+            Assert.DoesNotContain("\"connectionName\"", accounts);
             Assert.Contains("\"connectionRef\"", accounts);
             Assert.Contains(SyntheticRef.For("connection", ExpectedConnection), accounts);
         }

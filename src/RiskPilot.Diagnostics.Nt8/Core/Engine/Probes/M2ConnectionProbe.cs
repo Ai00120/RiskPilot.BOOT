@@ -196,18 +196,17 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Engine.Probes
                 result = DiagnosticResult
                     .Pass(ModuleId, "M2.PROVIDER_IDENTITY", correlation, now)
                     .WithReasonCode("EXPECTED_PROVIDER_MATCH")
-                    .WithLimitation("Provider identity is classified from the provider enum's ToString(); the enum has no dedicated Rithmic member, so a match means the observed value is a verified name equal to the expected provider.");
+                    .WithLimitation("Provider identity is classified from the provider enum's ToString(); the enum has no dedicated Rithmic member, so a match means the observed value is the compiled Owner-authorized Provider14 slot resolved to the expected provider.");
             }
             else if (unresolved)
             {
-                // A generic placeholder slot (e.g. "Provider14") carries no vendor identity and the
-                // owner-authorized slot mapping is empty by default, so the provider cannot be
-                // proven. Fail closed (INCONCLUSIVE) and mark the real mapping BLOCKED.
+                // A generic placeholder slot other than the D-097 Provider14 mapping carries no
+                // vendor identity, so the provider cannot be proven. Fail closed (INCONCLUSIVE).
                 result = DiagnosticResult
                     .Inconclusive(ModuleId, "M2.PROVIDER_IDENTITY", correlation, now)
                     .WithReasonCode("PROVIDER_SLOT_UNRESOLVED")
-                    .WithLimitation("The observed provider is a generic NinjaTrader placeholder slot (for example \"Provider14\") that carries no vendor identity, and no owner-authorized slot->vendor mapping resolves it. The real provider mapping is BLOCKED until runtime evidence records which slot the adapter occupies; it is never assumed to be the expected provider.")
-                    .WithNextAction("Record the installed host's provider enum slot mapping (owner-authorized) from runtime evidence, then re-run.");
+                    .WithLimitation("The observed provider is a generic NinjaTrader placeholder slot that carries no vendor identity, and the compiled Owner-authorized mapping (D-097: Provider14 -> Rithmic) does not resolve it. Any other slot stays unproven; it is never assumed to be the expected provider.")
+                    .WithNextAction("Confirm the observed provider slot is the Owner-authorized Provider14, then re-run.");
             }
             else
             {

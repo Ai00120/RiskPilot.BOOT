@@ -168,7 +168,7 @@ metadata/instrument/market-data مشاهده نمی‌شد. اکنون پنج م
 
 ### ۴.۱ تعلقِ دقیق حساب به Connection/provider (`M2.ACCOUNT_CONNECTION_ASSOCIATION`)
 
-این check اثبات می‌کند که **حساب هدف** به Connection موردنیاز (`My Rithmic`) و provider موردنیاز
+این check اثبات می‌کند که **حساب هدف** به Connection موردنیاز (`Rithmic`) و provider موردنیاز
 (`Rithmic`) **متعلق** است، به‌جای بازرسی یک Connection دلخواه یا اولین Connection موجود. لایهٔ Host
 (`Nt8HostDataProvider.BuildTargetAccountConnectionObservation()`) تنها Connection خودِ حساب هدف
 (`Account.Connection`) را می‌خواند و همهٔ نام‌های خام را به boolean/count و یک `SyntheticRef` کاهش
@@ -192,8 +192,9 @@ check عمومی `M2.ACCOUNT_PROVIDER_AGREEMENT` و artifactهای `connections.
 
 ### ۴.۲ هویت دقیق حساب (`M2.ACCOUNT_IDENTITY`)
 
-هویت دائم مورد نیاز BOT: حساب `SimRP.BOT`، Connection `My Rithmic`، provider `Rithmic`،
-mode `Simulation`، currency `USD`.
+هویت دائم مورد نیاز BOT (D-097): حساب `SimRP.BOT`، Connection `Rithmic`، provider `Rithmic`
+(از slot `Provider14` با mapping کامپایل‌شدهٔ BOOT)، mode `Simulation` یا `Live` برای همین حساب
+SIM، currency `USD`.
 
 - لایهٔ Host (`Nt8HostDataProvider.BuildAccountIdentityObservation()`) نام واقعی حساب را
   **فقط به‌صورت داخلی** با تطابق ordinal دقیق مقایسه می‌کند و خروجی را به یک

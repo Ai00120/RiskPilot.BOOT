@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 
 namespace RiskPilot.Diagnostics.Nt8.Core.Identity
 {
@@ -74,9 +75,11 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
     /// </para>
     /// <para>
     /// A placeholder slot may only be accepted through an explicit, verified owner-authorized
-    /// slot-&gt;vendor mapping (the same owner-controlled pattern as D-078). The mapping is empty by
-    /// default: until real host evidence records which slot the adapter occupies, the provider
-    /// identity stays BLOCKED (UNRESOLVED), never guessed from a display name or an online reference.
+    /// slot-&gt;vendor mapping (the same owner-controlled pattern as D-078). D-097 authorizes exactly
+    /// one such mapping for the one designated environment: <c>Provider14 -&gt; Rithmic</c>, compiled
+    /// immutably in <see cref="OwnerAuthorizedSlots"/>. No other slot is mapped and none is inferred
+    /// from a display name or an online reference; every other placeholder stays
+    /// <see cref="ProviderIdentityMatch.Unresolved"/> (fail closed).
     /// </para>
     /// </summary>
     public static class ProviderIdentity
@@ -84,16 +87,30 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
         /// <summary>The required provider name for the permanent RiskPilot.BOT identity.</summary>
         public const string ExpectedProvider = "Rithmic";
 
+        /// <summary>The observed NinjaTrader placeholder slot that the Owner authorized as Rithmic (D-097).</summary>
+        public const string OwnerAuthorizedRithmicSlot = "Provider14";
+
         /// <summary>An empty owner-authorized slot mapping (the fail-closed default).</summary>
         public static readonly IReadOnlyDictionary<string, string> NoOwnerAuthorizedSlots =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
-        /// The Owner-authorized placeholder-slot -&gt; vendor mapping. It is empty by default: the
-        /// real mapping is BLOCKED until runtime evidence records which slot the Rithmic adapter
-        /// occupies. Populate it only from a reviewed owner authorization, never from a guess.
+        /// The compiled, immutable Owner-authorized placeholder-slot -&gt; vendor mapping (D-097).
+        /// <para>
+        /// D-097 explicitly authorizes <c>Provider14 -&gt; Rithmic</c> for the one designated
+        /// NinjaTrader/Rithmic environment. The mapping is BOOT's own compiled constant: it is never
+        /// read from configuration, environment or the host, and the exposed dictionary is a
+        /// read-only view that cannot be mutated at runtime. Keys are matched exactly (ordinal), so
+        /// a differently-cased or different slot never resolves. No other slot is mapped; every
+        /// other placeholder stays <see cref="ProviderIdentityMatch.Unresolved"/> (fail closed).
+        /// </para>
         /// </summary>
-        public static readonly IReadOnlyDictionary<string, string> OwnerAuthorizedSlots = NoOwnerAuthorizedSlots;
+        public static readonly IReadOnlyDictionary<string, string> OwnerAuthorizedSlots =
+            new ReadOnlyDictionary<string, string>(
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    { OwnerAuthorizedRithmicSlot, ExpectedProvider }
+                });
 
         /// <summary>
         /// Classifies a raw provider value. A null/empty value is unobservable; a generic slot name
@@ -209,13 +226,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
         }
 
         /// <summary>
-        /// True when the observed value equals the expected provider under the default (empty)
-        /// owner-authorized mapping. A placeholder slot returns false: it is never assumed to be
-        /// the expected provider.
+        /// True when the observed value equals the expected provider under the compiled
+        /// Owner-authorized mapping (<see cref="OwnerAuthorizedSlots"/>). The D-097 slot
+        /// <c>Provider14</c> therefore resolves to the expected provider; any other placeholder slot
+        /// returns false because it is not mapped and is never assumed to be the expected provider.
         /// </summary>
         public static bool IsExpectedProvider(string observed)
         {
-            return Compare(observed, ExpectedProvider, NoOwnerAuthorizedSlots) == ProviderIdentityMatch.Matches;
+            return Compare(observed, ExpectedProvider, OwnerAuthorizedSlots) == ProviderIdentityMatch.Matches;
         }
 
         /// <summary>
@@ -262,11 +280,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Identity
 
         /// <summary>
         /// True when the observed value is a generic placeholder slot (or unreadable) that the
-        /// default mapping cannot resolve. The caller reports this as unproven (INCONCLUSIVE).
+        /// compiled Owner-authorized mapping cannot resolve. The D-097 <c>Provider14</c> slot is
+        /// resolved and therefore not unresolved; any other slot is. The caller reports this as
+        /// unproven (INCONCLUSIVE).
         /// </summary>
         public static bool IsUnresolved(string observed)
         {
-            return Compare(observed, ExpectedProvider, NoOwnerAuthorizedSlots) == ProviderIdentityMatch.Unresolved;
+            return Compare(observed, ExpectedProvider, OwnerAuthorizedSlots) == ProviderIdentityMatch.Unresolved;
         }
 
         private static string Normalize(string raw)

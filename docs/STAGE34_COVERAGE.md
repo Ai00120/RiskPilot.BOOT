@@ -63,10 +63,10 @@ ever written to a finding, a log or an artifact (only a synthetic `account#<hash
 | Identity element | Value | BOOT check |
 | --- | --- | --- |
 | Account | permanent single account (`SimRP.BOT`, defined only in the identity definition file) | `M2.ACCOUNT_IDENTITY` |
-| Connection | permanent bound connection (`My Rithmic`, defined only in the identity definition file) | `M2.ACCOUNT_CONNECTION_ASSOCIATION`, `M2.PROVIDER_IDENTITY` |
-| Provider | `Rithmic` | `M2.PROVIDER_IDENTITY`, `M2.ACCOUNT_PROVIDER_AGREEMENT` |
-| Mode | `Simulation` | `M2.ACCOUNT_IDENTITY` |
-| Instrument | `ES` (root) | `M4.INSTRUMENT_IDENTITY` |
+| Connection | `Rithmic` (the D-097 connection; it equals the public provider name) | `M2.ACCOUNT_CONNECTION_ASSOCIATION`, `M2.PROVIDER_IDENTITY` |
+| Provider | `Rithmic`, from the generic slot `Provider14` resolved by BOOT's own compiled immutable exact-match mapping | `M2.PROVIDER_IDENTITY`, `M2.ACCOUNT_PROVIDER_AGREEMENT` |
+| Mode | `Simulation` or `Live` (accepted only for the one D-097 SIM account) | `M2.ACCOUNT_IDENTITY` |
+| Instrument | `ES 12-26` (explicit target; root `ES`) | `M4.INSTRUMENT_IDENTITY` |
 | Exchange | `CME` (confirmed via the D-096 Globex/Rithmic configured route, never inferred from text) | `M4.INSTRUMENT_IDENTITY`, `M4.D096_ROUTE_CANDIDATE` |
 | Product | E-mini S&P 500 Futures | `M4.ES_PRODUCT_SPEC` |
 | Platform | NinjaTrader 8 (installed build is unobservable — never reported as PASS) | `M1.HOST_COMPATIBILITY`, `M1.HOST_VERSION` |

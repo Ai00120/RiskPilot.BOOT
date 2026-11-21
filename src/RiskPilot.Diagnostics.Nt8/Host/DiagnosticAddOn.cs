@@ -24,7 +24,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         private readonly System.Collections.Generic.List<string> _lifecycleStates = new System.Collections.Generic.List<string>();
         private readonly SwitchableUiDispatcher _uiDispatcher = new SwitchableUiDispatcher();
         private readonly Core.Run.HostReadinessTracker _readiness = new Core.Run.HostReadinessTracker();
-        private readonly Core.Instruments.TargetInstrumentSelection _instrumentSelection = new Core.Instruments.TargetInstrumentSelection();
+        private readonly Core.Instruments.TargetInstrumentSelection _instrumentSelection =
+            new Core.Instruments.TargetInstrumentSelection(Core.Identity.ExpectedInstrumentIdentity.TargetInstrumentId);
         private DiagnosticRuntime _runtime;
         private Nt8HostDataProvider _provider;
         private DiagnosticViewState _viewState;
@@ -41,11 +42,11 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         public const bool TradingDisabled = true;
 
         /// <summary>
-        /// The Owner-authorized provider placeholder-slot → vendor mapping. It defaults to the
-        /// fail-closed empty mapping (<see cref="Core.Identity.ProviderIdentity.OwnerAuthorizedSlots"/>),
-        /// so production never resolves a generic slot (for example <c>Provider14</c>) to a vendor.
-        /// A host or a test may set a reviewed mapping before the AddOn initialises; it is only ever
-        /// a lookup, never a mutation of the host connection.
+        /// The Owner-authorized provider placeholder-slot → vendor mapping. It defaults to BOOT's
+        /// compiled immutable D-097 mapping (<see cref="Core.Identity.ProviderIdentity.OwnerAuthorizedSlots"/>:
+        /// <c>Provider14 -&gt; Rithmic</c>). A host or a test may supply an empty or reviewed mapping
+        /// before the AddOn initialises; it is only ever a lookup, never a mutation of the host
+        /// connection.
         /// </summary>
         public System.Collections.Generic.IReadOnlyDictionary<string, string> OwnerAuthorizedProviderSlots { get; set; }
             = Core.Identity.ProviderIdentity.OwnerAuthorizedSlots;
@@ -154,14 +155,16 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         public Core.Contract.IReadOnlyDiagnosticSource StrategyDiagnosticSource { get; set; }
 
         /// <summary>
-        /// The explicit target instrument identity the diagnostic is scoped to (for example
-        /// <c>"ES 12-26"</c>). This is a thin proxy over <see cref="InstrumentSelection"/>, the
-        /// single source of truth the operator's Diagnostic Center picker writes and the host
-        /// provider and market-data capture read, so every component targets the same contract.
+        /// The explicit target instrument identity the diagnostic is scoped to. It defaults to the
+        /// compiled D-097 target <c>ES 12-26</c> (<see cref="Core.Identity.ExpectedInstrumentIdentity.TargetInstrumentId"/>)
+        /// and is a thin proxy over <see cref="InstrumentSelection"/>, the single source of truth the
+        /// operator's Diagnostic Center picker writes and the host provider and market-data capture
+        /// read, so every component targets the same contract.
         /// <para>
         /// This is the only way the target is chosen: the tool never auto-discovers an instrument
         /// from the loaded surface, never picks the first one and never selects by an ES root/name
-        /// substring. When it is null/empty the target stays unresolved and M4 reports
+        /// substring. The configured value is still resolved against the loaded surface; when it is
+        /// cleared (null/empty) the target stays unresolved and M4 reports
         /// <c>TARGET_INSTRUMENT_NOT_CONFIGURED</c> (INCONCLUSIVE, never PASS). Setting it never
         /// mutates the host selection; it only tells the read-only diagnostic which instrument to
         /// observe.
@@ -233,8 +236,8 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                     // states the AddOn has reached by the time each pass runs.
                     //
                     // OwnerAuthorizedProviderSlots is the Owner-authorized placeholder-slot -> vendor
-                    // mapping. It defaults to the fail-closed empty mapping (production never guesses a
-                    // slot -> vendor identity); a reviewed mapping can be supplied before Active.
+                    // mapping. It defaults to BOOT's compiled D-097 mapping (Provider14 -> Rithmic);
+                    // no other slot is resolved and a host/test may supply an empty mapping before Active.
                     var provider = new Nt8HostDataProvider(
                         () => HostIsLive,
                         () => LifecycleStates,
@@ -270,14 +273,21 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                                 runtime.Ingest(record);
                             }
                         },
-                        StrategyDiagnosticSource);
+                        () => StrategyDiagnosticSource,
+                        true);
 
                     // The run coordinator owns the single-run guarantee and marshals its UI
                     // notifications through the switchable dispatcher. The dispatcher has no
                     // target until a host window exists; until then it applies notifications
                     // inline to the view state, so a run's progress and result are never lost.
                     _viewState = new DiagnosticViewState();
-                    var runner = new RuntimeDiagnosticRunner(_runtime, BuildEvidenceSink(), EnsureMarketDataCapture, CaptureStrategyObservations);
+                    var runner = new RuntimeDiagnosticRunner(
+                        _runtime,
+                        BuildEvidenceSink(),
+                        EnsureMarketDataCapture,
+                        CaptureStrategyObservations,
+                        () => provider.ReadHostReadiness(),
+                        ReadinessWaitTimeoutMs);
                     _coordinator = new DiagnosticRunCoordinator(runner, _uiDispatcher, _runtime.Log);
                     WireViewState();
 
@@ -474,6 +484,14 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// surface; the first, synchronous probe still runs.
         /// </summary>
         public bool ReadinessRetryEnabled { get; set; } = true;
+
+        /// <summary>
+        /// Upper bound, in milliseconds, that a Full-mode pass waits for host readiness before it
+        /// evaluates. Defaults to <see cref="RuntimeDiagnosticRunner.DefaultReadinessTimeoutMs"/>;
+        /// a deterministic test sets it to 0 so no wall-clock wait occurs. Quick and Post-Trade
+        /// Audit never wait regardless of this value.
+        /// </summary>
+        public int ReadinessWaitTimeoutMs { get; set; } = RuntimeDiagnosticRunner.DefaultReadinessTimeoutMs;
 
         /// <summary>Number of readiness probes the background loop has scheduled so far.</summary>
         public int ReadinessAttempts { get { lock (_gate) { return _readinessAttempts; } } }

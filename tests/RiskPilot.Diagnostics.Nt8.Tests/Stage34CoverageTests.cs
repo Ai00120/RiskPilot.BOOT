@@ -270,7 +270,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Assert.Contains("\"statement\":", json);
             Assert.Contains("\"testCoverage\":\"EsProductSpecificationTests, HostInstrumentIdentityTests\"", json);
 
-            // The artifact never carries a raw identity literal.
+            // The artifact never carries the raw account identity or the retired raw connection name.
             Assert.DoesNotContain("SimRP.BOT", json);
             Assert.DoesNotContain("My Rithmic", json);
         }

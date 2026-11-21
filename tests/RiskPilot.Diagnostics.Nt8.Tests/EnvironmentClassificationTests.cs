@@ -28,7 +28,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
     public class EnvironmentClassificationTests
     {
         private const string ExpectedAccount = "SimRP.BOT";
-        private const string ExpectedConnection = "My Rithmic";
+        private const string ExpectedConnection = "Rithmic";
 
         private static void Reset()
         {
@@ -36,7 +36,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             Connection.Connections.Clear();
         }
 
-        private static Connection RequiredConnection(Mode mode)
+        private static Connection RequiredConnection(Mode mode, string name = null, Provider provider = Provider.Provider14)
         {
             return new Connection
             {
@@ -44,8 +44,8 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
                 PriceStatus = ConnectionStatus.Connected,
                 Options = new ConnectOptions
                 {
-                    Name = ExpectedConnection,
-                    Provider = Provider.Provider14,
+                    Name = name ?? ExpectedConnection,
+                    Provider = provider,
                     Mode = mode
                 }
             };
@@ -112,15 +112,40 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
         }
 
         [Fact]
+        public void Host_VerifiedTarget_LiveMode_IsLive_D097()
+        {
+            Reset();
+            try
+            {
+                // D-097 accepts a Live connection mode for the one exact SIM account, so a fully
+                // verified chain reports Live rather than Unknown. Live is still only reached when
+                // the account, its own connection, the resolved provider and the mode are all
+                // observed and consistent.
+                var connection = RequiredConnection(Mode.Live);
+                Account.All.Add(TargetAccount(connection));
+                Connection.Connections.Add(connection);
+
+                var provider = TestHost.Provider(true);
+                var environment = provider.GetEnvironment();
+
+                Assert.Equal(EnvironmentClass.Live, environment.Environment);
+            }
+            finally
+            {
+                Reset();
+            }
+        }
+
+        [Fact]
         public void Host_UnverifiedTarget_LiveMode_IsUnknown_NeverLive()
         {
             Reset();
             try
             {
-                // A target account whose connection mode is Live cannot be an M2-verified target
-                // (the approved identity requires Simulation mode). The environment class must then
-                // be Unknown (fail closed), never a fabricated Live.
-                var connection = RequiredConnection(Mode.Live);
+                // A Live mode never by itself makes a target verified. Here the target's connection
+                // name is not the required one, so the M2 association fails and the environment class
+                // must be Unknown (fail closed), never a fabricated Live.
+                var connection = RequiredConnection(Mode.Live, "Other Rithmic");
                 Account.All.Add(TargetAccount(connection));
                 Connection.Connections.Add(connection);
 

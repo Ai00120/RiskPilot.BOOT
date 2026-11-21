@@ -96,10 +96,10 @@ namespace RiskPilot.Diagnostics.Nt8.Host
         /// <summary>
         /// Full constructor. <paramref name="ownerAuthorizedProviderSlots"/> is the Owner-authorized
         /// placeholder-slot -&gt; vendor mapping used to resolve a generic provider slot such as
-        /// <c>Provider14</c>. It defaults to the fail-closed empty mapping
-        /// (<see cref="ProviderIdentity.OwnerAuthorizedSlots"/>); production never guesses a mapping,
-        /// so an unmapped placeholder stays unproven. The parameter exists so the mapping logic can
-        /// be exercised deterministically offline.
+        /// <c>Provider14</c>. It defaults to BOOT's compiled immutable D-097 mapping
+        /// (<see cref="ProviderIdentity.OwnerAuthorizedSlots"/>: <c>Provider14 -&gt; Rithmic</c>); the
+        /// parameter exists so the mapping logic can also be exercised with an empty mapping offline.
+        /// No other slot is resolved.
         /// </summary>
         public Nt8HostDataProvider(
             Func<bool> masterMetadataReady,
@@ -693,6 +693,7 @@ namespace RiskPilot.Diagnostics.Nt8.Host
                 var mode = SafeString(() => options.Mode.ToString());
                 observation.ModeObservable = !string.IsNullOrEmpty(mode);
                 observation.ModeIsSimulation = ExpectedAccountIdentity.ModeIsSimulation(mode);
+                observation.ModeIsAccepted = ExpectedAccountIdentity.ModeIsAccepted(mode);
             }
 
             var status = SafeString(() => connection.Status.ToString());

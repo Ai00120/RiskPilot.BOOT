@@ -230,9 +230,13 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Security
         }
 
         /// <summary>
-        /// True when <paramref name="text"/> contains any Owner identity literal. The literals are
-        /// never hardcoded here: they are drawn from <see cref="ExpectedAccountIdentity"/>, so this
-        /// scanner can never itself become an identity-leak site.
+        /// True when <paramref name="text"/> contains an Owner identity literal that must stay
+        /// confined to the definition file. The account name is always confined. The connection
+        /// name is confined only when it is distinct from the public provider name: under D-097 the
+        /// connection is named <c>Rithmic</c>, the same public vendor identity the provider evidence
+        /// legitimately reports, so treating it as a leak would flag every provider mention. The
+        /// literals are never hardcoded here: they are drawn from
+        /// <see cref="ExpectedAccountIdentity"/>, so this scanner can never itself become a leak site.
         /// </summary>
         public static bool ContainsIdentityLiteral(string text)
         {
@@ -247,7 +251,9 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Security
             }
 
             var account = text.IndexOf(ExpectedAccountIdentity.AccountName, StringComparison.Ordinal);
-            var connection = text.IndexOf(ExpectedAccountIdentity.ConnectionName, StringComparison.Ordinal);
+            var connection = ConnectionNameIsSensitive()
+                ? text.IndexOf(ExpectedAccountIdentity.ConnectionName, StringComparison.Ordinal)
+                : -1;
             if (account < 0)
             {
                 return connection;
@@ -259,6 +265,14 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Security
             }
 
             return Math.Min(account, connection);
+        }
+
+        private static bool ConnectionNameIsSensitive()
+        {
+            return !string.Equals(
+                ExpectedAccountIdentity.ConnectionName,
+                ExpectedAccountIdentity.Provider,
+                StringComparison.OrdinalIgnoreCase);
         }
 
         private static void ApplyRules(

@@ -75,11 +75,27 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Models.Observations
         /// <summary>True when the connection mode is simulation.</summary>
         public bool ModeIsSimulation { get; set; }
 
+        /// <summary>
+        /// True when the connection mode is accepted for the D-097 account: Simulation or Live.
+        /// The verifier only consults this for the single exact account match, so it never
+        /// authorizes another account. When a producer sets only <see cref="ModeIsSimulation"/>,
+        /// the accepted flag falls back to it, so a Simulation observation keeps its previous
+        /// meaning and an unobserved mode stays false (fail closed).
+        /// </summary>
+        public bool ModeIsAccepted
+        {
+            get { return _modeIsAcceptedSet ? _modeIsAccepted : ModeIsSimulation; }
+            set { _modeIsAccepted = value; _modeIsAcceptedSet = true; }
+        }
+
         /// <summary>True when the account denomination was read.</summary>
         public bool DenominationObservable { get; set; }
 
         /// <summary>True when the account denomination is USD.</summary>
         public bool DenominationIsUsd { get; set; }
+
+        private bool _modeIsAccepted;
+        private bool _modeIsAcceptedSet;
 
         public AccountIdentityObservation()
         {

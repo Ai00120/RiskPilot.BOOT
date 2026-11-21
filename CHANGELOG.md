@@ -11,6 +11,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ### Changed
 
+- **D-097 identity acceptance.** The permanent identity is account `SimRP.BOT`, connection
+  `Rithmic`, provider `Rithmic` resolved from the generic `Provider14` slot by BOOT's own compiled,
+  immutable, exact-match mapping, mode `Simulation` **or** `Live` for that one designated SIM
+  account, and denomination `USD`. `ProviderIdentity.OwnerAuthorizedSlots` now carries that single
+  mapping; every other placeholder slot remains unresolved (fail closed). The static safety scan
+  still confines the account-name literal, and no BOT binary or source dependency was added.
+- **The explicit target instrument now defaults to `ES 12-26`.** The AddOn and the Diagnostic Center
+  selection model start with that contract instead of no selection, so a host run no longer reports
+  `TARGET_INSTRUMENT_NOT_CONFIGURED` merely because the operator did not pick one. The value is still
+  resolved against the loaded surface by exact match; a missing contract stays `INCONCLUSIVE`.
+- **Full-mode runs wait (bounded) for host readiness.** `RuntimeDiagnosticRunner` polls the host
+  readiness observation before a Full pass, up to `DiagnosticAddOn.ReadinessWaitTimeoutMs`
+  (default 20 s), and re-attempts the idempotent market-data subscription afterward. Quick keeps its
+  immediate semantics, Post-Trade Audit still reads only recorded data, cancellation stops the wait,
+  and waiting never changes a verdict (a FAIL stays FAIL).
+- **M7 resolves its read-only strategy source live.** `StrategyDiagnosticCapture` accepts a source
+  probe, so a diagnostic source supplied after AddOn initialisation is honoured; M7 executes the
+  Stage 3/4 strategy verification when records are available and stays `INCONCLUSIVE` otherwise.
+
 - **Host readiness now reports nine independent, evidence-based facts instead of a conflated
   Boolean.** The previous model recorded `metadataReady` from the lifecycle gate, so an AddOn that
   merely reached `Active` reported metadata as ready even though `MasterInstrument.*` had never been
@@ -30,10 +49,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   `InvalidateStreamFacts` (driven by `DiagnosticAddOn.InvalidateReadinessForReconnect`) clears the
   connection/stream facts after a connection loss, so readiness is never `PASS` on stale or
   invalidated evidence. The exported block carries the `epoch`.
-- **The AddOn's provider placeholder-slot mapping is now an explicit, default-empty input.**
-  `DiagnosticAddOn.OwnerAuthorizedProviderSlots` defaults to the fail-closed empty mapping, so
-  production never resolves a generic slot (for example `Provider14`) to a vendor; a reviewed
-  mapping may be supplied before `Active`. This is a read-only lookup, never a host mutation.
+- **The AddOn's provider placeholder-slot mapping is an explicit, reviewed input.** It now defaults
+  to BOOT's compiled immutable D-097 mapping (`Provider14 -> Rithmic`); a caller may supply the
+  fail-closed empty mapping before `Active`. This is a read-only lookup, never a host mutation.
 - **M7 documents its missing external producer.** BOOT ships no strategy diagnostic producer, so M7
   stays `INCONCLUSIVE` (never a fabricated `PASS`) and no BOT dependency is introduced. The neutral
   read-only boundary and the producer responsibilities are recorded in

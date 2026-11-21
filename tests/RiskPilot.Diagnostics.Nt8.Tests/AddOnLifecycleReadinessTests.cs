@@ -20,7 +20,7 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
     public class AddOnLifecycleReadinessTests
     {
         private const string ExpectedAccount = "SimRP.BOT";
-        private const string ExpectedConnection = "My Rithmic";
+        private const string ExpectedConnection = "Rithmic";
 
         private static void Reset()
         {
@@ -80,9 +80,8 @@ namespace RiskPilot.Diagnostics.Nt8.Tests
             // Disable the background retry timer so the test drives every probe deterministically;
             // the first probe still runs synchronously inside ApplyLifecycleState("Active").
             // The target instrument is set explicitly (the only supported selection mechanism).
-            // The reviewed owner-authorized slot mapping mirrors how production would resolve the
-            // generic Provider14 slot once runtime evidence records the mapping; production defaults
-            // to the empty (fail-closed) mapping.
+            // The reviewed owner-authorized slot mapping mirrors production's compiled D-097
+            // Provider14 -> Rithmic mapping; the AddOn also exposes the fail-closed empty mapping.
             return new DiagnosticAddOn
             {
                 ReadinessRetryEnabled = false,

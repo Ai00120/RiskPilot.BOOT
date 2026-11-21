@@ -27,6 +27,22 @@ namespace RiskPilot.Diagnostics.Nt8.Core.Instruments
         private IReadOnlyList<string> _availableInstrumentIds = new List<string>();
         private bool _surfaceObservable;
 
+        /// <summary>Creates an unselected model (the fail-closed default).</summary>
+        public TargetInstrumentSelection()
+            : this(null)
+        {
+        }
+
+        /// <summary>
+        /// Creates a model with an explicit initial selection (the compiled D-097 ES 12-26 default
+        /// supplied by the AddOn). The value is still resolved against the loaded surface; it is
+        /// never treated as a discovered instrument.
+        /// </summary>
+        public TargetInstrumentSelection(string initialSelection)
+        {
+            _selectedInstrumentId = initialSelection;
+        }
+
         /// <summary>Raised after the selection or the available list changes. Handlers must not block.</summary>
         public event Action Changed;
 
